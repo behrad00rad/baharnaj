@@ -1,0 +1,32 @@
+main { overflow: hidden; background: #f5f0e9; }
+.container { max-width: 1180px; margin: auto; padding-inline: 40px; }
+.nav { height: 88px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #ddd3c8; }
+.brand { font-size: 21px; font-weight: 700; letter-spacing: -1px; }
+.brand span { display: inline-grid; place-items: center; width: 31px; height: 31px; margin-left: 8px; border: 1px solid #a47865; border-radius: 50%; color: #a47865; }
+.links { display: flex; gap: 38px; color: #756c67; font-size: 14px; }
+.nav-cta, .section-heading a { color: #a47865; font-size: 14px; }
+.nav-cta span, .button span, .section-heading a span { margin-right: 12px; font-size: 20px; }
+.hero { min-height: 620px; display: grid; grid-template-columns: .85fr 1fr; gap: 80px; align-items: center; padding-top: 45px; }
+.eyebrow { color: #a47865; font-size: 12px; letter-spacing: 1px; margin: 0 0 22px; }
+h1, h2 { font-weight: 500; line-height: 1.15; letter-spacing: -2px; margin: 0; }
+h1 { font-size: clamp(64px, 8vw, 110px); } h2 { font-size: clamp(44px, 5vw, 70px); }
+em { font-family: 'DM Serif Display', serif; font-weight: 400; color: #a47865; }
+.lead { max-width: 300px; color: #766d67; line-height: 2; margin: 28px 0 35px; }
+.button { display: inline-flex; align-items: center; border: 0; background: #a47865; color: #fffaf5; padding: 16px 24px; cursor: pointer; transition: transform .2s, background .2s; }
+.button:hover { transform: translateY(-3px); background: #875e4e; }
+.hero-art { position: relative; height: 500px; } .image-frame { width: 78%; height: 100%; margin-right: auto; overflow: hidden; }
+.image-frame img { width: 100%; height: 100%; object-fit: cover; filter: saturate(.75); }
+.round-note { position: absolute; bottom: 35px; right: 0; width: 120px; height: 120px; display: grid; place-content: center; text-align: center; border-radius: 50%; background: #d6b6a2; color: #664c40; font-size: 14px; line-height: 1.8; transform: rotate(-10deg); }
+.vertical-label { position: absolute; left: -18px; bottom: 15px; writing-mode: vertical-rl; color: #a47865; font-size: 10px; letter-spacing: 3px; }
+.intro { padding-top: 120px; padding-bottom: 145px; text-align: center; } .intro p:last-child { max-width: 440px; margin: 28px auto 0; color: #766d67; line-height: 2; font-size: 14px; }
+.services { padding-bottom: 130px; } .section-heading { display: flex; justify-content: space-between; align-items: end; margin-bottom: 50px; }
+.service-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; } .service-card { min-height: 285px; padding: 28px; background: #ebe1d7; border-top: 2px solid #b58b77; display: flex; flex-direction: column; }
+.service-number { color: #b58b77; font-family: 'DM Serif Display'; font-size: 26px; } h3 { font-size: 22px; font-weight: 500; margin: 20px 0 10px; }
+.service-card p { color: #766d67; font-size: 13px; line-height: 1.9; margin: 0; } .service-meta { display: flex; justify-content: space-between; margin-top: auto; padding-top: 25px; color: #a47865; font-size: 12px; }
+.service-card button { border: 0; border-top: 1px solid #c9b8aa; text-align: right; margin-top: 20px; padding: 17px 0 0; background: transparent; color: #433832; cursor: pointer; } .service-card button span { float: left; color: #a47865; }
+.booking { display: grid; grid-template-columns: 1fr 1fr; gap: 90px; padding-top: 95px; padding-bottom: 115px; border-top: 1px solid #ddd3c8; }
+.booking > div > p:last-child { color: #766d67; margin-top: 25px; } form { display: grid; gap: 19px; } label { display: grid; gap: 8px; color: #766d67; font-size: 12px; }
+input, select { width: 100%; border: 0; border-bottom: 1px solid #cdbeb2; padding: 11px 0; color: #332c2a; background: transparent; outline: none; } input:focus, select:focus { border-color: #a47865; }
+form .button { justify-self: start; margin-top: 10px; } .success { background: #ebe1d7; padding: 34px; text-align: center; } .success span { color: #a47865; font-size: 32px; }
+.success h3 { margin: 10px 0; } .success p { color: #766d67; font-size: 13px; } .footer { border-top: 1px solid #ddd3c8; padding-top: 30px; padding-bottom: 32px; display: flex; align-items: center; justify-content: space-between; color: #766d67; font-size: 12px; } .footer .brand { color: #332c2a; }
+@media (max-width: 700px) { .container { padding-inline: 22px; } .nav { height: 72px; } .links { display: none; } .hero { display: flex; flex-direction: column; align-items: stretch; gap: 45px; min-height: auto; padding-top: 65px; } h1 { font-size: 68px; } .hero-art { height: 390px; } .intro { padding-top: 90px; padding-bottom: 100px; } .service-grid, .booking { grid-template-columns: 1fr; } .section-heading { margin-bottom: 28px; } .booking { gap: 45px; } .footer { flex-wrap: wrap; gap: 18px; } }

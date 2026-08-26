@@ -1,0 +1,3 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Vazirmatn:wght@400;500;600;700&display=swap');
+:root { font-family: 'Vazirmatn', sans-serif; color: #332c2a; background: #f5f0e9; font-synthesis: none; text-rendering: optimizeLegibility; }
+* { box-sizing: border-box; } html { scroll-behavior: smooth; } body { margin: 0; min-width: 320px; } button, input, select { font: inherit; } a { color: inherit; text-decoration: none; }

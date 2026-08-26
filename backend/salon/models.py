@@ -1,0 +1,44 @@
+from django.contrib.auth.models import AbstractUser
+from django.db import models
+
+class User(AbstractUser):
+	ROLE_CHOICES = [("customer", "Customer"), ("employee", "Employee"), ("admin", "Admin")]
+	phone = models.CharField(max_length=20, blank=True)
+	role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="customer")
+
+class Service(models.Model):
+	name = models.CharField(max_length=120)
+	persian_name = models.CharField(max_length=120)
+	description = models.TextField(blank=True)
+	category = models.CharField(max_length=80, blank=True)
+	price = models.PositiveIntegerField()
+	duration = models.PositiveIntegerField(help_text="Duration in minutes")
+	image = models.URLField(blank=True)
+	is_active = models.BooleanField(default=True)
+	def __str__(self):
+		return self.persian_name
+
+class Employee(models.Model):
+	user = models.OneToOneField(User, on_delete=models.PROTECT, related_name="employee_profile")
+	specialty = models.CharField(max_length=120, blank=True)
+	commission_value = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+	services = models.ManyToManyField(Service, related_name="employees", blank=True)
+	is_active = models.BooleanField(default=True)
+
+class Appointment(models.Model):
+	STATUS_CHOICES = [("pending", "Pending"), ("confirmed", "Confirmed"), ("completed", "Completed"), ("cancelled", "Cancelled")]
+	customer = models.ForeignKey(User, on_delete=models.PROTECT, related_name="appointments", null=True)
+	employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="appointments")
+	service = models.ForeignKey(Service, on_delete=models.PROTECT, related_name="appointments")
+	date = models.DateField()
+	start_time = models.TimeField()
+	end_time = models.TimeField()
+	price = models.PositiveIntegerField()
+	status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+	notes = models.TextField(blank=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+	class Meta:
+		ordering = ["date", "start_time"]
+from django.db import models
+
+# Create your models here.
