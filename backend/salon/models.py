@@ -39,6 +39,23 @@ class Appointment(models.Model):
 	created_at = models.DateTimeField(auto_now_add=True)
 	class Meta:
 		ordering = ["date", "start_time"]
+
+class WorkRecord(models.Model):
+	employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="work_records")
+	appointment = models.OneToOneField(Appointment, on_delete=models.PROTECT, related_name="work_record")
+	service = models.ForeignKey(Service, on_delete=models.PROTECT)
+	price = models.PositiveIntegerField()
+	commission = models.PositiveIntegerField(default=0)
+	completed_at = models.DateTimeField(auto_now_add=True)
+	notes = models.TextField(blank=True)
+
+class Transaction(models.Model):
+	TYPE_CHOICES = [("payment", "Payment"), ("commission", "Commission"), ("expense", "Expense"), ("refund", "Refund")]
+	type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+	amount = models.PositiveIntegerField()
+	appointment = models.ForeignKey(Appointment, on_delete=models.PROTECT, null=True, blank=True)
+	description = models.CharField(max_length=255, blank=True)
+	created_at = models.DateTimeField(auto_now_add=True)
 from django.db import models
 
 # Create your models here.
