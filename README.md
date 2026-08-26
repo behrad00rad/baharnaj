@@ -6,11 +6,11 @@ Full-stack salon management platform. The repository contains one Persian RTL Re
 
 - `frontend/`: Persian RTL public salon experience with API-connected service cards and booking request form.
 - `backend/`: Django 6 + Django REST Framework with a custom user model, services, employees, appointments, validation, and versioned endpoints.
-- PostgreSQL is the configured production database. The backend does not fall back to SQLite.
+- SQLite is the default database for local development and is stored at `backend/db.sqlite3`.
 
 ## Run locally
 
-1. Create PostgreSQL database and user, then copy `.env.example` to `.env` in `backend/` and adjust values.
+1. Copy `.env.example` to `.env` in `backend/` and adjust values if needed.
 2. Apply migrations:
 
 ```bash

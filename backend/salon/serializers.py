@@ -1,5 +1,7 @@
+from datetime import datetime, timedelta
+
 from rest_framework import serializers
-from .models import Appointment, Employee, Service
+from .models import Appointment, Employee, Service, Transaction, User, WorkRecord, WorkingHour
 
 class ServiceSerializer(serializers.ModelSerializer):
     employees = serializers.SerializerMethodField()
@@ -18,6 +20,53 @@ class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = ("id", "name", "specialty", "is_active", "services")
+
+
+class EmployeeAdminSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = ("id", "user", "specialty", "commission_value", "is_active", "services")
+
+
+class UserAdminSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("id", "username", "first_name", "last_name", "email", "phone", "role", "is_active", "is_staff")
+
+
+class ServiceAdminSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Service
+        fields = "__all__"
+
+
+class WorkingHourSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkingHour
+        fields = "__all__"
+
+
+class WorkRecordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkRecord
+        fields = "__all__"
+        read_only_fields = ("employee", "service", "price", "commission", "completed_at")
+
+    def create(self, validated_data):
+        appointment = validated_data["appointment"]
+        validated_data.setdefault("employee", appointment.employee)
+        validated_data.setdefault("service", appointment.service)
+        validated_data.setdefault("price", appointment.price)
+        validated_data["commission"] = round(validated_data["price"] * float(validated_data["employee"].commission_value) / 100)
+        appointment.status = "completed"
+        appointment.save(update_fields=("status",))
+        return super().create(validated_data)
+
+
+class TransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Transaction
+        fields = "__all__"
 
 class AppointmentSerializer(serializers.ModelSerializer):
     customer_name = serializers.CharField(write_only=True, required=False)
@@ -40,7 +89,11 @@ class AppointmentSerializer(serializers.ModelSerializer):
         name = validated_data.pop("customer_name", "مشتری آنلاین")
         phone = validated_data.pop("customer_phone", "")
         request = self.context["request"]
-        customer = request.user if request.user.is_authenticated else None
+        customer = validated_data.pop("customer", None)
+        service = validated_data["service"]
+        validated_data.setdefault("price", service.price)
+        validated_data.setdefault("end_time", (datetime.combine(validated_data["date"], validated_data["start_time"]) + timedelta(minutes=service.duration)).time())
+        customer = customer or (request.user if request.user.is_authenticated else None)
         if customer is None:
             username = f"guest_{phone or 'online'}_{validated_data['date'].strftime('%Y%m%d%H%M%S')}"
             customer = User.objects.create_user(username=username, first_name=name, phone=phone)

@@ -25,6 +25,17 @@ class Employee(models.Model):
 	services = models.ManyToManyField(Service, related_name="employees", blank=True)
 	is_active = models.BooleanField(default=True)
 
+class WorkingHour(models.Model):
+	employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="working_hours")
+	weekday = models.PositiveSmallIntegerField(choices=[(day, str(day)) for day in range(7)])
+	start_time = models.TimeField()
+	end_time = models.TimeField()
+	is_active = models.BooleanField(default=True)
+
+	class Meta:
+		constraints = [models.UniqueConstraint(fields=("employee", "weekday"), name="unique_employee_weekday")]
+		ordering = ["weekday", "start_time"]
+
 class Appointment(models.Model):
 	STATUS_CHOICES = [("pending", "Pending"), ("confirmed", "Confirmed"), ("completed", "Completed"), ("cancelled", "Cancelled")]
 	customer = models.ForeignKey(User, on_delete=models.PROTECT, related_name="appointments", null=True)
