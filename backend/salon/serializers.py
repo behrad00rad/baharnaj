@@ -2,7 +2,17 @@ from datetime import datetime, date as date_type, time, timedelta
 from uuid import uuid4
 
 from rest_framework import serializers
-from .models import Appointment, AppointmentService, Employee, Service, Transaction, User, WorkRecord, WorkingHour
+from django.conf import settings
+from .models import Appointment, AppointmentService, Employee, GalleryItem, Service, Transaction, User, WorkRecord, WorkingHour
+
+def absolute_gallery_url(request, value):
+    if not value:
+        return value
+    if not value.startswith("/"):
+        return value
+    if settings.PUBLIC_BACKEND_URL:
+        return f"{settings.PUBLIC_BACKEND_URL}{value}"
+    return request.build_absolute_uri(value) if request else value
 
 class ServiceSerializer(serializers.ModelSerializer):
     employees = serializers.SerializerMethodField()
@@ -13,6 +23,52 @@ class ServiceSerializer(serializers.ModelSerializer):
 
     def get_employees(self, obj):
         return [{"id": employee.id, "name": employee.user.get_full_name(), "specialty": employee.specialty} for employee in obj.employees.filter(is_active=True)]
+
+class GalleryItemSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GalleryItem
+        fields = ("id", "title", "category", "image_url", "description", "order")
+
+    def get_image_url(self, obj):
+        if obj.image:
+            return absolute_gallery_url(self.context.get("request"), obj.image.url)
+        return absolute_gallery_url(self.context.get("request"), obj.image_url)
+
+class GalleryAdminSerializer(serializers.ModelSerializer):
+    image_url = serializers.URLField(required=False, allow_blank=True)
+
+    class Meta:
+        model = GalleryItem
+        fields = ("id", "title", "category", "image", "image_url", "description", "order", "is_published", "created_at")
+        read_only_fields = ("id", "created_at")
+
+    def validate(self, attrs):
+        if not attrs.get("image") and not attrs.get("image_url") and not self.instance:
+            raise serializers.ValidationError("تصویر یا آدرس تصویر الزامی است.")
+        return attrs
+    def create(self, validated_data):
+        item = super().create(validated_data)
+        if item.image:
+            item.image_url = item.image.url
+            item.save(update_fields=("image_url",))
+        return item
+
+    def update(self, instance, validated_data):
+        item = super().update(instance, validated_data)
+        if item.image:
+            item.image_url = item.image.url
+            item.save(update_fields=("image_url",))
+        return item
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.image:
+            data["image_url"] = absolute_gallery_url(self.context.get("request"), instance.image.url)
+        else:
+            data["image_url"] = absolute_gallery_url(self.context.get("request"), instance.image_url)
+        return data
 
 
 class EmployeeSerializer(serializers.ModelSerializer):

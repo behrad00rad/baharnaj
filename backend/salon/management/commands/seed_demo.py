@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from salon.models import Employee, Service, User, WorkingHour
+from salon.models import Employee, GalleryItem, Service, User, WorkingHour
 
 
 class Command(BaseCommand):
@@ -68,5 +68,14 @@ class Command(BaseCommand):
                     weekday=weekday,
                     defaults={"start_time": "09:00", "end_time": "20:00", "is_active": True},
                 )
+
+        gallery_items = [
+            ("فضای آرام بهارناژ", "فضا", "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=1200&q=85"),
+            ("جزئیات یک آیین زیبایی", "مراقبت", "https://images.unsplash.com/photo-1516975080664-ed2fc6a32937?auto=format&fit=crop&w=1200&q=85"),
+            ("رنگ و درخشش", "مو", "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=1200&q=85"),
+            ("لحظه‌ای برای خودت", "آرامش", "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?auto=format&fit=crop&w=1200&q=85"),
+        ]
+        for order, (title, category, image_url) in enumerate(gallery_items):
+            GalleryItem.objects.update_or_create(image_url=image_url, defaults={"title": title, "category": category, "order": order, "is_published": True})
 
         self.stdout.write(self.style.SUCCESS("Demo salon data and working hours are ready."))

@@ -18,6 +18,19 @@ class Service(models.Model):
 	def __str__(self):
 		return self.persian_name
 
+class GalleryItem(models.Model):
+	title = models.CharField(max_length=160, blank=True)
+	category = models.CharField(max_length=80, blank=True)
+	image_url = models.URLField(max_length=500, blank=True)
+	image = models.ImageField(upload_to="gallery/", blank=True)
+	description = models.TextField(blank=True)
+	order = models.PositiveIntegerField(default=0)
+	is_published = models.BooleanField(default=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		ordering = ["order", "-created_at"]
+
 class Employee(models.Model):
 	user = models.OneToOneField(User, on_delete=models.PROTECT, related_name="employee_profile")
 	specialty = models.CharField(max_length=120, blank=True)

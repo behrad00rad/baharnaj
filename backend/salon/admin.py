@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.forms import UserChangeForm, UserCreationForm
 from django import forms
-from .models import Appointment, Employee, Service, Transaction, User, WorkRecord, WorkingHour
+from .models import Appointment, Employee, GalleryItem, Service, Transaction, User, WorkRecord, WorkingHour
 
 
 class SalonUserCreationForm(UserCreationForm):
@@ -56,6 +56,14 @@ class ServiceAdmin(admin.ModelAdmin):
 	list_filter = ("category", "is_active")
 	search_fields = ("name", "persian_name", "description")
 	list_editable = ("price", "duration", "is_active")
+
+@admin.register(GalleryItem)
+class GalleryItemAdmin(admin.ModelAdmin):
+	list_display = ("title", "category", "order", "is_published")
+	list_filter = ("category", "is_published")
+	list_editable = ("order", "is_published")
+	fields = ("title", "category", "image", "image_url", "description", "order", "is_published")
+	readonly_fields = ("image_url",)
 
 
 @admin.register(Employee)

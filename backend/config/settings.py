@@ -26,7 +26,12 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-change-me")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+CODESPACE_NAME = os.getenv("CODESPACE_NAME", "")
+CODESPACES_DOMAIN = os.getenv("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN", "app.github.dev")
+CODESPACE_BACKEND_HOST = f"{CODESPACE_NAME}-8000.{CODESPACES_DOMAIN}" if CODESPACE_NAME else ""
+CODESPACE_FRONTEND_ORIGIN = f"https://{CODESPACE_NAME}-5173.{CODESPACES_DOMAIN}" if CODESPACE_NAME else ""
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", ",".join(filter(None, ["localhost", "127.0.0.1", CODESPACE_BACKEND_HOST]))).split(",")
+PUBLIC_BACKEND_URL = os.getenv("PUBLIC_BACKEND_URL", f"https://{CODESPACE_BACKEND_HOST}" if CODESPACE_BACKEND_HOST else "").rstrip("/")
 
 
 # Application definition
@@ -120,6 +125,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = "static/"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 
 # Email
@@ -132,5 +139,5 @@ MAILERS = {
 }
 
 REST_FRAMEWORK = {"DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework_simplejwt.authentication.JWTAuthentication",), "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.AllowAny",)}
-CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174").split(",")
+CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", ",".join(filter(None, ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174", CODESPACE_FRONTEND_ORIGIN]))).split(",")
 AUTH_USER_MODEL = "salon.User"

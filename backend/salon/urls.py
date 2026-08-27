@@ -5,10 +5,11 @@ from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminServiceV
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView,
 					EmployeeAppointmentsView, EmployeeListView, EmployeeStatisticsView,
 					ServiceListView, TransactionViewSet, WorkRecordViewSet,
-					WorkingHourViewSet, EmployeeWorkRecordViewSet)
+					WorkingHourViewSet, EmployeeWorkRecordViewSet, GalleryListView, AdminGalleryViewSet)
 
 router = DefaultRouter()
 router.register("admin/services", AdminServiceViewSet, basename="admin-service")
+router.register("admin/gallery", AdminGalleryViewSet, basename="admin-gallery")
 router.register("admin/employees", AdminEmployeeViewSet, basename="admin-employee")
 router.register("admin/users", AdminUserViewSet, basename="admin-user")
 router.register("admin/appointments", AdminAppointmentViewSet, basename="admin-appointment")
@@ -19,6 +20,7 @@ router.register("employee/work-records", EmployeeWorkRecordViewSet, basename="em
 
 urlpatterns = [
 	path("services/", ServiceListView.as_view(), name="service-list"),
+	path("gallery/", GalleryListView.as_view(), name="gallery-list"),
 	path("employees/", EmployeeListView.as_view(), name="employee-list"),
 	path("availability/", AvailabilityView.as_view(), name="availability-list"),
 	path("appointments/", AppointmentCreateView.as_view(), name="appointment-create"),

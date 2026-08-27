@@ -2,11 +2,16 @@ from django.test import TestCase
 
 # Create your tests here.
 from datetime import date
+from io import BytesIO
+from PIL import Image
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.conf import settings
+from django.test import override_settings
 
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-from .models import Appointment, Employee, Service, Transaction, User, WorkRecord, WorkingHour
+from .models import Appointment, Employee, GalleryItem, Service, Transaction, User, WorkRecord, WorkingHour
 
 
 class SalonApiTests(APITestCase):
@@ -128,3 +133,39 @@ class SalonApiTests(APITestCase):
 		)
 		self.assertEqual(response.status_code, 201)
 		self.assertEqual(Transaction.objects.get().amount, 800000)
+
+	def test_public_gallery_returns_only_published_items_in_order(self):
+		GalleryItem.objects.create(title="Published", category="مو", image_url="https://example.com/published.jpg", order=1)
+		GalleryItem.objects.create(title="Hidden", category="مو", image_url="https://example.com/hidden.jpg", order=0, is_published=False)
+		response = self.client.get(reverse("gallery-list"))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual([item["title"] for item in response.data], ["Published"])
+
+	def test_admin_can_upload_gallery_image(self):
+		image = BytesIO()
+		Image.new("RGB", (1, 1), "white").save(image, format="PNG")
+		image.seek(0)
+		self.client.force_authenticate(self.admin)
+		response = self.client.post(
+			reverse("admin-gallery-list"),
+			{"title": "New image", "category": "مو", "image": SimpleUploadedFile("gallery.png", image.read(), content_type="image/png")},
+			format="multipart",
+		)
+		self.assertEqual(response.status_code, 201)
+		item = GalleryItem.objects.get(title="New image")
+		self.assertTrue(item.image.name.startswith("gallery/"))
+		self.assertEqual(item.image_url, item.image.url)
+		origin = settings.PUBLIC_BACKEND_URL or "http://testserver"
+		self.assertTrue(response.data["image_url"].startswith(f"{origin}/media/gallery/"))
+
+	@override_settings(PUBLIC_BACKEND_URL="")
+	def test_gallery_makes_relative_image_url_absolute(self):
+		GalleryItem.objects.create(title="Remote path", image_url="/media/gallery/old.jpg")
+		response = self.client.get(reverse("gallery-list"))
+		self.assertEqual(response.data[0]["image_url"], "http://testserver/media/gallery/old.jpg")
+
+	@override_settings(PUBLIC_BACKEND_URL="https://backend.example.com")
+	def test_gallery_uses_configured_public_backend_url(self):
+		GalleryItem.objects.create(title="Configured host", image_url="/media/gallery/configured.jpg")
+		response = self.client.get(reverse("gallery-list"))
+		self.assertEqual(response.data[0]["image_url"], "https://backend.example.com/media/gallery/configured.jpg")

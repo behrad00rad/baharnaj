@@ -1,13 +1,15 @@
 from datetime import date as date_type, datetime, time, timedelta
 from django.db import transaction
 from django.db.models import Count
-from rest_framework import generics, status, viewsets
+from rest_framework import generics, parsers, status, viewsets
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .models import Appointment, Employee, Service, Transaction, User, WorkRecord, WorkingHour
+from .models import Appointment, Employee, GalleryItem, Service, Transaction, User, WorkRecord, WorkingHour
 from .serializers import (AppointmentSerializer, EmployeeAdminSerializer, EmployeeSerializer,
+                          GalleryAdminSerializer,
+                          GalleryItemSerializer,
                           ServiceAdminSerializer, ServiceSerializer, TransactionSerializer,
                           UserAdminSerializer,
                           WorkRecordSerializer, WorkingHourSerializer)
@@ -15,6 +17,10 @@ from .serializers import (AppointmentSerializer, EmployeeAdminSerializer, Employ
 class ServiceListView(generics.ListAPIView):
     queryset = Service.objects.filter(is_active=True)
     serializer_class = ServiceSerializer
+
+class GalleryListView(generics.ListAPIView):
+    queryset = GalleryItem.objects.filter(is_published=True)
+    serializer_class = GalleryItemSerializer
 
 class EmployeeListView(generics.ListAPIView):
     serializer_class = EmployeeSerializer
@@ -112,6 +118,11 @@ class AdminModelViewSet(viewsets.ModelViewSet):
 class AdminServiceViewSet(AdminModelViewSet):
     queryset = Service.objects.all()
     serializer_class = ServiceAdminSerializer
+
+class AdminGalleryViewSet(AdminModelViewSet):
+    queryset = GalleryItem.objects.all()
+    serializer_class = GalleryAdminSerializer
+    parser_classes = (parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser)
 
 class AdminEmployeeViewSet(AdminModelViewSet):
     queryset = Employee.objects.select_related("user").prefetch_related("services")
