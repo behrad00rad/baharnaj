@@ -1,5 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import date as date_type, datetime, time, timedelta
 from django.db import transaction
+from django.db.models import Count
 from rest_framework import generics, status, viewsets
 from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.response import Response
@@ -20,17 +21,30 @@ class EmployeeListView(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = Employee.objects.filter(is_active=True).select_related("user")
-        service_id = self.request.query_params.get("service")
-        return queryset.filter(services=service_id) if service_id else queryset
+        service_ids = [item for item in self.request.query_params.get("service", "").split(",") if item]
+        if service_ids:
+            return queryset.filter(services__in=service_ids).annotate(service_count=Count("services", distinct=True)).filter(service_count=len(service_ids))
+        return queryset
 
 class AvailabilityView(generics.ListAPIView):
     def list(self, request, *args, **kwargs):
-        service_id, employee_id, date_value = request.query_params.get("service"), request.query_params.get("employee"), request.query_params.get("date")
-        if not all((service_id, employee_id, date_value)):
+        service_values, employee_id, date_value = request.query_params.get("service", "").split(","), request.query_params.get("employee"), request.query_params.get("date")
+        service_values = [item for item in service_values if item]
+        if not all((service_values, employee_id, date_value)):
             return Response({"detail": "خدمت، متخصص و تاریخ الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
-        service = Service.objects.get(pk=service_id)
-        employee = Employee.objects.get(pk=employee_id, is_active=True, services=service)
-        date = datetime.strptime(date_value, "%Y-%m-%d").date()
+        try:
+            services = list(Service.objects.filter(pk__in=service_values, is_active=True))
+            employee = Employee.objects.filter(pk=employee_id, is_active=True, services__in=service_values).first()
+            date = datetime.strptime(date_value, "%Y-%m-%d").date()
+        except ValueError:
+            return Response({"date": date_value, "slots": []})
+        if employee is None:
+            return Response({"date": date_value, "slots": []})
+        if len(services) != len(set(service_values)) or employee.services.filter(pk__in=service_values).count() != len(set(service_values)):
+            return Response({"date": date_value, "slots": []})
+        if date < date_type.today():
+            return Response({"date": date_value, "slots": []})
+        duration = sum(service.duration for service in services)
         appointments = Appointment.objects.filter(employee=employee, date=date, status__in=["pending", "confirmed"])
         working_hours = employee.working_hours.filter(weekday=date.weekday(), is_active=True)
         if not working_hours.exists():
@@ -39,9 +53,13 @@ class AvailabilityView(generics.ListAPIView):
         for working_hour in working_hours:
             current = datetime.combine(date, working_hour.start_time)
             closing = datetime.combine(date, working_hour.end_time)
-            while current + timedelta(minutes=service.duration) <= closing:
+            opening = max(current.time(), time(8))
+            closing = min(closing.time(), time(20))
+            current = datetime.combine(date, opening)
+            closing_datetime = datetime.combine(date, closing)
+            while current + timedelta(minutes=duration) <= closing_datetime:
                 start = current.time()
-                end = (current + timedelta(minutes=service.duration)).time()
+                end = (current + timedelta(minutes=duration)).time()
                 if not appointments.filter(start_time__lt=end, end_time__gt=start).exists():
                     slots.append(start.strftime("%H:%M"))
                 current += timedelta(minutes=30)
@@ -73,11 +91,13 @@ class AppointmentCreateView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        end_time = (datetime.combine(data["date"], data["start_time"]) + timedelta(minutes=data["service"].duration)).time()
+        selected_services = data.get("services") or [data["service"]]
+        duration = sum(service.duration for service in selected_services)
+        end_time = (datetime.combine(data["date"], data["start_time"]) + timedelta(minutes=duration)).time()
         conflict = Appointment.objects.select_for_update().filter(employee=data["employee"], date=data["date"], status__in=["pending", "confirmed"], start_time__lt=end_time, end_time__gt=data["start_time"]).exists()
         if conflict:
             return Response({"detail": "این زمان قبلاً رزرو شده است."}, status=status.HTTP_409_CONFLICT)
-        appointment = serializer.save(price=data["service"].price, end_time=end_time, customer=request.user if request.user.is_authenticated else None)
+        appointment = serializer.save(price=sum(service.price for service in selected_services), end_time=end_time, customer=request.user if request.user.is_authenticated else None)
         return Response(self.get_serializer(appointment).data, status=status.HTTP_201_CREATED)
 
 

@@ -41,6 +41,7 @@ class Appointment(models.Model):
 	customer = models.ForeignKey(User, on_delete=models.PROTECT, related_name="appointments", null=True)
 	employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="appointments")
 	service = models.ForeignKey(Service, on_delete=models.PROTECT, related_name="appointments")
+	services = models.ManyToManyField(Service, through="AppointmentService", related_name="multi_service_appointments", blank=True)
 	date = models.DateField()
 	start_time = models.TimeField()
 	end_time = models.TimeField()
@@ -50,6 +51,14 @@ class Appointment(models.Model):
 	created_at = models.DateTimeField(auto_now_add=True)
 	class Meta:
 		ordering = ["date", "start_time"]
+
+class AppointmentService(models.Model):
+	appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE, related_name="service_assignments")
+	service = models.ForeignKey(Service, on_delete=models.PROTECT)
+	employee = models.ForeignKey(Employee, on_delete=models.PROTECT)
+
+	class Meta:
+		constraints = [models.UniqueConstraint(fields=("appointment", "service"), name="unique_appointment_service")]
 
 class WorkRecord(models.Model):
 	employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="work_records")

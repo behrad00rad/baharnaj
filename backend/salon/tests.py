@@ -16,13 +16,16 @@ class SalonApiTests(APITestCase):
 		self.service = Service.objects.create(
 			name="Cut", persian_name="کوتاهی", price=800000, duration=60, is_active=True
 		)
+		self.color_service = Service.objects.create(
+			name="Color", persian_name="رنگ", price=1200000, duration=120, is_active=True
+		)
 		self.employee_user = User.objects.create_user(username="employee", first_name="Sara", role="employee")
 		self.employee_user.set_password("secret")
 		self.employee_user.save()
 		self.employee = Employee.objects.create(
 			user=self.employee_user, commission_value=10, is_active=True
 		)
-		self.employee.services.add(self.service)
+		self.employee.services.add(self.service, self.color_service)
 		WorkingHour.objects.create(
 			employee=self.employee, weekday=5, start_time="09:00", end_time="20:00"
 		)
@@ -52,6 +55,32 @@ class SalonApiTests(APITestCase):
 		second = self.client.post(reverse("appointment-create"), payload)
 		self.assertEqual(first.status_code, 201)
 		self.assertEqual(second.status_code, 409)
+
+	def test_booking_persists_all_services_and_combined_totals(self):
+		payload = {
+			"customer_name": "مریم",
+			"customer_phone": "09121111111",
+			"service": self.service.id,
+			"services": [self.service.id, self.color_service.id],
+			"employee": self.employee.id,
+			"date": "2026-08-29",
+			"start_time": "09:00",
+		}
+		response = self.client.post(reverse("appointment-create"), payload)
+		self.assertEqual(response.status_code, 201)
+		appointment = Appointment.objects.get()
+		self.assertEqual(set(appointment.services.values_list("id", flat=True)), {self.service.id, self.color_service.id})
+		self.assertEqual(appointment.price, 2000000)
+		self.assertEqual(str(appointment.end_time), "12:00:00")
+
+	def test_booking_rejects_outside_working_hours(self):
+		payload = {
+			"customer_name": "مریم", "customer_phone": "09121111111",
+			"service": self.service.id, "employee": self.employee.id,
+			"date": "2026-08-29", "start_time": "07:45",
+		}
+		response = self.client.post(reverse("appointment-create"), payload)
+		self.assertEqual(response.status_code, 400)
 
 	def test_admin_crud_requires_staff(self):
 		response = self.client.get(reverse("admin-service-list"))

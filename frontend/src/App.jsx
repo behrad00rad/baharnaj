@@ -7,8 +7,17 @@ import './App.css'
 const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api/v1/' })
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token')
-  if (token) config.headers.Authorization = `Bearer ${token}`
+  const publicEndpoint = /^(services|employees|availability|appointments)\//.test(config.url || '')
+  if (token && !publicEndpoint) config.headers.Authorization = `Bearer ${token}`
   return config
+})
+api.interceptors.response.use((response) => response, (error) => {
+  if (error.response?.status === 401) {
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
+    localStorage.removeItem('user_role')
+  }
+  return Promise.reject(error)
 })
 const fallbackServices = [
   { id: 1, persian_name: 'رنگ و احیای مو', description: 'رنگی درخشان با مراقبت عمیق و شخصی‌سازی‌شده', price: 2500000, duration: 150 },
@@ -27,22 +36,29 @@ function getTokenRole(token) {
   }
 }
 
+const localIsoDate = (value = new Date()) => `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`
+
 function JalaliDatePicker({ value, onChange }) {
-  const today = new Date()
-  const current = value ? value.split('-').map(Number) : [today.getFullYear(), today.getMonth() + 1, today.getDate()]
+  const today = localIsoDate()
+  const current = value ? value.split('-').map(Number) : today.split('-').map(Number)
   const jalali = value ? toJalaali(current[0], current[1], current[2]) : toJalaali(...current)
   const years = Array.from({ length: 5 }, (_, index) => jalali.jy - 2 + index)
   const update = (part, nextValue) => {
     const next = { ...jalali, [part]: Number(nextValue) }
     const gregorian = toGregorian(next.jy, next.jm, Math.min(next.jd, next.jm <= 6 ? 31 : 30))
-    onChange(`${gregorian.gy}-${pad(gregorian.gm)}-${pad(gregorian.gd)}`)
+    const nextDate = `${gregorian.gy}-${pad(gregorian.gm)}-${pad(gregorian.gd)}`
+    if (nextDate >= today) onChange(nextDate)
   }
   return <div className="jalali-picker"><span>تاریخ شمسی</span><div><select aria-label="سال" value={jalali.jy} onChange={(event) => update('jy', event.target.value)}>{years.map((year) => <option key={year} value={year}>{year}</option>)}</select><select aria-label="ماه" value={jalali.jm} onChange={(event) => update('jm', event.target.value)}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{new Intl.NumberFormat('fa-IR').format(index + 1)}</option>)}</select><select aria-label="روز" value={jalali.jd} onChange={(event) => update('jd', event.target.value)}>{Array.from({ length: jalali.jm <= 6 ? 31 : 30 }, (_, index) => <option key={index + 1} value={index + 1}>{new Intl.NumberFormat('fa-IR').format(index + 1)}</option>)}</select></div></div>
 }
 
+function DateModal({ value, onChange, onClose }) {
+  return <div className="modal-backdrop" role="presentation" onMouseDown={onClose}><div className="date-modal" role="dialog" aria-modal="true" aria-label="انتخاب تاریخ" onMouseDown={(event) => event.stopPropagation()}><div className="modal-heading"><strong>انتخاب تاریخ</strong><button type="button" onClick={onClose} aria-label="بستن">×</button></div><JalaliDatePicker value={value} onChange={(date) => { onChange(date); onClose() }} /></div></div>
+}
+
 function PublicLayout({ children }) {
   const location = useLocation()
-  return <main dir="rtl"><nav className="nav container"><Link className="brand" to="/"><span>بَ</span> بهارناژ</Link><div className="links"><Link className={location.pathname === '/' ? 'active' : ''} to="/">خانه</Link><Link to="/services">خدمات</Link><Link to="/about">درباره ما</Link><Link to="/team">تیم ما</Link><Link to="/gallery">گالری</Link><Link to="/contact">تماس با ما</Link></div><div><Link className="nav-cta" to="/login">ورود کارکنان</Link><Link className="nav-cta" to="/book">رزرو نوبت <span>↗</span></Link></div></nav>{children}<footer id="contact" className="footer container"><Link className="brand" to="/"><span>بَ</span> بهارناژ</Link><p>تهران، خیابان ولیعصر، کوچه نهم</p><p>شنبه تا پنجشنبه · ۹ تا ۲۰</p><a href="tel:+982112345678">۰۲۱ ۱۲۳۴ ۵۶۷۸</a></footer></main>
+  return <main dir="rtl"><nav className="nav container"><Link className="brand" to="/"><span>بَ</span> بهارناژ</Link><div className="links"><Link className={location.pathname === '/' ? 'active' : ''} to="/">خانه</Link><Link to="/services">خدمات</Link><Link to="/about">درباره ما</Link><Link to="/team">تیم ما</Link><Link to="/gallery">گالری</Link><Link to="/contact">تماس با ما</Link></div><div><Link className="nav-cta px-2" to="/login"> ورود کارکنان </Link><Link className="nav-cta" to="/book">رزرو نوبت <span>↗</span></Link></div></nav>{children}<footer id="contact" className="footer container"><Link className="brand" to="/"><span>بَ</span> بهارناژ</Link><p>تهران، خیابان ولیعصر، کوچه نهم</p><p>شنبه تا پنجشنبه · ۹ تا ۲۰</p><a href="tel:+982112345678">۰۲۱ ۱۲۳۴ ۵۶۷۸</a></footer></main>
 }
 
 function useServices() {
@@ -88,18 +104,31 @@ function Login() {
 function Booking() {
   const { services } = useServices()
   const params = new URLSearchParams(useLocation().search)
-  const [serviceId, setServiceId] = useState(params.get('service') || '')
-  const [employees, setEmployees] = useState([])
-  const [employeeId, setEmployeeId] = useState('')
+  const [serviceRows, setServiceRows] = useState([{ serviceId: params.get('service') || '', employeeId: '' }])
+  const [employeesByService, setEmployeesByService] = useState({})
   const [slots, setSlots] = useState([])
+  const [dateOpen, setDateOpen] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState({ name: '', phone: '', date: '', time: '' })
-  useEffect(() => { if (serviceId) api.get(`employees/?service=${serviceId}`).then(({ data }) => setEmployees(data)).catch(() => setEmployees([])) }, [serviceId])
-  useEffect(() => { if (serviceId && employeeId && form.date) api.get(`availability/?service=${serviceId}&employee=${employeeId}&date=${form.date}`).then(({ data }) => setSlots(data.slots)).catch(() => setSlots([])) }, [serviceId, employeeId, form.date])
-  const submit = async (event) => { event.preventDefault(); setError(''); try { await api.post('appointments/', { customer_name: form.name, customer_phone: form.phone, service: serviceId, employee: employeeId, date: form.date, start_time: form.time }); setDone(true) } catch { setError('این زمان در دسترس نیست یا اطلاعات کامل نشده است. لطفاً زمان دیگری را انتخاب کنید.') } }
+  useEffect(() => {
+    serviceRows.forEach(({ serviceId }) => {
+      if (serviceId && !employeesByService[serviceId]) api.get(`employees/?service=${serviceId}`).then(({ data }) => setEmployeesByService((current) => ({ ...current, [serviceId]: Array.isArray(data) ? data : data.results || [] }))).catch(() => setEmployeesByService((current) => ({ ...current, [serviceId]: [] })))
+    })
+  }, [serviceRows, employeesByService])
+  useEffect(() => {
+    const selectedRows = serviceRows.filter((row) => row.serviceId && row.employeeId)
+    if (!form.date || selectedRows.length !== serviceRows.length) return
+    Promise.all(selectedRows.map((row) => api.get(`availability/?service=${row.serviceId}&employee=${row.employeeId}&date=${form.date}`).then(({ data }) => data.slots || []).catch(() => []))).then((availability) => setSlots(availability.reduce((common, current) => common.filter((slot) => current.includes(slot)), availability[0] || [])))
+  }, [serviceRows, form.date])
+  const totalPrice = serviceRows.reduce((total, row) => total + (services.find((item) => String(item.id) === row.serviceId)?.price || 0), 0)
+  const hasCompleteServiceRows = serviceRows.every((row) => row.serviceId && row.employeeId)
+  const updateRow = (index, changes) => { setSlots([]); setForm((current) => ({ ...current, time: '' })); setServiceRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, ...changes } : row)) }
+  const addService = () => setServiceRows((current) => [...current, { serviceId: '', employeeId: '' }])
+  const removeService = (index) => setServiceRows((current) => current.length === 1 ? [{ serviceId: '', employeeId: '' }] : current.filter((_, rowIndex) => rowIndex !== index))
+  const submit = async (event) => { event.preventDefault(); setError(''); try { await api.post('appointments/', { customer_name: form.name, customer_phone: form.phone, service: serviceRows[0].serviceId, services: serviceRows.map((row) => row.serviceId), service_assignments: serviceRows.map((row) => ({ service: row.serviceId, employee: row.employeeId })), employee: serviceRows[0].employeeId, date: form.date, start_time: form.time }); setDone(true) } catch { setError('این زمان در دسترس نیست یا اطلاعات کامل نشده است. لطفاً زمان دیگری را انتخاب کنید.') } }
   if (done) return <PageIntro eyebrow="رزرو بهارناژ" title="درخواستت ثبت شد." text="برای هماهنگی نهایی، به‌زودی با شما تماس می‌گیریم." />
-  return <section className="booking container"><div><p className="eyebrow">وقت تو، همین حالا</p><h1>نوبتت را<br /><em>رزرو کن.</em></h1><p>خدمت، متخصص، تاریخ و ساعت دلخواهت را انتخاب کن.</p></div><form onSubmit={submit}><label>خدمت مورد نظر<select required value={serviceId} onChange={(event) => { setServiceId(event.target.value); setEmployeeId('') }}><option value="">انتخاب کنید</option>{services.map((item) => <option key={item.id} value={item.id}>{item.persian_name} · {toman(item.price)}</option>)}</select></label><label>متخصص<select required value={employeeId} onChange={(event) => setEmployeeId(event.target.value)}><option value="">انتخاب متخصص</option>{employees.map((item) => <option key={item.id} value={item.id}>{item.name || 'متخصص بهارناژ'} · {item.specialty}</option>)}</select></label><JalaliDatePicker value={form.date} onChange={(date) => setForm({ ...form, date, time: '' })} /><label>ساعت<select required value={form.time} onChange={(event) => setForm({ ...form, time: event.target.value })}><option value="">ابتدا تاریخ را انتخاب کنید</option>{slots.map((slot) => <option key={slot} value={slot}>{slot}</option>)}</select></label><label>نام و نام خانوادگی<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="مثلاً مریم احمدی" /></label><label>شماره تماس<input required type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="۰۹۱۲۱۲۳۴۵۶۷" /></label>{!employees.length && serviceId && <p className="error">برای این خدمت هنوز متخصص فعالی ثبت نشده است.</p>}{error && <p className="error">{error}</p>}<button className="button" type="submit">تأیید رزرو <span>←</span></button></form></section>
+  return <section className="booking container"><div><p className="eyebrow">وقت تو، همین حالا</p><h1>نوبتت را<br /><em>رزرو کن.</em></h1><p>خدمت، متخصص، تاریخ و ساعت دلخواهت را انتخاب کن.</p></div><form onSubmit={submit}><div className="booking-services"><div className="field-heading"><span>خدمت و متخصص</span><button type="button" onClick={addService}>افزودن خدمت +</button></div>{serviceRows.map((row, index) => <div className="service-row" key={`${index}-${row.serviceId}`}><select required aria-label="خدمت" value={row.serviceId} onChange={(event) => updateRow(index, { serviceId: event.target.value, employeeId: '' })}><option value="">انتخاب خدمت</option>{services.filter((item) => !serviceRows.some((other, otherIndex) => otherIndex !== index && String(item.id) === other.serviceId)).map((item) => <option key={item.id} value={item.id}>{item.persian_name} · {toman(item.price)}</option>)}</select><select required aria-label="متخصص این خدمت" value={row.employeeId} disabled={!row.serviceId} onChange={(event) => updateRow(index, { employeeId: event.target.value })}><option value="">متخصص این خدمت</option>{(employeesByService[row.serviceId] || []).map((item) => <option key={item.id} value={item.id}>{item.name || 'متخصص بهارناژ'} · {item.specialty}</option>)}</select><button type="button" className="remove-service" onClick={() => removeService(index)} aria-label="حذف خدمت">×</button></div>)}</div><p className="booking-total">مجموع: {toman(totalPrice)}</p><label>تاریخ نوبت<button type="button" className="date-trigger" onClick={() => setDateOpen(true)}>{form.date ? new Intl.DateTimeFormat('fa-IR').format(new Date(`${form.date}T00:00:00`)) : 'انتخاب تاریخ'}</button></label>{dateOpen && <DateModal value={form.date} onChange={(date) => { setSlots([]); setForm({ ...form, date, time: '' }) }} onClose={() => setDateOpen(false)} />}<label>ساعت <span className="field-hint">ساعات کاری: ۰۸:۰۰ تا ۲۰:۰۰</span><select required value={form.time} onChange={(event) => setForm({ ...form, time: event.target.value })}><option value="">{!hasCompleteServiceRows ? 'ابتدا خدمت و متخصص را انتخاب کنید' : !form.date ? 'ابتدا تاریخ را انتخاب کنید' : 'در حال دریافت زمان‌های خالی...'}</option>{(hasCompleteServiceRows && form.date ? slots : []).map((slot) => <option key={slot} value={slot}>{slot}</option>)}</select></label><label>نام و نام خانوادگی<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="مثلاً مریم احمدی" /></label><label>شماره تماس<input required type="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="۰۹۱۲۱۲۳۴۵۶۷" /></label>{serviceRows.some((row) => row.serviceId && !(employeesByService[row.serviceId] || []).length) && <p className="error">برای یکی از خدمات متخصص فعالی ثبت نشده است.</p>}{hasCompleteServiceRows && form.date && !slots.length && <p className="error">برای این متخصص در تاریخ انتخاب‌شده زمان خالی وجود ندارد.</p>}{error && <p className="error">{error}</p>}<button className="button" type="submit">تأیید رزرو <span>←</span></button></form></section>
 }
 
 function Dashboard({ role }) {
