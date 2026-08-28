@@ -155,15 +155,26 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
     "DEFAULT_THROTTLE_RATES": {"login": "5/minute", "guest_booking": "10/hour"},
 }
-CORS_ALLOWED_ORIGINS = [origin for origin in os.getenv("CORS_ALLOWED_ORIGINS", ",".join(filter(None, ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174", CODESPACE_FRONTEND_ORIGIN]))).split(",") if origin]
+configured_origins = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin.strip()]
+if DEBUG:
+    CORS_ALLOWED_ORIGINS = configured_origins + [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ]
+    CORS_ALLOWED_ORIGIN_REGEXES = [r"^https://.*-5173\.app\.github\.dev$"]
+    CSRF_TRUSTED_ORIGINS = configured_origins + ["https://*.app.github.dev"]
+else:
+    CORS_ALLOWED_ORIGINS = configured_origins
+    CSRF_TRUSTED_ORIGINS = configured_origins
 CORS_ALLOW_CREDENTIALS = True
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
-CSRF_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
-SESSION_COOKIE_SECURE = not DEBUG
-SESSION_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
-REFRESH_COOKIE_SECURE = not DEBUG
-REFRESH_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SAMESITE = "None"
+REFRESH_COOKIE_SECURE = True
+REFRESH_COOKIE_SAMESITE = "None"
 REFRESH_COOKIE_NAME = "baharnaj_refresh"
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=10),
