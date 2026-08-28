@@ -1,7 +1,11 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { PageIntro, PublicLayout } from './components/PublicLayout'
 import Booking from './pages/Booking'
-import Dashboard from './pages/Dashboard'
+import AdminLayout from './components/AdminLayout'
+import AdminRouter from './pages/AdminApp'
+import EmployeeLayout from './components/EmployeeLayout'
+import EmployeeApp from './pages/EmployeeApp'
 import Gallery from './pages/Gallery'
 import Home from './pages/Home'
 import Login from './pages/Login'
@@ -13,9 +17,18 @@ import Contact from './pages/Contact'
 import Privacy from './pages/Privacy'
 import Terms from './pages/Terms'
 import './App.css'
+import { api } from './shared/api'
+import { clearSessionState, markAuthReady, setSession, useAuth } from './shared/auth'
+
+let authBootstrapPromise
 
 // App is intentionally limited to routing; page behavior lives beside its page.
 export default function App() {
+  const { ready } = useAuth()
+  useEffect(() => {
+    authBootstrapPromise ??= api.post('auth/token/refresh/').then(({ data }) => setSession(data.access, data.role)).catch(() => clearSessionState()).finally(markAuthReady)
+  }, [])
+  if (!ready) return null
   return <BrowserRouter><Routes>
     <Route path="/" element={<PublicLayout><Home /></PublicLayout>} />
     <Route path="/services" element={<PublicLayout><Services /></PublicLayout>} />
@@ -29,8 +42,8 @@ export default function App() {
     <Route path="/contact" element={<PublicLayout><Contact /></PublicLayout>} />
     <Route path="/privacy" element={<PublicLayout><Privacy /></PublicLayout>} />
     <Route path="/terms" element={<PublicLayout><Terms /></PublicLayout>} />
-    <Route path="/employee/*" element={<Dashboard role="employee" />} />
-    <Route path="/admin/*" element={<Dashboard role="admin" />} />
+      <Route path="/employee/*" element={<EmployeeLayout />}><Route path="*" element={<EmployeeApp />} /></Route>
+    <Route path="/admin/*" element={<AdminLayout />}><Route path="*" element={<AdminRouter />} /></Route>
     <Route path="*" element={<Navigate to="/" replace />} />
   </Routes></BrowserRouter>
 }

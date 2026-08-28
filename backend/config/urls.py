@@ -19,14 +19,16 @@ from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
-from rest_framework_simplejwt.views import TokenRefreshView
-from salon.views import SalonTokenView
+from salon.views import CookieRefreshView, CookieTokenView, CsrfView, PasswordResetConfirmView, PasswordResetRequestView
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/v1/", include("salon.urls")),
-    path("api/v1/auth/token/", SalonTokenView.as_view()),
-    path("api/v1/auth/token/refresh/", TokenRefreshView.as_view()),
+    path("api/v1/auth/token/", CookieTokenView.as_view()),
+    path("api/v1/auth/token/refresh/", CookieRefreshView.as_view()),
+    path("api/v1/auth/csrf/", CsrfView.as_view()),
+    path("api/v1/auth/password-reset/", PasswordResetRequestView.as_view()),
+    path("api/v1/auth/password-reset/<uidb64>/<token>/", PasswordResetConfirmView.as_view()),
 ]
 
 if settings.DEBUG:

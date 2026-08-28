@@ -2,8 +2,7 @@ import { toGregorian, toJalaali } from 'jalaali-js'
 import { pad } from '../shared/date'
 
 export function JalaliDatePicker({ value, onChange }) {
-  const today = new Date()
-  const todayIso = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
+  const todayIso = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date())
   const current = value ? value.split('-').map(Number) : todayIso.split('-').map(Number)
   const jalali = toJalaali(current[0], current[1], current[2])
   const years = Array.from({ length: 5 }, (_, index) => jalali.jy - 2 + index)
