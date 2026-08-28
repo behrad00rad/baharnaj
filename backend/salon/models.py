@@ -1,142 +1,387 @@
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
+import uuid
+
+
+def generate_confirmation_code():
+    return uuid.uuid4().hex[:10]
+
+
+class SoftDeleteManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False)
+
+
+class SoftDeleteModel(models.Model):
+    is_deleted = models.BooleanField(default=False)
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
+
+    class Meta:
+        abstract = True
+
+    def delete(self, using=None, keep_parents=False):
+        self.is_deleted = True
+        self.save(update_fields=("is_deleted",))
 
 
 class User(AbstractUser):
-\tROLE_CHOICES = [("customer", "Customer"), ("employee", "Employee"), ("admin", "Admin")]
-\tphone = models.CharField(max_length=20, blank=True)
-\trole = models.CharField(max_length=20, choices=ROLE_CHOICES, default="customer")
+    # AbstractUser preserves Django auth/admin compatibility while roles stay explicit.
+    ROLE_CHOICES = [("customer", "Customer"), ("employee", "Employee"), ("admin", "Admin")]
+    ACCOUNT_STATUS_CHOICES = [("active", "Active"), ("suspended", "Suspended"), ("closed", "Closed")]
+    phone = models.CharField(max_length=20, blank=True)
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="customer")
+    account_status = models.CharField(max_length=20, choices=ACCOUNT_STATUS_CHOICES, default="active")
+    last_login_ip = models.GenericIPAddressField(null=True, blank=True)
+    failed_login_attempts = models.PositiveSmallIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        self.is_staff = self.role in {"employee", "admin"}
+        if kwargs.get("update_fields") is not None:
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | {"is_staff"}
+        super().save(*args, **kwargs)
+
+
+class CustomerProfile(SoftDeleteModel):
+    user = models.OneToOneField(User, on_delete=models.PROTECT, related_name="customer_profile")
+    notes = models.TextField(blank=True)
+    profile_photo = models.ImageField(upload_to="profiles/", blank=True)
+    tags = models.TextField(blank=True)
+    no_show_count = models.PositiveIntegerField(default=0)
+    last_visit = models.DateField(null=True, blank=True)
+
+    def clean(self):
+        if self.user_id and self.user.role != "customer":
+            raise ValidationError("CustomerProfile requires a customer-role user.")
+
+
+class EmployeeProfile(SoftDeleteModel):
+    user = models.OneToOneField(User, on_delete=models.PROTECT, related_name="employee_profile")
+    specialty = models.CharField(max_length=120, blank=True)
+    bio = models.TextField(blank=True)
+    commission_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    is_active = models.BooleanField(default=True)
+    profile_photo = models.ImageField(upload_to="profiles/", blank=True)
+
+    def clean(self):
+        if self.user_id and self.user.role != "employee":
+            raise ValidationError("EmployeeProfile requires an employee-role user.")
+
+
+class AccountLogin(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="login_history")
+    logged_in_at = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    succeeded = models.BooleanField(default=True)
+
+
+class AdminActionLog(models.Model):
+    actor = models.ForeignKey(User, on_delete=models.PROTECT, related_name="admin_actions")
+    action = models.CharField(max_length=40)
+    model_name = models.CharField(max_length=100)
+    object_id = models.CharField(max_length=64)
+    changed_at = models.DateTimeField(auto_now_add=True)
+    details = models.JSONField(default=dict, blank=True)
+
+
+class ServiceCategory(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    display_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
 
 
 class Service(models.Model):
-\tname = models.CharField(max_length=120)
-\tpersian_name = models.CharField(max_length=120)
-\tdescription = models.TextField(blank=True)
-\tcategory = models.CharField(max_length=80, blank=True)
-\tprice = models.PositiveIntegerField()
-\tduration = models.PositiveIntegerField(help_text="Duration in minutes")
-\timage = models.URLField(blank=True)
-\tis_active = models.BooleanField(default=True)
+    category = models.ForeignKey(ServiceCategory, on_delete=models.PROTECT, related_name="services")
+    name = models.CharField(max_length=120)
+    persian_name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    price = models.PositiveIntegerField()
+    duration = models.PositiveIntegerField(help_text="Duration in minutes")
+    is_active = models.BooleanField(default=True)
+    is_bookable = models.BooleanField(default=True)
+    is_featured = models.BooleanField(default=False)
+    is_deleted = models.BooleanField(default=False)
+    objects = SoftDeleteManager()
+    all_objects = models.Manager()
 
-\tdef __str__(self):
-\t\treturn self.persian_name
+    class Meta:
+        ordering = ("name",)
 
+    def delete(self, using=None, keep_parents=False):
+        self.is_deleted = True
+        self.save(update_fields=("is_deleted",))
 
-class GalleryItem(models.Model):
-\ttitle = models.CharField(max_length=160, blank=True)
-\tcategory = models.CharField(max_length=80, blank=True)
-\timage_url = models.URLField(max_length=500, blank=True)
-\timage = models.ImageField(upload_to="gallery/", blank=True)
-\tdescription = models.TextField(blank=True)
-\torder = models.PositiveIntegerField(default=0)
-\tis_published = models.BooleanField(default=True)
-\tcreated_at = models.DateTimeField(auto_now_add=True)
-
-\tclass Meta:
-\t\tordering = ["order", "-created_at"]
+    def __str__(self):
+        return self.persian_name
 
 
-class Expertise(models.Model):
-\tname = models.CharField(max_length=120)
-\tpersian_name = models.CharField(max_length=120)
-\tcategory = models.CharField(max_length=80, blank=True)
-\tis_active = models.BooleanField(default=True)
+class EmployeeService(models.Model):
+    employee = models.ForeignKey(EmployeeProfile, on_delete=models.PROTECT, related_name="service_links")
+    service = models.ForeignKey(Service, on_delete=models.PROTECT, related_name="employee_links")
+    is_active = models.BooleanField(default=True)
 
-\tclass Meta:
-\t\tconstraints = [
-\t\t\tmodels.UniqueConstraint(fields=("name", "persian_name"), name="unique_expertise_name")
-\t\t]
-\t\tordering = ["persian_name", "name"]
-
-\tdef __str__(self):
-\t\treturn self.persian_name or self.name
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("employee", "service"), name="unique_employee_service")]
 
 
-class Employee(models.Model):
-\tuser = models.OneToOneField(User, on_delete=models.PROTECT, related_name="employee_profile")
-\tspecialty = models.CharField(max_length=120, blank=True)
-\texpertise = models.ManyToManyField(
-\t\tExpertise,
-\t\tthrough="EmployeeExpertise",
-\t\trelated_name="employees",
-\t\tblank=True,
-\t)
-\tcommission_value = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-\tservices = models.ManyToManyField(Service, related_name="employees", blank=True)
-\tis_active = models.BooleanField(default=True)
+class ServiceImage(models.Model):
+    service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name="images")
+    image = models.ImageField(upload_to="services/")
+    image_url = models.URLField(max_length=500, blank=True)
+    display_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
 
 
-class EmployeeExpertise(models.Model):
-\temployee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="expertise_links")
-\texpertise = models.ForeignKey(Expertise, on_delete=models.PROTECT, related_name="employee_links")
-\tyears_experience = models.PositiveSmallIntegerField(null=True, blank=True)
-\tis_primary = models.BooleanField(default=False)
+class WorkingSchedule(models.Model):
+    employee = models.ForeignKey(EmployeeProfile, on_delete=models.PROTECT, related_name="working_schedules")
+    weekday = models.PositiveSmallIntegerField(choices=[(day, str(day)) for day in range(7)])
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="created_working_schedules")
+    updated_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="updated_working_schedules")
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-\tclass Meta:
-\t\tconstraints = [
-\t\t\tmodels.UniqueConstraint(fields=("employee", "expertise"), name="unique_employee_expertise")
-\t\t]
-\t\tordering = ["-is_primary", "expertise__persian_name"]
-
-
-class WorkingHour(models.Model):
-\temployee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="working_hours")
-\tweekday = models.PositiveSmallIntegerField(choices=[(day, str(day)) for day in range(7)])
-\tstart_time = models.TimeField()
-\tend_time = models.TimeField()
-\tis_active = models.BooleanField(default=True)
-
-\tclass Meta:
-\t\tconstraints = [models.UniqueConstraint(fields=("employee", "weekday"), name="unique_employee_weekday")]
-\t\tordering = ["weekday", "start_time"]
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("employee", "weekday"), name="unique_employee_weekday")]
 
 
-class Appointment(models.Model):
-\tSTATUS_CHOICES = [("pending", "Pending"), ("confirmed", "Confirmed"), ("completed", "Completed"), ("cancelled", "Cancelled")]
-\tcustomer = models.ForeignKey(User, on_delete=models.PROTECT, related_name="appointments", null=True)
-\temployee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="appointments")
-\tservice = models.ForeignKey(Service, on_delete=models.PROTECT, related_name="appointments")
-\tservices = models.ManyToManyField(Service, through="AppointmentService", related_name="multi_service_appointments", blank=True)
-\tdate = models.DateField()
-\tstart_time = models.TimeField()
-\tend_time = models.TimeField()
-\tprice = models.PositiveIntegerField()
-\tstatus = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
-\tnotes = models.TextField(blank=True)
-\tcreated_at = models.DateTimeField(auto_now_add=True)
-
-\tclass Meta:
-\t\tordering = ["date", "start_time"]
+class ScheduleException(models.Model):
+    employee = models.ForeignKey(EmployeeProfile, on_delete=models.PROTECT, related_name="schedule_exceptions")
+    date = models.DateField()
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    is_working = models.BooleanField(default=False)
+    reason = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="created_schedule_exceptions")
+    updated_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="updated_schedule_exceptions")
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
-class AppointmentService(models.Model):
-\tappointment = models.ForeignKey(Appointment, on_delete=models.CASCADE, related_name="service_assignments")
-\tservice = models.ForeignKey(Service, on_delete=models.PROTECT)
-\temployee = models.ForeignKey(Employee, on_delete=models.PROTECT)
-\tunit_price = models.PositiveIntegerField(null=True, blank=True, help_text="Price captured when the appointment was booked")
-\tduration_minutes = models.PositiveIntegerField(null=True, blank=True, help_text="Duration captured when the appointment was booked")
-\tnotes = models.TextField(blank=True)
-\tstatus = models.CharField(max_length=20, choices=Appointment.STATUS_CHOICES, default="pending")
-
-\tclass Meta:
-\t\tconstraints = [models.UniqueConstraint(fields=("appointment", "service"), name="unique_appointment_service")]
+class TimeOff(models.Model):
+    employee = models.ForeignKey(EmployeeProfile, on_delete=models.PROTECT, related_name="time_off")
+    start_date = models.DateField()
+    end_date = models.DateField()
+    reason = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="created_time_off")
+    updated_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="updated_time_off")
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
-class WorkRecord(models.Model):
-\temployee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name="work_records")
-\tappointment = models.ForeignKey(Appointment, on_delete=models.PROTECT, related_name="work_records")
-\tappointment_service = models.OneToOneField(AppointmentService, on_delete=models.PROTECT, related_name="work_record", null=True, blank=True)
-\tservice = models.ForeignKey(Service, on_delete=models.PROTECT)
-\tprice = models.PositiveIntegerField()
-\tcommission = models.PositiveIntegerField(default=0)
-\tcompleted_at = models.DateTimeField(auto_now_add=True)
-\tnotes = models.TextField(blank=True)
+class Appointment(SoftDeleteModel):
+    STATUS_CHOICES = [("pending", "Pending"), ("confirmed", "Confirmed"), ("completed", "Completed"), ("cancelled", "Cancelled")]
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.PROTECT, related_name="appointments")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="created_appointments")
+    updated_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="updated_appointments")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    confirmation_code = models.CharField(max_length=32, unique=True, default=generate_confirmation_code)
+
+    def set_status(self, status, changed_by=None, reason=""):
+        if status not in dict(self.STATUS_CHOICES):
+            raise ValidationError("Invalid appointment status.")
+        if self.status == status and not reason:
+            return
+        self.status = status
+        self.updated_by = changed_by
+        from django.db import transaction
+        with transaction.atomic():
+            self.save(update_fields=("status", "updated_by", "updated_at"))
+            AppointmentStatusHistory.objects.create(appointment=self, status=status, changed_by=changed_by, reason=reason, created_by=changed_by, updated_by=changed_by)
 
 
-class Transaction(models.Model):
-\tTYPE_CHOICES = [("payment", "Payment"), ("commission", "Commission"), ("expense", "Expense"), ("refund", "Refund")]
-\ttype = models.CharField(max_length=20, choices=TYPE_CHOICES)
-\tamount = models.PositiveIntegerField()
-\tappointment = models.ForeignKey(Appointment, on_delete=models.PROTECT, null=True, blank=True)
-\tdescription = models.CharField(max_length=255, blank=True)
-\tcreated_at = models.DateTimeField(auto_now_add=True)
+class AppointmentItem(models.Model):
+    COMPLETION_CHOICES = [("pending", "Pending"), ("in_progress", "In progress"), ("completed", "Completed"), ("cancelled", "Cancelled")]
+    appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE, related_name="items")
+    service = models.ForeignKey(Service, on_delete=models.PROTECT, related_name="appointment_items")
+    employee = models.ForeignKey(EmployeeProfile, on_delete=models.PROTECT, related_name="appointment_items")
+    date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    price_snapshot = models.PositiveIntegerField()
+    duration_snapshot = models.PositiveIntegerField()
+    notes = models.TextField(blank=True)
+    completion_status = models.CharField(max_length=20, choices=COMPLETION_CHOICES, default="pending")
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="created_appointment_items")
+    updated_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="updated_appointment_items")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [models.Index(fields=("employee", "date", "completion_status"), name="apptitem_emp_date_status")]
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            self.price_snapshot = self.service.price
+            self.duration_snapshot = self.service.duration
+        return super().save(*args, **kwargs)
+
+    def set_completion_status(self, status, changed_by=None, reason=""):
+        if status not in dict(self.COMPLETION_CHOICES):
+            raise ValidationError("Invalid appointment item status.")
+        self.completion_status = status
+        self.updated_by = changed_by
+        self.save(update_fields=("completion_status", "updated_by", "updated_at"))
+        self.appointment.set_status(
+            "cancelled" if status == "cancelled" else "completed" if status == "completed" else "confirmed",
+            changed_by=changed_by,
+            reason=reason,
+        )
+
+
+class BookingHold(models.Model):
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    employee = models.ForeignKey(EmployeeProfile, on_delete=models.CASCADE)
+    service = models.ForeignKey(Service, on_delete=models.CASCADE)
+    date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def active(self):
+        return self.expires_at > timezone.now()
+
+
+class WaitlistEntry(models.Model):
+    service = models.ForeignKey(Service, on_delete=models.PROTECT)
+    employee = models.ForeignKey(EmployeeProfile, on_delete=models.PROTECT, null=True, blank=True)
+    date = models.DateField()
+    name = models.CharField(max_length=160)
+    phone = models.CharField(max_length=20)
+    notified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class AppointmentStatusHistory(models.Model):
+    appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE, related_name="status_history")
+    status = models.CharField(max_length=20, choices=Appointment.STATUS_CHOICES)
+    changed_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True)
+    changed_at = models.DateTimeField(auto_now_add=True)
+    reason = models.TextField(blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="created_status_history")
+    updated_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="updated_status_history")
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError("Appointment status history is append-only.")
+        return super().save(*args, **kwargs)
+
+
+class AuditedModel(models.Model):
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="%(class)s_created")
+    updated_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="%(class)s_updated")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+
+class Payment(AuditedModel):
+    STATUS_CHOICES = [("pending", "Pending"), ("paid", "Paid"), ("failed", "Failed"), ("refunded", "Refunded")]
+    appointment = models.ForeignKey(Appointment, on_delete=models.PROTECT, related_name="payments")
+    amount = models.PositiveIntegerField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    provider_reference = models.CharField(max_length=255, blank=True)
+
+    def mark_paid(self, changed_by=None):
+        if self.status not in {"pending", "failed"}:
+            raise ValidationError("Payment cannot transition to paid from this state.")
+        self.status = "paid"
+        self.updated_by = changed_by
+        self.save(update_fields=("status", "updated_by", "updated_at"))
+
+    def refund(self, changed_by=None):
+        if self.status != "paid":
+            raise ValidationError("Only paid payments can be refunded.")
+        self.status = "refunded"
+        self.updated_by = changed_by
+        self.save(update_fields=("status", "updated_by", "updated_at"))
+
+
+class Transaction(AuditedModel):
+    TYPE_CHOICES = [("payment", "Payment"), ("commission", "Commission"), ("expense", "Expense"), ("refund", "Refund")]
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    amount = models.PositiveIntegerField()
+    appointment = models.ForeignKey(Appointment, on_delete=models.PROTECT, null=True, blank=True, related_name="transactions")
+    description = models.CharField(max_length=255, blank=True)
+
+
+class EmployeeCommission(AuditedModel):
+    appointment_item = models.ForeignKey(AppointmentItem, on_delete=models.PROTECT, related_name="commissions")
+    commission_rate_snapshot = models.DecimalField(max_digits=5, decimal_places=2)
+    commission_amount = models.PositiveIntegerField()
+
+
+class Refund(AuditedModel):
+    payment = models.ForeignKey(Payment, on_delete=models.PROTECT, related_name="refunds")
+    amount = models.PositiveIntegerField()
+    reason = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=[("pending", "Pending"), ("completed", "Completed")], default="pending")
+
+    def complete(self, changed_by=None):
+        if self.status != "pending":
+            raise ValidationError("Refund is already completed.")
+        self.status = "completed"
+        self.updated_by = changed_by
+        self.save(update_fields=("status", "updated_by", "updated_at"))
+        self.payment.refund(changed_by=changed_by)
+
+
+class GalleryAsset(models.Model):
+    title = models.CharField(max_length=160, blank=True)
+    category = models.CharField(max_length=80, blank=True)
+    image_url = models.URLField(max_length=500, blank=True)
+    image = models.ImageField(upload_to="gallery/", blank=True)
+    description = models.TextField(blank=True)
+    display_order = models.PositiveIntegerField(default=0)
+    is_published = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("display_order", "-created_at")
+
+
+class Promotion(models.Model):
+    name = models.CharField(max_length=160)
+    description = models.TextField(blank=True)
+    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField()
+    is_active = models.BooleanField(default=True)
+
+
+class HomepageSection(models.Model):
+    key = models.SlugField(unique=True)
+    title = models.CharField(max_length=160)
+    body = models.TextField(blank=True)
+    display_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+
+class SalonSettings(models.Model):
+    singleton_id = models.PositiveSmallIntegerField(default=1, unique=True, editable=False)
+    salon_name = models.CharField(max_length=160, default="Baharnaj")
+    phone = models.CharField(max_length=20, blank=True)
+    address = models.TextField(blank=True)
+
+    def save(self, *args, **kwargs):
+        self.singleton_id = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_solo(cls):
+        return cls.objects.get_or_create(singleton_id=1)[0]

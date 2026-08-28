@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { api, clearSession, toman } from '../shared/api'
+import { useAuth } from '../shared/auth'
 
 const resources = {
   '/admin/services': { title: 'خدمات', endpoint: 'admin/services/', fields: [['name', 'نام انگلیسی'], ['persian_name', 'نام فارسی'], ['category', 'دسته بندی'], ['price', 'قیمت'], ['duration', 'مدت (دقیقه)']] },
@@ -42,7 +43,7 @@ function EmployeeScreen({ path }) {
 }
 
 export default function Dashboard({ role }) {
-  const employee = role === 'employee'; const location = useLocation(); const navigate = useNavigate(); const authenticated = Boolean(localStorage.getItem('access_token')); const actualRole = localStorage.getItem('user_role'); const [stats, setStats] = useState(null)
+  const employee = role === 'employee'; const location = useLocation(); const navigate = useNavigate(); const { accessToken, role: actualRole } = useAuth(); const authenticated = Boolean(accessToken); const [stats, setStats] = useState(null)
   useEffect(() => { if (authenticated) api.get(employee ? 'employee/statistics/' : 'admin/statistics/').then(({ data }) => setStats(data)).catch(() => setStats(null)) }, [authenticated, employee])
   if (!authenticated) return <Navigate to="/login" replace />
   if ((employee && actualRole !== 'employee') || (!employee && actualRole !== 'admin')) return <Navigate to={actualRole === 'employee' ? '/employee' : '/login'} replace />

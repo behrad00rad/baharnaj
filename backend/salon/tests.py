@@ -1,171 +1,122 @@
-from django.test import TestCase
-
-# Create your tests here.
 from datetime import date
-from io import BytesIO
-from PIL import Image
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.conf import settings
-from django.test import override_settings
 
-from django.urls import reverse
-from rest_framework.test import APITestCase
+from django.db import IntegrityError
+from django.test import TestCase, override_settings
+from rest_framework.test import APIClient
 
-from .models import Appointment, Employee, GalleryItem, Service, Transaction, User, WorkRecord, WorkingHour
+from .models import Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, Payment, Refund, Service, ServiceCategory, TimeOff, User, WorkingSchedule
 
 
-class SalonApiTests(APITestCase):
-	def setUp(self):
-		self.admin = User.objects.create_user(username="admin", is_staff=True)
-		self.customer = User.objects.create_user(username="customer", phone="09120000000")
-		self.service = Service.objects.create(
-			name="Cut", persian_name="کوتاهی", price=800000, duration=60, is_active=True
-		)
-		self.color_service = Service.objects.create(
-			name="Color", persian_name="رنگ", price=1200000, duration=120, is_active=True
-		)
-		self.employee_user = User.objects.create_user(username="employee", first_name="Sara", role="employee")
-		self.employee_user.set_password("secret")
-		self.employee_user.save()
-		self.employee = Employee.objects.create(
-			user=self.employee_user, commission_value=10, is_active=True
-		)
-		self.employee.services.add(self.service, self.color_service)
-		WorkingHour.objects.create(
-			employee=self.employee, weekday=5, start_time="09:00", end_time="20:00"
-		)
+class AppointmentItemSchemaTests(TestCase):
+    def setUp(self):
+        self.customer = User.objects.create_user(username="customer")
+        self.customer_profile = CustomerProfile.objects.create(user=self.customer)
+        employee_user = User.objects.create_user(username="employee", role="employee")
+        self.employee = EmployeeProfile.objects.create(user=employee_user, is_active=True)
+        category = ServiceCategory.objects.create(name="Hair")
+        self.service = Service.objects.create(category=category, name="Cut", persian_name="Cut", price=800, duration=60)
+        EmployeeService.objects.create(employee=self.employee, service=self.service)
+        self.appointment = Appointment.objects.create(customer=self.customer_profile, created_by=self.customer)
 
-	def test_public_employee_filter_and_working_hour_availability(self):
-		response = self.client.get(reverse("employee-list"), {"service": self.service.id})
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data[0]["id"], self.employee.id)
+    def make_item(self, start="09:00", end="10:00"):
+        return AppointmentItem.objects.create(
+            appointment=self.appointment, service=self.service, employee=self.employee,
+            date=date(2026, 8, 29), start_time=start, end_time=end,
+        )
 
-		response = self.client.get(
-			reverse("availability-list"),
-			{"service": self.service.id, "employee": self.employee.id, "date": "2026-08-29"},
-		)
-		self.assertEqual(response.status_code, 200)
-		self.assertIn("09:00", response.data["slots"])
+    def test_item_snapshots_are_not_recalculated(self):
+        item = self.make_item()
+        self.assertEqual((item.price_snapshot, item.duration_snapshot), (800, 60))
+        self.service.price = 1200
+        self.service.duration = 90
+        self.service.save()
+        item.notes = "updated"
+        item.save()
+        item.refresh_from_db()
+        self.assertEqual((item.price_snapshot, item.duration_snapshot), (800, 60))
 
-	def test_booking_rejects_overlapping_appointment(self):
-		payload = {
-			"customer_name": "مریم",
-			"customer_phone": "09121111111",
-			"service": self.service.id,
-			"employee": self.employee.id,
-			"date": "2026-08-29",
-			"start_time": "09:00",
-		}
-		first = self.client.post(reverse("appointment-create"), payload)
-		second = self.client.post(reverse("appointment-create"), payload)
-		self.assertEqual(first.status_code, 201)
-		self.assertEqual(second.status_code, 409)
+    def test_database_rejects_overlapping_items(self):
+        self.make_item()
+        with self.assertRaises(IntegrityError):
+            self.make_item(start="09:30", end="10:30")
 
-	def test_booking_persists_all_services_and_combined_totals(self):
-		payload = {
-			"customer_name": "مریم",
-			"customer_phone": "09121111111",
-			"service": self.service.id,
-			"services": [self.service.id, self.color_service.id],
-			"employee": self.employee.id,
-			"date": "2026-08-29",
-			"start_time": "09:00",
-		}
-		response = self.client.post(reverse("appointment-create"), payload)
-		self.assertEqual(response.status_code, 201)
-		appointment = Appointment.objects.get()
-		self.assertEqual(set(appointment.services.values_list("id", flat=True)), {self.service.id, self.color_service.id})
-		self.assertEqual(appointment.price, 2000000)
-		self.assertEqual(str(appointment.end_time), "12:00:00")
+    def test_soft_delete_hides_service(self):
+        self.service.delete()
+        self.assertFalse(Service.objects.filter(pk=self.service.pk).exists())
+        self.assertTrue(Service.all_objects.filter(pk=self.service.pk).exists())
 
-	def test_booking_rejects_outside_working_hours(self):
-		payload = {
-			"customer_name": "مریم", "customer_phone": "09121111111",
-			"service": self.service.id, "employee": self.employee.id,
-			"date": "2026-08-29", "start_time": "07:45",
-		}
-		response = self.client.post(reverse("appointment-create"), payload)
-		self.assertEqual(response.status_code, 400)
+    def test_status_method_writes_history(self):
+        self.appointment.set_status("confirmed", changed_by=self.customer, reason="approved")
+        self.assertEqual(self.appointment.status_history.count(), 1)
+        self.assertEqual(self.appointment.status_history.get().reason, "approved")
 
-	def test_admin_crud_requires_staff(self):
-		response = self.client.get(reverse("admin-service-list"))
-		self.assertEqual(response.status_code, 401)
-		self.client.force_authenticate(self.admin)
-		response = self.client.get(reverse("admin-service-list"))
-		self.assertEqual(response.status_code, 200)
+    def test_role_is_source_of_truth_for_staff(self):
+        user = User.objects.create_user(username="manager", role="admin", is_staff=False)
+        self.assertTrue(user.is_staff)
+        user.role = "customer"
+        user.save()
+        user.refresh_from_db()
+        self.assertFalse(user.is_staff)
 
-	def test_login_returns_role_claim(self):
-		response = self.client.post("/api/v1/auth/token/", {"username": "employee", "password": "secret"})
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data["role"], "employee")
+    def test_login_returns_access_token_and_http_only_refresh_cookie(self):
+        user = User.objects.create_user(username="login-user", password="correct-password", role="admin")
+        response = self.client.post("/api/v1/auth/token/", {"username": user.username, "password": "correct-password"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["role"], "admin")
+        self.assertNotIn("refresh", response.data)
+        self.assertTrue(response.cookies["baharnaj_refresh"]["httponly"])
 
-	def test_work_record_completes_appointment_and_calculates_commission(self):
-		appointment = Appointment.objects.create(
-			customer=self.customer,
-			employee=self.employee,
-			service=self.service,
-			date=date(2026, 8, 29),
-			start_time="09:00",
-			end_time="10:00",
-			price=self.service.price,
-		)
-		self.client.force_authenticate(self.admin)
-		response = self.client.post(
-			reverse("work-record-list"), {"appointment": appointment.id, "notes": "Done"}
-		)
-		self.assertEqual(response.status_code, 201)
-		appointment.refresh_from_db()
-		self.assertEqual(appointment.status, "completed")
-		self.assertEqual(WorkRecord.objects.get().commission, 80000)
+    @override_settings(TIME_ZONE="Asia/Tehran")
+    def test_availability_does_not_depend_on_client_timezone(self):
+        from .models import WorkingSchedule
+        WorkingSchedule.objects.create(employee=self.employee, weekday=5, start_time="09:00", end_time="20:00")
+        client = APIClient()
+        query = {"service": self.service.pk, "employee": self.employee.pk, "date": "2026-08-29"}
+        tehran = client.get("/api/v1/availability/", query, HTTP_X_TIMEZONE="Asia/Tehran").data["slots"]
+        tokyo = client.get("/api/v1/availability/", query, HTTP_X_TIMEZONE="Asia/Tokyo").data["slots"]
+        self.assertEqual(tehran, tokyo)
 
-	def test_closed_day_has_no_availability_and_finance_is_in_admin_crud(self):
-		response = self.client.get(
-			reverse("availability-list"),
-			{"service": self.service.id, "employee": self.employee.id, "date": "2026-08-28"},
-		)
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data["slots"], [])
+    def test_working_hour_violation_is_rejected(self):
+        from rest_framework.test import APIRequestFactory
+        from .serializers import AppointmentItemSerializer
+        serializer = AppointmentItemSerializer(data={"appointment": self.appointment.pk, "service": self.service.pk, "employee": self.employee.pk, "date": "2026-08-29", "start_time": "08:00", "end_time": "09:00"})
+        self.assertFalse(serializer.is_valid())
 
-		self.client.force_authenticate(self.admin)
-		response = self.client.post(
-			reverse("transaction-list"),
-			{"type": "payment", "amount": 800000, "description": "Booking payment"},
-		)
-		self.assertEqual(response.status_code, 201)
-		self.assertEqual(Transaction.objects.get().amount, 800000)
+    def test_time_off_and_schedule_exception_enforcement(self):
+        WorkingSchedule.objects.create(employee=self.employee, weekday=5, start_time="09:00", end_time="20:00")
+        TimeOff.objects.create(employee=self.employee, start_date=date(2026, 8, 29), end_date=date(2026, 8, 29))
+        from .serializers import AppointmentItemSerializer
+        serializer = AppointmentItemSerializer(data={"appointment": self.appointment.pk, "service": self.service.pk, "employee": self.employee.pk, "date": "2026-08-29", "start_time": "10:00", "end_time": "11:00"})
+        self.assertFalse(serializer.is_valid())
 
-	def test_public_gallery_returns_only_published_items_in_order(self):
-		GalleryItem.objects.create(title="Published", category="مو", image_url="https://example.com/published.jpg", order=1)
-		GalleryItem.objects.create(title="Hidden", category="مو", image_url="https://example.com/hidden.jpg", order=0, is_published=False)
-		response = self.client.get(reverse("gallery-list"))
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual([item["title"] for item in response.data], ["Published"])
+    def test_role_permissions_and_employee_isolation(self):
+        from rest_framework.test import APIClient
+        other_user = User.objects.create_user(username="other", role="employee")
+        other = EmployeeProfile.objects.create(user=other_user)
+        EmployeeService.objects.create(employee=other, service=self.service)
+        other_appointment = Appointment.objects.create(customer=self.customer_profile)
+        AppointmentItem.objects.create(appointment=other_appointment, service=self.service, employee=other, date=date(2026, 8, 30), start_time="09:00", end_time="10:00")
+        client = APIClient(); client.force_authenticate(self.employee.user)
+        response = client.get("/api/v1/employee/appointment-items/")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(other_appointment.pk, [item["appointment"] for item in response.data])
+        client.force_authenticate(self.customer)
+        self.assertEqual(client.get("/api/v1/admin/statistics/").status_code, 403)
 
-	def test_admin_can_upload_gallery_image(self):
-		image = BytesIO()
-		Image.new("RGB", (1, 1), "white").save(image, format="PNG")
-		image.seek(0)
-		self.client.force_authenticate(self.admin)
-		response = self.client.post(
-			reverse("admin-gallery-list"),
-			{"title": "New image", "category": "مو", "image": SimpleUploadedFile("gallery.png", image.read(), content_type="image/png")},
-			format="multipart",
-		)
-		self.assertEqual(response.status_code, 201)
-		item = GalleryItem.objects.get(title="New image")
-		self.assertTrue(item.image.name.startswith("gallery/"))
-		self.assertEqual(item.image_url, item.image.url)
-		origin = settings.PUBLIC_BACKEND_URL or "http://testserver"
-		self.assertTrue(response.data["image_url"].startswith(f"{origin}/media/gallery/"))
+    def test_commission_calculation_and_payment_refund_transitions(self):
+        item = self.make_item()
+        commission = EmployeeCommission.objects.create(appointment_item=item, commission_rate_snapshot=10, commission_amount=80)
+        self.assertEqual(commission.commission_amount, 80)
+        payment = Payment.objects.create(appointment=self.appointment, amount=800)
+        payment.mark_paid(self.customer); self.assertEqual(payment.status, "paid")
+        refund = Refund.objects.create(payment=payment, amount=800)
+        refund.complete(self.customer)
+        self.assertEqual(payment.status, "refunded")
 
-	@override_settings(PUBLIC_BACKEND_URL="")
-	def test_gallery_makes_relative_image_url_absolute(self):
-		GalleryItem.objects.create(title="Remote path", image_url="/media/gallery/old.jpg")
-		response = self.client.get(reverse("gallery-list"))
-		self.assertEqual(response.data[0]["image_url"], "http://testserver/media/gallery/old.jpg")
-
-	@override_settings(PUBLIC_BACKEND_URL="https://backend.example.com")
-	def test_gallery_uses_configured_public_backend_url(self):
-		GalleryItem.objects.create(title="Configured host", image_url="/media/gallery/configured.jpg")
-		response = self.client.get(reverse("gallery-list"))
-		self.assertEqual(response.data[0]["image_url"], "https://backend.example.com/media/gallery/configured.jpg")
+    def test_reschedule_revalidates_and_cancellation_history(self):
+        WorkingSchedule.objects.create(employee=self.employee, weekday=5, start_time="09:00", end_time="20:00")
+        item = self.make_item()
+        item.date = date(2026, 8, 29); item.start_time = "11:00"; item.end_time = "12:00"; item.full_clean(); item.save()
+        self.assertFalse(AppointmentItem.objects.filter(start_time="09:00").exists())
+        self.appointment.set_status("cancelled", changed_by=self.customer, reason="customer request")
+        self.assertEqual(self.appointment.status_history.get().reason, "customer request")

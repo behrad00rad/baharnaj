@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from salon.models import Employee, GalleryItem, Service, User, WorkingHour
+from salon.models import EmployeeProfile, EmployeeService, GalleryAsset, Service, ServiceCategory, User, WorkingSchedule
 
 
 class Command(BaseCommand):
@@ -36,7 +36,11 @@ class Command(BaseCommand):
             },
         ]
         service_objects = []
+        categories = {}
         for data in services:
+            category_name = data.pop("category")
+            categories.setdefault(category_name, ServiceCategory.objects.get_or_create(name=category_name)[0])
+            data["category"] = categories[category_name]
             service, _ = Service.objects.update_or_create(name=data["name"], defaults=data)
             service_objects.append(service)
 
@@ -57,13 +61,14 @@ class Command(BaseCommand):
             user.role = "employee"
             user.set_password("demo-password")
             user.save()
-            employee, _ = Employee.objects.update_or_create(
+            employee, _ = EmployeeProfile.objects.update_or_create(
                 user=user,
-                defaults={"specialty": specialty, "commission_value": commission, "is_active": True},
+                defaults={"specialty": specialty, "commission_rate": commission, "is_active": True},
             )
-            employee.services.set(service_objects)
+            EmployeeService.objects.filter(employee=employee).delete()
+            EmployeeService.objects.bulk_create([EmployeeService(employee=employee, service=service) for service in service_objects])
             for weekday in workdays:
-                WorkingHour.objects.update_or_create(
+                WorkingSchedule.objects.update_or_create(
                     employee=employee,
                     weekday=weekday,
                     defaults={"start_time": "09:00", "end_time": "20:00", "is_active": True},
@@ -76,6 +81,6 @@ class Command(BaseCommand):
             ("لحظه‌ای برای خودت", "آرامش", "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?auto=format&fit=crop&w=1200&q=85"),
         ]
         for order, (title, category, image_url) in enumerate(gallery_items):
-            GalleryItem.objects.update_or_create(image_url=image_url, defaults={"title": title, "category": category, "order": order, "is_published": True})
+            GalleryAsset.objects.update_or_create(image_url=image_url, defaults={"title": title, "category": category, "display_order": order, "is_published": True})
 
         self.stdout.write(self.style.SUCCESS("Demo salon data and working hours are ready."))

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, getTokenRole } from '../shared/api'
+import { api } from '../shared/api'
+import { setSession } from '../shared/auth'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -10,9 +11,10 @@ export default function Login() {
   const submit = async (event) => {
     event.preventDefault(); setError('')
     try {
+      await api.get('auth/csrf/')
       const { data } = await api.post('auth/token/', form)
-      localStorage.setItem('access_token', data.access); localStorage.setItem('refresh_token', data.refresh)
-      const role = data.role || getTokenRole(data.access); localStorage.setItem('user_role', role || '')
+      setSession(data.access, data.role)
+      const role = data.role
       navigate(role === 'employee' ? '/employee' : '/admin', { replace: true })
     } catch (requestError) { setError(requestError.response?.data?.detail || 'اتصال به سرور برقرار نشد یا نام کاربری و رمز عبور صحیح نیست.') }
   }

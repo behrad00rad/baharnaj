@@ -1,18 +1,26 @@
-from datetime import datetime, date as date_type, time, timedelta
+from datetime import datetime, time, timedelta
+from django.utils import timezone
 from uuid import uuid4
 
-from rest_framework import serializers
 from django.conf import settings
-from .models import Appointment, AppointmentService, Employee, GalleryItem, Service, Transaction, User, WorkRecord, WorkingHour
+from rest_framework import serializers
+
+from .models import (
+    AccountLogin, AdminActionLog, Appointment, AppointmentItem, CustomerProfile, EmployeeProfile,
+    EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage,
+    BookingHold, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
+)
+from .validators import validate_no_employee_overlap
+from .security import validate_image_upload, validate_phone
+
 
 def absolute_gallery_url(request, value):
-    if not value:
-        return value
-    if not value.startswith("/"):
+    if not value or not value.startswith("/"):
         return value
     if settings.PUBLIC_BACKEND_URL:
         return f"{settings.PUBLIC_BACKEND_URL}{value}"
     return request.build_absolute_uri(value) if request else value
+
 
 class ServiceSerializer(serializers.ModelSerializer):
     employees = serializers.SerializerMethodField()
@@ -22,73 +30,41 @@ class ServiceSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
     def get_employees(self, obj):
-        return [{"id": employee.id, "name": employee.user.get_full_name(), "specialty": employee.specialty} for employee in obj.employees.filter(is_active=True)]
+        return [{"id": link.employee_id, "name": link.employee.user.get_full_name(), "specialty": link.employee.specialty}
+                for link in obj.employee_links.filter(is_active=True).select_related("employee__user")
+                if link.employee.is_active and not link.employee.is_deleted]
 
-class GalleryItemSerializer(serializers.ModelSerializer):
+
+class GalleryAssetSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
 
     class Meta:
-        model = GalleryItem
-        fields = ("id", "title", "category", "image_url", "description", "order")
+        model = GalleryAsset
+        fields = ("id", "title", "category", "image", "image_url", "description", "display_order")
+        extra_kwargs = {"image": {"write_only": True, "required": False}}
+
+    def validate_image(self, value):
+        return validate_image_upload(value)
 
     def get_image_url(self, obj):
-        if obj.image:
-            return absolute_gallery_url(self.context.get("request"), obj.image.url)
-        return absolute_gallery_url(self.context.get("request"), obj.image_url)
-
-class GalleryAdminSerializer(serializers.ModelSerializer):
-    image_url = serializers.URLField(required=False, allow_blank=True)
-
-    class Meta:
-        model = GalleryItem
-        fields = ("id", "title", "category", "image", "image_url", "description", "order", "is_published", "created_at")
-        read_only_fields = ("id", "created_at")
-
-    def validate(self, attrs):
-        if not attrs.get("image") and not attrs.get("image_url") and not self.instance:
-            raise serializers.ValidationError("تصویر یا آدرس تصویر الزامی است.")
-        return attrs
-    def create(self, validated_data):
-        item = super().create(validated_data)
-        if item.image:
-            item.image_url = item.image.url
-            item.save(update_fields=("image_url",))
-        return item
-
-    def update(self, instance, validated_data):
-        item = super().update(instance, validated_data)
-        if item.image:
-            item.image_url = item.image.url
-            item.save(update_fields=("image_url",))
-        return item
-
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        if instance.image:
-            data["image_url"] = absolute_gallery_url(self.context.get("request"), instance.image.url)
-        else:
-            data["image_url"] = absolute_gallery_url(self.context.get("request"), instance.image_url)
-        return data
+        return absolute_gallery_url(self.context.get("request"), obj.image.url if obj.image else obj.image_url)
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source="user.get_full_name", read_only=True)
 
     class Meta:
-        model = Employee
-        fields = ("id", "name", "specialty", "is_active", "services")
+        model = EmployeeProfile
+        fields = ("id", "name", "specialty", "is_active", "profile_photo")
 
-
-class EmployeeAdminSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Employee
-        fields = ("id", "user", "specialty", "commission_value", "is_active", "services")
+    def validate_profile_photo(self, value):
+        return validate_image_upload(value)
 
 
 class UserAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ("id", "username", "first_name", "last_name", "email", "phone", "role", "is_active", "is_staff")
+        fields = ("id", "username", "first_name", "last_name", "email", "phone", "role", "account_status", "is_active", "is_staff")
 
 
 class ServiceAdminSerializer(serializers.ModelSerializer):
@@ -97,27 +73,121 @@ class ServiceAdminSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class WorkingHourSerializer(serializers.ModelSerializer):
+class ServiceImageSerializer(serializers.ModelSerializer):
     class Meta:
-        model = WorkingHour
+        model = ServiceImage
         fields = "__all__"
 
+    def validate_image(self, value):
+        return validate_image_upload(value)
 
-class WorkRecordSerializer(serializers.ModelSerializer):
+
+class AppointmentItemSerializer(serializers.ModelSerializer):
     class Meta:
-        model = WorkRecord
-        fields = "__all__"
-        read_only_fields = ("employee", "service", "price", "commission", "completed_at")
+        model = AppointmentItem
+        fields = ("id", "service", "employee", "date", "start_time", "end_time", "price_snapshot", "duration_snapshot", "notes", "completion_status")
+        read_only_fields = ("id", "price_snapshot", "duration_snapshot")
+
+    def validate(self, attrs):
+        service = attrs.get("service", self.instance.service if self.instance else None)
+        employee = attrs.get("employee", self.instance.employee if self.instance else None)
+        request = self.context.get("request")
+        if request and request.user.role == "employee" and employee.user_id != request.user.id:
+            raise serializers.ValidationError("هر متخصص فقط می‌تواند ردیف‌های خودش را مدیریت کند.")
+        if not service.is_active or not service.is_bookable or not EmployeeService.objects.filter(employee=employee, service=service, is_active=True).exists():
+            raise serializers.ValidationError("این متخصص این خدمت را ارائه نمی‌دهد.")
+        appointment_date = attrs.get("date", self.instance.date if self.instance else None)
+        start_time = attrs.get("start_time", self.instance.start_time if self.instance else None)
+        end_time = attrs.get("end_time", self.instance.end_time if self.instance else None)
+        if not employee.working_schedules.filter(weekday=appointment_date.weekday(), is_active=True, start_time__lte=start_time, end_time__gte=end_time).exists():
+            raise serializers.ValidationError("زمان انتخاب‌شده خارج از ساعات کاری متخصص است.")
+        if employee.time_off.filter(start_date__lte=appointment_date, end_date__gte=appointment_date).exists():
+            raise serializers.ValidationError("متخصص در این تاریخ در دسترس نیست.")
+        validate_no_employee_overlap(
+            employee=employee, date=appointment_date, start_time=start_time, end_time=end_time,
+            item_id=self.instance.pk if self.instance else None,
+        )
+        return attrs
+
+
+class AppointmentSerializer(serializers.ModelSerializer):
+    items = AppointmentItemSerializer(many=True)
+    customer_name = serializers.CharField(write_only=True, required=False)
+    customer_phone = serializers.CharField(write_only=True, required=False)
+    hold_token = serializers.UUIDField(write_only=True, required=False)
+    create_account = serializers.BooleanField(write_only=True, required=False, default=False)
+    account_password = serializers.CharField(write_only=True, required=False, min_length=8)
+
+    class Meta:
+        model = Appointment
+        fields = ("id", "customer", "items", "status", "notes", "created_by", "updated_by", "created_at", "updated_at", "confirmation_code", "customer_name", "customer_phone", "hold_token", "create_account", "account_password")
+        read_only_fields = ("id", "customer", "created_by", "updated_by", "created_at", "updated_at")
+
+    def validate_items(self, items):
+        if not items:
+            raise serializers.ValidationError("حداقل یک خدمت برای نوبت الزامی است.")
+        for position, item in enumerate(items):
+            for other in items[position + 1:]:
+                if item["employee"] != other["employee"] or item["date"] != other["date"]:
+                    continue
+                if item["start_time"] < other["end_time"] and item["end_time"] > other["start_time"]:
+                    raise serializers.ValidationError("ردیف‌های نوبت برای یک متخصص هم‌پوشانی دارند.")
+        return items
+
+    def validate_customer_phone(self, value):
+        return validate_phone(value)
 
     def create(self, validated_data):
-        appointment = validated_data["appointment"]
-        validated_data.setdefault("employee", appointment.employee)
-        validated_data.setdefault("service", appointment.service)
-        validated_data.setdefault("price", appointment.price)
-        validated_data["commission"] = round(validated_data["price"] * float(validated_data["employee"].commission_value) / 100)
-        appointment.status = "completed"
-        appointment.save(update_fields=("status",))
-        return super().create(validated_data)
+        item_data = validated_data.pop("items")
+        hold_token = validated_data.pop("hold_token", None)
+        create_account = validated_data.pop("create_account", False)
+        account_password = validated_data.pop("account_password", None)
+        name = validated_data.pop("customer_name", "مشتری آنلاین")
+        phone = validated_data.pop("customer_phone", "")
+        request = self.context.get("request")
+        customer = request.user if request and request.user.is_authenticated else None
+        if customer is None:
+            customer = User.objects.create_user(username=f"guest_{phone or 'online'}_{uuid4().hex[:10]}", first_name=name, phone=phone)
+        if create_account and account_password:
+            customer.username = phone
+            customer.set_password(account_password)
+            customer.save(update_fields=("username", "password"))
+        customer_profile, _ = CustomerProfile.objects.get_or_create(user=customer)
+        if hold_token:
+            hold = BookingHold.objects.filter(token=hold_token, expires_at__gt=timezone.now()).first()
+            if not hold or not any(item["employee"] == hold.employee and item["service"] == hold.service and item["date"] == hold.date and item["start_time"] == hold.start_time for item in item_data):
+                raise serializers.ValidationError("این زمان دیگر در اختیار شما نیست.")
+        appointment = Appointment.objects.create(customer=customer_profile, created_by=customer, **validated_data)
+        AppointmentItem.objects.bulk_create([
+            AppointmentItem(
+                appointment=appointment,
+                created_by=customer,
+                updated_by=customer,
+                price_snapshot=item["service"].price,
+                duration_snapshot=item["service"].duration,
+                **item,
+            )
+            for item in item_data
+        ])
+        if hold_token:
+            BookingHold.objects.filter(token=hold_token).delete()
+        from .notifications import send_booking_confirmation
+        send_booking_confirmation(appointment)
+        return appointment
+
+
+class BookingHoldSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BookingHold
+        fields = ("token", "employee", "service", "date", "start_time", "end_time", "expires_at")
+        read_only_fields = ("token", "expires_at")
+
+
+class WaitlistEntrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WaitlistEntry
+        fields = "__all__"
+        read_only_fields = ("notified_at", "created_at")
 
 
 class TransactionSerializer(serializers.ModelSerializer):
@@ -125,69 +195,34 @@ class TransactionSerializer(serializers.ModelSerializer):
         model = Transaction
         fields = "__all__"
 
-class AppointmentSerializer(serializers.ModelSerializer):
-    customer_name = serializers.CharField(write_only=True, required=False)
-    customer_phone = serializers.CharField(write_only=True, required=False)
-    services = serializers.PrimaryKeyRelatedField(queryset=Service.objects.filter(is_active=True), many=True, required=False)
-    service_assignments = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
 
+class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Appointment
-        fields = ("id", "customer", "employee", "service", "services", "service_assignments", "date", "start_time", "end_time", "price", "status", "notes", "created_at", "customer_name", "customer_phone")
-        read_only_fields = ("customer", "price", "end_time")
-    def validate(self, attrs):
-        service = attrs.get("service")
-        assignments = attrs.get("service_assignments")
-        selected_services = attrs.get("services") or ([service] if service else [])
-        employee = attrs.get("employee")
-        if assignments:
-            try:
-                assignment_ids = [(int(item["service"]), int(item["employee"])) for item in assignments]
-                assignment_services = list(Service.objects.filter(pk__in=[item[0] for item in assignment_ids], is_active=True))
-                assignment_employees = {item.id: item for item in Employee.objects.filter(pk__in=[item[1] for item in assignment_ids], is_active=True)}
-            except (KeyError, TypeError, ValueError):
-                raise serializers.ValidationError("خدمت و متخصص هر ردیف معتبر نیست.")
-            if len(assignment_ids) != len(set(item[0] for item in assignment_ids)) or len(assignment_services) != len(assignment_ids) or any(item[1] not in assignment_employees or not assignment_employees[item[1]].services.filter(pk=item[0]).exists() for item in assignment_ids):
-                raise serializers.ValidationError("این متخصص این خدمت را ارائه نمی‌دهد.")
-            selected_services = assignment_services
-            employee = assignment_employees[assignment_ids[0][1]]
-            attrs["employee"] = employee
-            attrs["service"] = next(item for item in selected_services if item.id == assignment_ids[0][0])
-        elif not selected_services or not employee or not employee.is_active or employee.services.filter(pk__in=[item.pk for item in selected_services]).count() != len(selected_services):
-            raise serializers.ValidationError("این متخصص این خدمت را ارائه نمی‌دهد.")
-        attrs["service"] = service or selected_services[0]
-        if attrs["date"] < date_type.today():
-            raise serializers.ValidationError("تاریخ نوبت نمی‌تواند در گذشته باشد.")
-        if attrs["start_time"].minute % 15:
-            raise serializers.ValidationError("زمان شروع باید مضربی از ۱۵ دقیقه باشد.")
-        if attrs["start_time"] < time(8) or attrs["start_time"] >= time(20):
-            raise serializers.ValidationError("ساعت شروع باید بین ۰۸:۰۰ و ۲۰:۰۰ باشد.")
-        duration = sum(item.duration for item in selected_services)
-        if (datetime.combine(attrs["date"], attrs["start_time"]) + timedelta(minutes=duration)).time() > time(20):
-            raise serializers.ValidationError("مدت نوبت نباید از ساعت ۲۰:۰۰ عبور کند.")
-        return attrs
+        model = Payment
+        fields = "__all__"
 
-    def create(self, validated_data):
-        from .models import User
-        name = validated_data.pop("customer_name", "مشتری آنلاین")
-        phone = validated_data.pop("customer_phone", "")
-        request = self.context["request"]
-        customer = validated_data.pop("customer", None)
-        assignments = validated_data.pop("service_assignments", None)
-        selected_services = validated_data.pop("services", None) or [validated_data["service"]]
-        service = validated_data["service"]
-        validated_data.setdefault("price", sum(item.price for item in selected_services))
-        validated_data.setdefault("end_time", (datetime.combine(validated_data["date"], validated_data["start_time"]) + timedelta(minutes=sum(item.duration for item in selected_services))).time())
-        customer = customer or (request.user if request.user.is_authenticated else None)
-        if customer is None:
-            username = f"guest_{phone or 'online'}_{validated_data['date'].strftime('%Y%m%d%H%M%S')}_{uuid4().hex[:8]}"
-            customer = User.objects.create_user(username=username, first_name=name, phone=phone)
-        appointment = Appointment.objects.create(customer=customer, **validated_data)
-        if assignments:
-            AppointmentService.objects.bulk_create([
-                AppointmentService(appointment=appointment, service_id=int(item["service"]), employee_id=int(item["employee"]))
-                for item in assignments
-            ])
-        else:
-            AppointmentService.objects.bulk_create([AppointmentService(appointment=appointment, service=item, employee=appointment.employee) for item in selected_services])
-        return appointment
+
+class EmployeeServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmployeeService
+        fields = "__all__"
+
+
+class WorkingScheduleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WorkingSchedule
+        fields = "__all__"
+
+
+class TimeOffSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TimeOff
+        fields = "__all__"
+        read_only_fields = ("employee", "created_by", "updated_by", "created_at", "updated_at")
+
+
+class AdminActionLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AdminActionLog
+        fields = "__all__"
+        read_only_fields = ("id", "actor", "changed_at")
