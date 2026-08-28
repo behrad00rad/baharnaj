@@ -51,6 +51,24 @@ def remove_overlap_triggers(apps, schema_editor):
         schema_editor.execute("DROP TRIGGER IF EXISTS salon_appointmentitem_no_overlap_update")
 
 
+def backfill_customer_profiles(apps, schema_editor):
+    CustomerProfile = apps.get_model("salon", "CustomerProfile")
+    Appointment = apps.get_model("salon", "Appointment")
+    customer_user_ids = Appointment.objects.exclude(customer_id=None).values_list("customer_id", flat=True).distinct()
+    CustomerProfile.objects.bulk_create(
+        [CustomerProfile(id=user_id, user_id=user_id) for user_id in customer_user_ids],
+        ignore_conflicts=True,
+    )
+
+
+def backfill_service_categories(apps, schema_editor):
+    Service = apps.get_model("salon", "Service")
+    ServiceCategory = apps.get_model("salon", "ServiceCategory")
+    for service in Service.objects.all():
+        category, _ = ServiceCategory.objects.get_or_create(name=service.category)
+        Service.objects.filter(pk=service.pk).update(category=category.pk)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -727,6 +745,7 @@ class Migration(migrations.Migration):
                 to=settings.AUTH_USER_MODEL,
             ),
         ),
+        migrations.RunPython(backfill_customer_profiles, migrations.RunPython.noop),
         migrations.AlterField(
             model_name="appointment",
             name="customer",
@@ -874,6 +893,7 @@ class Migration(migrations.Migration):
                 to="salon.employeeprofile",
             ),
         ),
+        migrations.RunPython(backfill_service_categories, migrations.RunPython.noop),
         migrations.AlterField(
             model_name="service",
             name="category",

@@ -29,6 +29,12 @@ def restore_overlap_triggers(apps, schema_editor):
     """)
 
 
+def backfill_confirmation_codes(apps, schema_editor):
+    Appointment = apps.get_model("salon", "Appointment")
+    for appointment in Appointment.objects.all().only("id"):
+        Appointment.objects.filter(pk=appointment.pk).update(confirmation_code=uuid.uuid4().hex[:10])
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -38,6 +44,15 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(drop_overlap_triggers, migrations.RunPython.noop),
         migrations.AddField(
+            model_name="appointment",
+            name="confirmation_code",
+            field=models.CharField(
+                default=salon.models.generate_confirmation_code,
+                max_length=32,
+            ),
+        ),
+        migrations.RunPython(backfill_confirmation_codes, migrations.RunPython.noop),
+        migrations.AlterField(
             model_name="appointment",
             name="confirmation_code",
             field=models.CharField(
