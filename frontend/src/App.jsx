@@ -20,11 +20,13 @@ import './App.css'
 import { api } from './shared/api'
 import { clearSessionState, markAuthReady, setSession, useAuth } from './shared/auth'
 
+let authBootstrapPromise
+
 // App is intentionally limited to routing; page behavior lives beside its page.
 export default function App() {
   const { ready } = useAuth()
   useEffect(() => {
-    api.post('auth/token/refresh/').then(({ data }) => setSession(data.access, data.role)).catch(() => clearSessionState()).finally(markAuthReady)
+    authBootstrapPromise ??= api.post('auth/token/refresh/').then(({ data }) => setSession(data.access, data.role)).catch(() => clearSessionState()).finally(markAuthReady)
   }, [])
   if (!ready) return null
   return <BrowserRouter><Routes>
