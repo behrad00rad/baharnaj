@@ -164,6 +164,15 @@ class ServiceCategorySerializer(serializers.ModelSerializer):
         fields = ("id", "name", "is_active")
 
 
+class AdminCustomerOptionSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source="user.get_full_name", read_only=True)
+    phone = serializers.CharField(source="user.phone", read_only=True)
+
+    class Meta:
+        model = CustomerProfile
+        fields = ("id", "name", "phone")
+
+
 class UserAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -291,6 +300,48 @@ class AppointmentSerializer(serializers.ModelSerializer):
         from .notifications import send_booking_confirmation
         send_booking_confirmation(appointment)
         return appointment
+
+
+class AdminAppointmentCreateSerializer(serializers.ModelSerializer):
+    items = AppointmentItemSerializer(many=True)
+    customer = serializers.PrimaryKeyRelatedField(queryset=CustomerProfile.objects.all(), required=False)
+    customer_name = serializers.CharField(required=False, write_only=True, allow_blank=False)
+    customer_phone = serializers.CharField(required=False, write_only=True, allow_blank=False)
+    payment_status = serializers.ChoiceField(choices=Payment.STATUS_CHOICES, write_only=True, required=False)
+
+    class Meta:
+        model = Appointment
+        fields = ("id", "customer", "customer_name", "customer_phone", "items", "notes", "status", "payment_status")
+        read_only_fields = ("id",)
+
+    def validate(self, attrs):
+        if not attrs.get("customer") and not (attrs.get("customer_name") and attrs.get("customer_phone")):
+            raise serializers.ValidationError({"customer": "یک مشتری انتخاب کنید یا نام و شماره مشتری جدید را وارد کنید."})
+        return attrs
+
+    def create(self, validated_data):
+        items = validated_data.pop("items")
+        payment_status = validated_data.pop("payment_status", None)
+        customer = validated_data.pop("customer", None)
+        customer_name = validated_data.pop("customer_name", None)
+        customer_phone = validated_data.pop("customer_phone", None)
+        actor = self.context["request"].user
+        if customer is None:
+            phone = validate_phone(customer_phone)
+            user, created = User.objects.get_or_create(username=f"admin_guest_{phone}", defaults={"first_name": customer_name, "phone": phone, "role": "customer"})
+            if not created:
+                user.first_name = customer_name
+                user.phone = phone
+                user.save(update_fields=("first_name", "phone"))
+            customer, _ = CustomerProfile.objects.get_or_create(user=user)
+        appointment = Appointment.objects.create(customer=customer, created_by=actor, updated_by=actor, **validated_data)
+        AppointmentItem.objects.bulk_create([AppointmentItem(appointment=appointment, created_by=actor, updated_by=actor, price_snapshot=item["service"].price, duration_snapshot=item["service"].duration, **item) for item in items])
+        if payment_status:
+            Payment.objects.create(appointment=appointment, amount=sum(item["service"].price for item in items), status=payment_status, created_by=actor, updated_by=actor)
+        return appointment
+
+    def to_representation(self, instance):
+        return AppointmentSerializer(instance, context=self.context).data
 
 
 class BookingHoldItemSerializer(serializers.ModelSerializer):

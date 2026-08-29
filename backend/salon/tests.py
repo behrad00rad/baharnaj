@@ -168,6 +168,22 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(duplicate.status_code, 400)
         self.assertIn("username", duplicate.data)
 
+    def test_admin_appointments_filter_create_and_revenue(self):
+        admin = User.objects.create_user(username="calendar-admin", role="admin")
+        booking_date = date(2026, 8, 31)
+        WorkingSchedule.objects.create(employee=self.employee, weekday=booking_date.weekday(), start_time="09:00", end_time="20:00")
+        client = APIClient()
+        client.force_authenticate(admin)
+        response = client.post("/api/v1/admin/appointments/", {"customer": self.customer_profile.pk, "status": "confirmed", "payment_status": "paid", "notes": "admin booking", "items": [{"service": self.service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "10:00", "end_time": "11:00"}]}, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["items"][0]["service"], self.service.pk)
+        self.assertEqual(response.data["status"], "confirmed")
+        appointments = client.get(f"/api/v1/admin/appointments/?start_date={booking_date}&end_date={booking_date}&status=confirmed&employee={self.employee.pk}&service={self.service.pk}")
+        self.assertEqual([item["id"] for item in appointments.data], [response.data["id"]])
+        revenue = client.get(f"/api/v1/admin/revenue/?period=day&date={timezone.localdate()}")
+        self.assertEqual(revenue.status_code, 200)
+        self.assertEqual(revenue.data["total"], self.service.price)
+
     def test_commission_calculation_and_payment_refund_transitions(self):
         item = self.make_item()
         commission = EmployeeCommission.objects.create(appointment_item=item, commission_rate_snapshot=10, commission_amount=80)

@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
@@ -17,10 +17,10 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
+from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 class ServiceListView(generics.ListAPIView):
@@ -247,6 +247,12 @@ class AdminEmployeeEligibleUsersView(generics.ListAPIView):
         return User.objects.filter(role="employee", employee_profile__isnull=True).order_by("username")
 
 
+class AdminCustomerOptionsView(generics.ListAPIView):
+    permission_classes = (IsAdmin,)
+    serializer_class = AdminCustomerOptionSerializer
+    queryset = CustomerProfile.objects.select_related("user").order_by("user__first_name", "user__username")
+
+
 class AdminTransactionTypesView(generics.GenericAPIView):
     permission_classes = (IsAdmin,)
 
@@ -262,6 +268,27 @@ class AdminServiceCategoryViewSet(AdminModelViewSet):
 class AdminAppointmentViewSet(AdminModelViewSet):
     queryset = Appointment.objects.select_related("customer__user").prefetch_related("items__service", "items__employee__user")
     serializer_class = AppointmentSerializer
+
+    def get_serializer_class(self):
+        return AdminAppointmentCreateSerializer if self.action == "create" else AppointmentSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        start_date = self.request.query_params.get("start_date")
+        end_date = self.request.query_params.get("end_date")
+        if start_date:
+            queryset = queryset.filter(items__date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(items__date__lte=end_date)
+        for query_name, lookup in (("status", "status"), ("employee", "items__employee_id"), ("service", "items__service_id")):
+            value = self.request.query_params.get(query_name)
+            if value:
+                queryset = queryset.filter(**{lookup: value})
+        return queryset.distinct()
+
+    def perform_create(self, serializer):
+        appointment = serializer.save()
+        AdminActionLog.objects.create(actor=self.request.user, action="create", model_name="Appointment", object_id=str(appointment.pk), details={"status": appointment.status})
 
     def perform_update(self, serializer):
         appointment = self.get_object()
@@ -290,6 +317,27 @@ class TransactionViewSet(AdminModelViewSet):
 class PaymentViewSet(AdminModelViewSet):
     queryset = Payment.objects.select_related("appointment")
     serializer_class = PaymentSerializer
+
+
+class AdminRevenueView(generics.GenericAPIView):
+    permission_classes = (IsAdmin,)
+
+    def get(self, request):
+        period = request.query_params.get("period", "day")
+        anchor = request.query_params.get("date")
+        try:
+            current = datetime.strptime(anchor, "%Y-%m-%d").date() if anchor else timezone.localdate()
+        except ValueError:
+            return Response({"detail": "تاریخ نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+        if period == "week":
+            start, end = current - timedelta(days=current.weekday()), current + timedelta(days=6 - current.weekday())
+        elif period == "month":
+            start = current.replace(day=1)
+            end = (start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        else:
+            start = end = current
+        total = Payment.objects.filter(status="paid", created_at__date__range=(start, end)).aggregate(total=Sum("amount"))["total"] or 0
+        return Response({"period": period, "start_date": start, "end_date": end, "total": total})
 
 
 class ServiceImageViewSet(AdminModelViewSet):

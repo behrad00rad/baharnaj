@@ -10,6 +10,7 @@ const { get, post } = vi.hoisted(() => ({
       'admin/employee-eligible-users/': [{ id: 9, username: 'eligible-user', first_name: 'Eligible User' }],
       'admin/service-categories/': [{ id: 4, name: 'Hair' }],
       'services/': [{ id: 3, persian_name: 'Cut', is_active: true, is_bookable: true }],
+      'admin/customer-options/': [{ id: 2, name: 'Customer' }],
     }[endpoint] || []
     return Promise.resolve({ data })
   }),
@@ -50,5 +51,17 @@ describe('admin CRUD forms', () => {
 
     await waitFor(() => expect(post).toHaveBeenCalledWith('admin/employees/', expect.any(FormData)))
     expect(post.mock.calls[0][1].getAll('services')).toEqual(['3'])
+  })
+
+  it('loads backend-filtered appointments and real customer options for a new appointment', async () => {
+    render(<MemoryRouter initialEntries={['/appointments']}><AdminRouter /></MemoryRouter>)
+
+    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/^admin\/appointments\/\?start_date=/)))
+    fireEvent.click(screen.getByRole('button', { name: 'فیلترها' }))
+    fireEvent.change(screen.getByLabelText('فیلتر خدمت'), { target: { value: '3' } })
+    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/service=3/)))
+    fireEvent.click(screen.getByRole('button', { name: /افزودن نوبت/ }))
+    await waitFor(() => expect(get).toHaveBeenCalledWith('admin/customer-options/'))
+    expect(await screen.findByRole('option', { name: 'Customer' })).toHaveValue('2')
   })
 })

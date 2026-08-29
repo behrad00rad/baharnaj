@@ -82,7 +82,9 @@ function Stat({ label, value, note, accent = false }) {
 function DashboardHome() {
   const navigate = useNavigate();
   const appointments = useResource("admin/appointments/");
-  const payments = useResource("admin/payments/");
+  const dailyRevenue = useResource("admin/revenue/?period=day");
+  const weeklyRevenue = useResource("admin/revenue/?period=week");
+  const monthlyRevenue = useResource("admin/revenue/?period=month");
   const services = useResource("services/");
   const [activity, setActivity] = useState([]);
   useEffect(() => {
@@ -95,9 +97,6 @@ function DashboardHome() {
     (item) =>
       item.items?.some((line) => line.date === today) || item.date === today,
   );
-  const revenue = payments.data
-    .filter((item) => item.status === "paid")
-    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
   return (
     <div className="admin-page">
       <Header
@@ -107,13 +106,17 @@ function DashboardHome() {
         onAction={() => navigate("/admin/appointments")}
       />
       <div className="admin-stat-grid">
-        <Stat label="درآمد امروز" value={toman(revenue)} accent />
+        <Stat
+          label="درآمد امروز"
+          value={toman(dailyRevenue.data.total)}
+          accent
+        />
         <Stat
           label="درآمد این هفته"
-          value={toman(revenue)}
+          value={toman(weeklyRevenue.data.total)}
           note="داده‌های ثبت‌شده"
         />
-        <Stat label="درآمد این ماه" value={toman(revenue)} />
+        <Stat label="درآمد این ماه" value={toman(monthlyRevenue.data.total)} />
         <Stat
           label="درخواست‌های در انتظار"
           value={
@@ -151,9 +154,7 @@ function DashboardHome() {
           </div>
           <div className="ring-stat">
             <div className="fake-ring">
-              <b>
-                {payments.data.filter((item) => item.status === "paid").length}
-              </b>
+              <b>{dailyRevenue.data.total ? "✓" : "۰"}</b>
               <small>پرداخت موفق</small>
             </div>
             <div className="legend">
@@ -282,27 +283,44 @@ function AppointmentRow({ item, onClick }) {
 }
 
 function Appointments() {
-  const resource = useResource("admin/appointments/");
   const employees = useResource("admin/employees/");
   const services = useResource("services/");
   const [selected, setSelected] = useState(null);
   const [view, setView] = useState("day");
+  const [anchor, setAnchor] = useState(today);
   const [status, setStatus] = useState("all");
-  const [query, setQuery] = useState("");
+  const [employee, setEmployee] = useState("");
+  const [service, setService] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [toast, setToast] = useState("");
-  const filtered = resource.data.filter(
-    (item) =>
-      (status === "all" || item.status === status) &&
-      (!query ||
-        JSON.stringify(item).toLowerCase().includes(query.toLowerCase())),
-  );
+  const range = dateRange(anchor, view);
+  const query = new URLSearchParams({
+    start_date: range.start,
+    end_date: range.end,
+    ...(status !== "all" && { status }),
+    ...(employee && { employee }),
+    ...(service && { service }),
+  });
+  const resource = useResource(`admin/appointments/?${query}`);
+  const moveRange = (direction) =>
+    setAnchor(
+      shiftDate(
+        anchor,
+        view === "month"
+          ? direction * 30
+          : view === "week"
+            ? direction * 7
+            : direction,
+      ),
+    );
   return (
     <div className="admin-page">
       <Header
         eyebrow="运营"
         title="预约管理"
-        action="添加预约"
-        onAction={() => setToast("请从预约表中选择服务与员工")}
+        action="افزودن نوبت"
+        onAction={() => setCreateOpen(true)}
       />
       <div className="toolbar">
         <div className="segmented">
@@ -320,11 +338,6 @@ function Appointments() {
             </button>
           ))}
         </div>
-        <input
-          placeholder="جست‌وجوی نام یا شماره مشتری"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
         <select
           value={status}
           onChange={(event) => setStatus(event.target.value)}
@@ -336,27 +349,66 @@ function Appointments() {
             </option>
           ))}
         </select>
-        <button className="filter-button">فیلترها ◌</button>
+        <button
+          className="filter-button"
+          onClick={() => setFiltersOpen(!filtersOpen)}
+        >
+          فیلترها
+        </button>
       </div>
+      {filtersOpen && (
+        <div className="toolbar">
+          <select
+            aria-label="فیلتر متخصص"
+            value={employee}
+            onChange={(event) => setEmployee(event.target.value)}
+          >
+            <option value="">همه متخصصان</option>
+            {employees.data.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="فیلتر خدمت"
+            value={service}
+            onChange={(event) => setService(event.target.value)}
+          >
+            <option value="">همه خدمات</option>
+            {services.data.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.persian_name || item.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <section className="admin-panel calendar-panel">
         <div className="calendar-strip">
-          <button>‹</button>
+          <button aria-label="بازه قبل" onClick={() => moveRange(-1)}>
+            ‹
+          </button>
           <strong>
             {new Intl.DateTimeFormat("fa-IR", {
+              weekday: view === "day" ? "long" : undefined,
               month: "long",
               year: "numeric",
-            }).format(new Date())}
+              day: view === "day" ? "numeric" : undefined,
+            }).format(new Date(`${anchor}T00:00:00`))}
           </strong>
-          <button>›</button>
+          <button aria-label="بازه بعد" onClick={() => moveRange(1)}>
+            ›
+          </button>
           <span>
             {employees.data.length} متخصص فعال · {services.data.length} خدمت
           </span>
         </div>
         {resource.loading ? (
           <Skeleton count={7} />
-        ) : filtered.length ? (
+        ) : resource.data.length ? (
           <div className="appointment-table">
-            {filtered.map((item) => (
+            {resource.data.map((item) => (
               <AppointmentRow
                 item={item}
                 key={item.id}
@@ -372,6 +424,16 @@ function Appointments() {
         )}
       </section>
       <Toast message={toast} />
+      {createOpen && (
+        <AdminAppointmentForm
+          close={() => setCreateOpen(false)}
+          onCreated={() => {
+            setCreateOpen(false);
+            resource.reload();
+            setToast("نوبت ثبت شد");
+          }}
+        />
+      )}
       {selected && (
         <AppointmentDrawer
           item={selected}
@@ -383,6 +445,244 @@ function Appointments() {
           }}
         />
       )}
+    </div>
+  );
+}
+function shiftDate(value, days) {
+  const next = new Date(`${value}T00:00:00`);
+  next.setDate(next.getDate() + days);
+  return next.toISOString().slice(0, 10);
+}
+function dateRange(anchor, view) {
+  const value = new Date(`${anchor}T00:00:00`);
+  if (view === "day") return { start: anchor, end: anchor };
+  if (view === "week") {
+    const start = shiftDate(anchor, -value.getDay());
+    return { start, end: shiftDate(start, 6) };
+  }
+  const start = `${anchor.slice(0, 7)}-01`;
+  return {
+    start,
+    end: shiftDate(
+      `${Number(anchor.slice(0, 4))}-${String(Number(anchor.slice(5, 7)) + 1).padStart(2, "0")}-01`,
+      -1,
+    ),
+  };
+}
+function AdminAppointmentForm({ close, onCreated }) {
+  const customers = useResource("admin/customer-options/");
+  const services = useResource("services/");
+  const [form, setForm] = useState({
+    date: today,
+    status: "pending",
+    payment_status: "",
+  });
+  const [employees, setEmployees] = useState([]);
+  const [slots, setSlots] = useState([]);
+  const [newCustomer, setNewCustomer] = useState(false);
+  const [error, setError] = useState("");
+  const update = (name, value) => setForm({ ...form, [name]: value });
+  useEffect(() => {
+    if (!form.service) return setEmployees([]);
+    api
+      .get(`employees/?service=${form.service}`)
+      .then(({ data }) => setEmployees(unwrap(data)))
+      .catch(() => setEmployees([]));
+  }, [form.service]);
+  useEffect(() => {
+    if (!form.service || !form.employee || !form.date) return setSlots([]);
+    api
+      .get(
+        `availability/?date=${form.date}&items=${encodeURIComponent(JSON.stringify([{ service: form.service, employee: form.employee }]))}`,
+      )
+      .then(({ data }) => setSlots(data.slots || []))
+      .catch(() => setSlots([]));
+  }, [form.service, form.employee, form.date]);
+  const submit = async (event) => {
+    event.preventDefault();
+    const selectedService = services.data.find(
+      (item) => String(item.id) === String(form.service),
+    );
+    if (!selectedService || !form.time) return;
+    const end = new Date(`2000-01-01T${form.time}:00`);
+    end.setMinutes(end.getMinutes() + Number(selectedService.duration));
+    try {
+      await api.post("admin/appointments/", {
+        ...(newCustomer
+          ? {
+              customer_name: form.customer_name,
+              customer_phone: form.customer_phone,
+            }
+          : { customer: form.customer }),
+        notes: form.notes || "",
+        status: form.status,
+        ...(form.payment_status && { payment_status: form.payment_status }),
+        items: [
+          {
+            service: form.service,
+            employee: form.employee,
+            date: form.date,
+            start_time: form.time,
+            end_time: end.toTimeString().slice(0, 5),
+          },
+        ],
+      });
+      onCreated();
+    } catch (requestError) {
+      setError(requestError.response?.data?.detail || "ثبت نوبت انجام نشد");
+    }
+  };
+  return (
+    <div className="modal-backdrop" onMouseDown={close}>
+      <form
+        className="admin-modal"
+        onSubmit={submit}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <button type="button" className="drawer-close" onClick={close}>
+          ×
+        </button>
+        <span className="admin-kicker">رزرو جدید</span>
+        <h2>افزودن نوبت</h2>
+        <label className="check-label">
+          <input
+            type="checkbox"
+            checked={newCustomer}
+            onChange={(event) => setNewCustomer(event.target.checked)}
+          />{" "}
+          مشتری جدید
+        </label>
+        {newCustomer ? (
+          <>
+            <label>
+              نام مشتری
+              <input
+                required
+                value={form.customer_name || ""}
+                onChange={(event) =>
+                  update("customer_name", event.target.value)
+                }
+              />
+            </label>
+            <label>
+              شماره تماس
+              <input
+                required
+                value={form.customer_phone || ""}
+                onChange={(event) =>
+                  update("customer_phone", event.target.value)
+                }
+              />
+            </label>
+          </>
+        ) : (
+          <label>
+            مشتری
+            <select
+              required
+              value={form.customer || ""}
+              onChange={(event) => update("customer", event.target.value)}
+            >
+              <option value="">انتخاب کنید</option>
+              {customers.data.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name || item.phone}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label>
+          خدمت
+          <select
+            required
+            value={form.service || ""}
+            onChange={(event) => update("service", event.target.value)}
+          >
+            <option value="">انتخاب کنید</option>
+            {services.data.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.persian_name || item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          متخصص
+          <select
+            required
+            value={form.employee || ""}
+            onChange={(event) => update("employee", event.target.value)}
+          >
+            <option value="">انتخاب کنید</option>
+            {employees.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          تاریخ
+          <input
+            required
+            type="date"
+            value={form.date}
+            onChange={(event) => update("date", event.target.value)}
+          />
+        </label>
+        <label>
+          ساعت
+          <select
+            required
+            value={form.time || ""}
+            onChange={(event) => update("time", event.target.value)}
+          >
+            <option value="">انتخاب کنید</option>
+            {slots.map((slot) => (
+              <option key={slot} value={slot}>
+                {slot}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          یادداشت
+          <textarea
+            value={form.notes || ""}
+            onChange={(event) => update("notes", event.target.value)}
+          />
+        </label>
+        <label>
+          وضعیت
+          <select
+            value={form.status}
+            onChange={(event) => update("status", event.target.value)}
+          >
+            {Object.entries(labels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          وضعیت پرداخت
+          <select
+            value={form.payment_status}
+            onChange={(event) => update("payment_status", event.target.value)}
+          >
+            <option value="">بدون ثبت پرداخت</option>
+            <option value="pending">در انتظار</option>
+            <option value="paid">پرداخت شده</option>
+            <option value="failed">ناموفق</option>
+          </select>
+        </label>
+        {error && <small className="admin-field-error">{error}</small>}
+        <button className="admin-primary" type="submit">
+          ثبت نوبت
+        </button>
+      </form>
     </div>
   );
 }
@@ -723,7 +1023,19 @@ function EmployeeManagement() {
                   <small>{employee.specialty || "تخصص ثبت نشده"}</small>
                 </div>
                 <span>{employee.is_active ? "فعال" : "غیرفعال"}</span>
-                <button onClick={() => { setEditing(employee.id); setForm({ ...employee, services: employee.service_ids || [] }); setErrors({}); setOpen(true); }}>ویرایش</button>
+                <button
+                  onClick={() => {
+                    setEditing(employee.id);
+                    setForm({
+                      ...employee,
+                      services: employee.service_ids || [],
+                    });
+                    setErrors({});
+                    setOpen(true);
+                  }}
+                >
+                  ویرایش
+                </button>
               </article>
             ))}
           </div>
@@ -745,24 +1057,28 @@ function EmployeeManagement() {
             >
               ×
             </button>
-            <span className="admin-kicker">{editing ? "ویرایش کارمند" : "کارمند جدید"}</span>
+            <span className="admin-kicker">
+              {editing ? "ویرایش کارمند" : "کارمند جدید"}
+            </span>
             <h2>{editing ? "ویرایش کارمند" : "افزودن کارمند"}</h2>
-            {!editing && <div className="segmented">
-              <button
-                type="button"
-                className={mode === "new" ? "selected" : ""}
-                onClick={() => setMode("new")}
-              >
-                حساب جدید
-              </button>
-              <button
-                type="button"
-                className={mode === "existing" ? "selected" : ""}
-                onClick={() => setMode("existing")}
-              >
-                حساب موجود
-              </button>
-            </div>}
+            {!editing && (
+              <div className="segmented">
+                <button
+                  type="button"
+                  className={mode === "new" ? "selected" : ""}
+                  onClick={() => setMode("new")}
+                >
+                  حساب جدید
+                </button>
+                <button
+                  type="button"
+                  className={mode === "existing" ? "selected" : ""}
+                  onClick={() => setMode("existing")}
+                >
+                  حساب موجود
+                </button>
+              </div>
+            )}
             {!editing && mode === "existing" ? (
               <label>
                 حساب متخصص
@@ -828,7 +1144,32 @@ function EmployeeManagement() {
                 <small className="admin-field-error">{errors.phone}</small>
               )}
             </label>
-            <fieldset className="admin-service-picker"><legend>خدمات قابل ارائه</legend>{services.data.filter((service) => service.is_active && service.is_bookable).map((service) => <label key={service.id} className="check-label"><input type="checkbox" checked={(form.services || []).map(String).includes(String(service.id))} onChange={(event) => update("services", event.target.checked ? [...(form.services || []), service.id] : (form.services || []).filter((id) => String(id) !== String(service.id)))} /> {service.persian_name || service.name}</label>)}</fieldset>
+            <fieldset className="admin-service-picker">
+              <legend>خدمات قابل ارائه</legend>
+              {services.data
+                .filter((service) => service.is_active && service.is_bookable)
+                .map((service) => (
+                  <label key={service.id} className="check-label">
+                    <input
+                      type="checkbox"
+                      checked={(form.services || [])
+                        .map(String)
+                        .includes(String(service.id))}
+                      onChange={(event) =>
+                        update(
+                          "services",
+                          event.target.checked
+                            ? [...(form.services || []), service.id]
+                            : (form.services || []).filter(
+                                (id) => String(id) !== String(service.id),
+                              ),
+                        )
+                      }
+                    />{" "}
+                    {service.persian_name || service.name}
+                  </label>
+                ))}
+            </fieldset>
             <label>
               درصد کمیسیون
               <input

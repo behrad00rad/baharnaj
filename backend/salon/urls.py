@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminServiceViewSet,
-					AdminUserViewSet, AdminEmployeeEligibleUsersView, AdminServiceCategoryViewSet, AdminTransactionTypesView, BookingHoldDeleteView,
+					AdminUserViewSet, AdminCustomerOptionsView, AdminEmployeeEligibleUsersView, AdminRevenueView, AdminServiceCategoryViewSet, AdminTransactionTypesView, BookingHoldDeleteView,
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView, BookingHoldView,
 					EmployeeAppointmentsView, EmployeeListView, EmployeeStatisticsView,
 					ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
@@ -43,6 +43,8 @@ urlpatterns = [
 	path("employee/earnings/", EmployeeEarningsView.as_view(), name="employee-earnings"),
 	path("admin/statistics/", AdminStatisticsView.as_view(), name="admin-statistics"),
 	path("admin/employee-eligible-users/", AdminEmployeeEligibleUsersView.as_view(), name="admin-employee-eligible-users"),
+	path("admin/customer-options/", AdminCustomerOptionsView.as_view(), name="admin-customer-options"),
 	path("admin/transaction-types/", AdminTransactionTypesView.as_view(), name="admin-transaction-types"),
+	path("admin/revenue/", AdminRevenueView.as_view(), name="admin-revenue"),
 	path("", include(router.urls)),
 ]
