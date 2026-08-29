@@ -20,7 +20,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, record_failed_login
-from .serializers import AdminActionLogSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 class ServiceListView(generics.ListAPIView):
@@ -220,7 +220,14 @@ class AdminGalleryViewSet(AdminModelViewSet):
 
 class AdminEmployeeViewSet(AdminModelViewSet):
     queryset = EmployeeProfile.objects.select_related("user")
-    serializer_class = EmployeeSerializer
+    serializer_class = AdminEmployeeSerializer
+
+    def get_serializer_class(self):
+        return AdminEmployeeCreateSerializer if self.action == "create" else AdminEmployeeSerializer
+
+    def perform_create(self, serializer):
+        employee = serializer.save()
+        AdminActionLog.objects.create(actor=self.request.user, action="create", model_name="EmployeeProfile", object_id=str(employee.pk), details={"username": employee.user.username})
 
     def perform_update(self, serializer):
         employee = serializer.save()
@@ -230,6 +237,26 @@ class AdminEmployeeViewSet(AdminModelViewSet):
 class AdminUserViewSet(AdminModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserAdminSerializer
+
+
+class AdminEmployeeEligibleUsersView(generics.ListAPIView):
+    permission_classes = (IsAdmin,)
+    serializer_class = UserAdminSerializer
+
+    def get_queryset(self):
+        return User.objects.filter(role="employee", employee_profile__isnull=True).order_by("username")
+
+
+class AdminTransactionTypesView(generics.GenericAPIView):
+    permission_classes = (IsAdmin,)
+
+    def get(self, request):
+        return Response([{"value": value, "label": label} for value, label in Transaction.TYPE_CHOICES])
+
+
+class AdminServiceCategoryViewSet(AdminModelViewSet):
+    queryset = ServiceCategory.objects.order_by("name")
+    serializer_class = ServiceCategorySerializer
 
 
 class AdminAppointmentViewSet(AdminModelViewSet):

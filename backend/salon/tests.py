@@ -142,6 +142,29 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(self.employee.specialty, "Hair color")
         self.assertEqual(self.employee.bio, "Updated profile")
 
+    def test_admin_employee_creation_contract(self):
+        admin = User.objects.create_user(username="admin", role="admin")
+        client = APIClient()
+        client.force_authenticate(admin)
+        new_employee = client.post("/api/v1/admin/employees/", {"username": "new-stylist", "password": "safe-password", "name": "New Stylist", "phone": "09121234567", "commission_rate": "15.50", "is_active": True}, format="json")
+        self.assertEqual(new_employee.status_code, 201)
+        self.assertEqual(new_employee.data["commission_rate"], "15.50")
+        self.assertEqual(User.objects.get(username="new-stylist").role, "employee")
+
+        existing_user = User.objects.create_user(username="eligible", role="employee")
+        existing_employee = client.post("/api/v1/admin/employees/", {"user": existing_user.pk, "name": "Existing Stylist", "commission_rate": "20.00"}, format="json")
+        self.assertEqual(existing_employee.status_code, 201)
+        self.assertEqual(existing_employee.data["user"], existing_user.pk)
+
+        for role in ("customer", "admin"):
+            ineligible_user = User.objects.create_user(username=f"{role}-user", role=role)
+            response = client.post("/api/v1/admin/employees/", {"user": ineligible_user.pk}, format="json")
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("user", response.data)
+        duplicate = client.post("/api/v1/admin/employees/", {"username": "new-stylist", "password": "safe-password"}, format="json")
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn("username", duplicate.data)
+
     def test_commission_calculation_and_payment_refund_transitions(self):
         item = self.make_item()
         commission = EmployeeCommission.objects.create(appointment_item=item, commission_rate_snapshot=10, commission_amount=80)

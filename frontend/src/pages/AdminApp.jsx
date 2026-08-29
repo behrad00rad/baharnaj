@@ -1,41 +1,749 @@
-import { useEffect, useState } from 'react'
-import { Link, Route, Routes, useNavigate } from 'react-router-dom'
-import { api, toman } from '../shared/api'
+import { useEffect, useState } from "react";
+import { Link, Route, Routes, useNavigate } from "react-router-dom";
+import { api, toman } from "../shared/api";
 
-const today = new Date().toISOString().slice(0, 10)
-const unwrap = (data) => data?.results || data || []
-const labels = { pending: 'در انتظار', confirmed: 'تأیید شده', completed: 'انجام شده', cancelled: 'لغو شده' }
+const today = new Date().toISOString().slice(0, 10);
+const unwrap = (data) => data?.results || data || [];
+const labels = {
+  pending: "در انتظار",
+  confirmed: "تأیید شده",
+  completed: "انجام شده",
+  cancelled: "لغو شده",
+};
 
 function useResource(endpoint) {
-  const [state, setState] = useState({ data: [], loading: true, error: false })
-  const reload = () => { setState((current) => ({ ...current, loading: true })); api.get(endpoint).then(({ data }) => setState({ data: unwrap(data), loading: false, error: false })).catch(() => setState({ data: [], loading: false, error: true })) }
-  useEffect(reload, [endpoint])
-  return { ...state, reload }
+  const [state, setState] = useState({ data: [], loading: true, error: false });
+  const reload = () => {
+    setState((current) => ({ ...current, loading: true }));
+    api
+      .get(endpoint)
+      .then(({ data }) =>
+        setState({ data: unwrap(data), loading: false, error: false }),
+      )
+      .catch(() => setState({ data: [], loading: false, error: true }));
+  };
+  useEffect(reload, [endpoint]);
+  return { ...state, reload };
 }
-function Toast({ message, type = 'success' }) { return message && <div className={`admin-toast ${type}`}>{type === 'success' ? '✓' : '!'} {message}</div> }
-function Skeleton({ count = 3 }) { return <div className="admin-skeletons">{Array.from({ length: count }, (_, index) => <span key={index} />)}</div> }
-function Empty({ title = 'داده‌ای وجود ندارد', text = 'وقتی اطلاعاتی ثبت شود، اینجا نمایش داده می‌شود.' }) { return <div className="admin-empty"><strong>{title}</strong><span>{text}</span></div> }
-function Header({ eyebrow, title, action, onAction }) { return <div className="admin-page-head"><div><span className="admin-kicker">{eyebrow}</span><h1>{title}</h1></div>{action && <button className="admin-primary" onClick={onAction}>＋ {action}</button>}</div> }
-function Stat({ label, value, note, accent = false }) { return <article className={`admin-stat ${accent ? 'accent' : ''}`}><span>{label}</span><strong>{value}</strong>{note && <small>{note}</small>}</article> }
+function Toast({ message, type = "success" }) {
+  return (
+    message && (
+      <div className={`admin-toast ${type}`}>
+        {type === "success" ? "✓" : "!"} {message}
+      </div>
+    )
+  );
+}
+function Skeleton({ count = 3 }) {
+  return (
+    <div className="admin-skeletons">
+      {Array.from({ length: count }, (_, index) => (
+        <span key={index} />
+      ))}
+    </div>
+  );
+}
+function Empty({
+  title = "داده‌ای وجود ندارد",
+  text = "وقتی اطلاعاتی ثبت شود، اینجا نمایش داده می‌شود.",
+}) {
+  return (
+    <div className="admin-empty">
+      <strong>{title}</strong>
+      <span>{text}</span>
+    </div>
+  );
+}
+function Header({ eyebrow, title, action, onAction }) {
+  return (
+    <div className="admin-page-head">
+      <div>
+        <span className="admin-kicker">{eyebrow}</span>
+        <h1>{title}</h1>
+      </div>
+      {action && (
+        <button className="admin-primary" onClick={onAction}>
+          ＋ {action}
+        </button>
+      )}
+    </div>
+  );
+}
+function Stat({ label, value, note, accent = false }) {
+  return (
+    <article className={`admin-stat ${accent ? "accent" : ""}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      {note && <small>{note}</small>}
+    </article>
+  );
+}
 
 function DashboardHome() {
-  const navigate = useNavigate()
-  const appointments = useResource('admin/appointments/')
-  const payments = useResource('admin/payments/')
-  const services = useResource('services/')
-  const [activity, setActivity] = useState([])
-  useEffect(() => { api.get('admin/activity/').then(({ data }) => setActivity(unwrap(data))).catch(() => setActivity([])) }, [])
-  const todays = appointments.data.filter((item) => item.items?.some((line) => line.date === today) || item.date === today)
-  const revenue = payments.data.filter((item) => item.status === 'paid').reduce((sum, item) => sum + Number(item.amount || 0), 0)
-  return <div className="admin-page"><Header eyebrow="مرکز فرماندهی" title="نمای کلی سالن" action="رزرو جدید" onAction={() => navigate('/admin/appointments')} /><div className="admin-stat-grid"><Stat label="درآمد امروز" value={toman(revenue)} accent /><Stat label="درآمد این هفته" value={toman(revenue)} note="داده‌های ثبت‌شده" /><Stat label="درآمد این ماه" value={toman(revenue)} /><Stat label="درخواست‌های در انتظار" value={appointments.data.filter((item) => item.status === 'pending').length} /></div><div className="admin-grid-two"><section className="admin-panel"><div className="panel-title"><div><span>برنامه امروز</span><h2>نوبت‌های امروز</h2></div><Link to="/admin/appointments">مشاهده همه ←</Link></div>{appointments.loading ? <Skeleton /> : todays.length ? <div className="appointment-list">{todays.slice(0, 6).map((item) => <AppointmentRow key={item.id} item={item} />)}</div> : <Empty title="امروز نوبتی ثبت نشده" text="روز آرامی در پیش است." />}</section><section className="admin-panel"><div className="panel-title"><div><span>گزارش مالی</span><h2>وضعیت پرداخت‌ها</h2></div></div><div className="ring-stat"><div className="fake-ring"><b>{payments.data.filter((item) => item.status === 'paid').length}</b><small>پرداخت موفق</small></div><div className="legend"><span><i className="dot green" />پرداخت‌شده</span><span><i className="dot yellow" />در انتظار</span><span><i className="dot red" />مانده</span></div></div><div className="mini-summary"><span>نوبت‌های انجام‌شده <b>{appointments.data.filter((item) => item.status === 'completed').length}</b></span><span>لغوشده <b>{appointments.data.filter((item) => item.status === 'cancelled').length}</b></span></div></section></div><div className="admin-grid-two"><section className="admin-panel"><div className="panel-title"><div><span>عملکرد</span><h2>محبوب‌ترین خدمات</h2></div></div>{services.loading ? <Skeleton count={5} /> : services.data.length ? <div className="rank-list">{services.data.slice(0, 5).map((service, index) => <div key={service.id}><b>۰{index + 1}</b><span>{service.persian_name || service.name}</span><em>{appointments.data.filter((item) => item.items?.some((line) => line.service === service.id)).length} رزرو</em></div>)}</div> : <Empty />}</section><section className="admin-panel"><div className="panel-title"><div><span>ردیابی تغییرات</span><h2>فعالیت اخیر</h2></div></div>{activity.length ? <div className="activity-list">{activity.slice(0, 5).map((item) => <div key={item.id}><i /> <span>{item.action || 'تغییر اطلاعات'}<small>{item.changed_at || item.created_at || 'اخیراً'}</small></span></div>)}</div> : <Empty title="فعالیتی ثبت نشده" text="تغییرات مدیریتی اینجا ثبت می‌شوند." />}</section></div><div className="quick-actions"><Link to="/admin/appointments">＋ افزودن نوبت</Link><Link to="/admin/employees">＋ افزودن کارمند</Link><Link to="/admin/services">＋ افزودن خدمت</Link></div></div>
+  const navigate = useNavigate();
+  const appointments = useResource("admin/appointments/");
+  const payments = useResource("admin/payments/");
+  const services = useResource("services/");
+  const [activity, setActivity] = useState([]);
+  useEffect(() => {
+    api
+      .get("admin/activity/")
+      .then(({ data }) => setActivity(unwrap(data)))
+      .catch(() => setActivity([]));
+  }, []);
+  const todays = appointments.data.filter(
+    (item) =>
+      item.items?.some((line) => line.date === today) || item.date === today,
+  );
+  const revenue = payments.data
+    .filter((item) => item.status === "paid")
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  return (
+    <div className="admin-page">
+      <Header
+        eyebrow="مرکز فرماندهی"
+        title="نمای کلی سالن"
+        action="رزرو جدید"
+        onAction={() => navigate("/admin/appointments")}
+      />
+      <div className="admin-stat-grid">
+        <Stat label="درآمد امروز" value={toman(revenue)} accent />
+        <Stat
+          label="درآمد این هفته"
+          value={toman(revenue)}
+          note="داده‌های ثبت‌شده"
+        />
+        <Stat label="درآمد این ماه" value={toman(revenue)} />
+        <Stat
+          label="درخواست‌های در انتظار"
+          value={
+            appointments.data.filter((item) => item.status === "pending").length
+          }
+        />
+      </div>
+      <div className="admin-grid-two">
+        <section className="admin-panel">
+          <div className="panel-title">
+            <div>
+              <span>برنامه امروز</span>
+              <h2>نوبت‌های امروز</h2>
+            </div>
+            <Link to="/admin/appointments">مشاهده همه ←</Link>
+          </div>
+          {appointments.loading ? (
+            <Skeleton />
+          ) : todays.length ? (
+            <div className="appointment-list">
+              {todays.slice(0, 6).map((item) => (
+                <AppointmentRow key={item.id} item={item} />
+              ))}
+            </div>
+          ) : (
+            <Empty title="امروز نوبتی ثبت نشده" text="روز آرامی در پیش است." />
+          )}
+        </section>
+        <section className="admin-panel">
+          <div className="panel-title">
+            <div>
+              <span>گزارش مالی</span>
+              <h2>وضعیت پرداخت‌ها</h2>
+            </div>
+          </div>
+          <div className="ring-stat">
+            <div className="fake-ring">
+              <b>
+                {payments.data.filter((item) => item.status === "paid").length}
+              </b>
+              <small>پرداخت موفق</small>
+            </div>
+            <div className="legend">
+              <span>
+                <i className="dot green" />
+                پرداخت‌شده
+              </span>
+              <span>
+                <i className="dot yellow" />
+                در انتظار
+              </span>
+              <span>
+                <i className="dot red" />
+                مانده
+              </span>
+            </div>
+          </div>
+          <div className="mini-summary">
+            <span>
+              نوبت‌های انجام‌شده{" "}
+              <b>
+                {
+                  appointments.data.filter(
+                    (item) => item.status === "completed",
+                  ).length
+                }
+              </b>
+            </span>
+            <span>
+              لغوشده{" "}
+              <b>
+                {
+                  appointments.data.filter(
+                    (item) => item.status === "cancelled",
+                  ).length
+                }
+              </b>
+            </span>
+          </div>
+        </section>
+      </div>
+      <div className="admin-grid-two">
+        <section className="admin-panel">
+          <div className="panel-title">
+            <div>
+              <span>عملکرد</span>
+              <h2>محبوب‌ترین خدمات</h2>
+            </div>
+          </div>
+          {services.loading ? (
+            <Skeleton count={5} />
+          ) : services.data.length ? (
+            <div className="rank-list">
+              {services.data.slice(0, 5).map((service, index) => (
+                <div key={service.id}>
+                  <b>۰{index + 1}</b>
+                  <span>{service.persian_name || service.name}</span>
+                  <em>
+                    {
+                      appointments.data.filter((item) =>
+                        item.items?.some((line) => line.service === service.id),
+                      ).length
+                    }{" "}
+                    رزرو
+                  </em>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Empty />
+          )}
+        </section>
+        <section className="admin-panel">
+          <div className="panel-title">
+            <div>
+              <span>ردیابی تغییرات</span>
+              <h2>فعالیت اخیر</h2>
+            </div>
+          </div>
+          {activity.length ? (
+            <div className="activity-list">
+              {activity.slice(0, 5).map((item) => (
+                <div key={item.id}>
+                  <i />{" "}
+                  <span>
+                    {item.action || "تغییر اطلاعات"}
+                    <small>
+                      {item.changed_at || item.created_at || "اخیراً"}
+                    </small>
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Empty
+              title="فعالیتی ثبت نشده"
+              text="تغییرات مدیریتی اینجا ثبت می‌شوند."
+            />
+          )}
+        </section>
+      </div>
+      <div className="quick-actions">
+        <Link to="/admin/appointments">＋ افزودن نوبت</Link>
+        <Link to="/admin/employees">＋ افزودن کارمند</Link>
+        <Link to="/admin/services">＋ افزودن خدمت</Link>
+      </div>
+    </div>
+  );
 }
-function AppointmentRow({ item, onClick }) { const line = item.items?.[0] || item; return <button className="appointment-row" onClick={onClick}><span className="time">{line.start_time || '--:--'}</span><span><b>{item.customer_name || item.customer?.name || `رزرو #${item.id}`}</b><small>{line.service_name || `نوبت ${item.items?.length || 1} خدمت`}</small></span><em className={`status ${item.status}`}>{labels[item.status] || item.status}</em></button> }
+function AppointmentRow({ item, onClick }) {
+  const line = item.items?.[0] || item;
+  return (
+    <button className="appointment-row" onClick={onClick}>
+      <span className="time">{line.start_time || "--:--"}</span>
+      <span>
+        <b>{item.customer_name || item.customer?.name || `رزرو #${item.id}`}</b>
+        <small>
+          {line.service_name || `نوبت ${item.items?.length || 1} خدمت`}
+        </small>
+      </span>
+      <em className={`status ${item.status}`}>
+        {labels[item.status] || item.status}
+      </em>
+    </button>
+  );
+}
 
-function Appointments() { const resource = useResource('admin/appointments/'); const employees = useResource('admin/employees/'); const services = useResource('services/'); const [selected, setSelected] = useState(null); const [view, setView] = useState('day'); const [status, setStatus] = useState('all'); const [query, setQuery] = useState(''); const [toast, setToast] = useState(''); const filtered = resource.data.filter((item) => (status === 'all' || item.status === status) && (!query || JSON.stringify(item).toLowerCase().includes(query.toLowerCase()))); return <div className="admin-page"><Header eyebrow="运营" title="预约管理" action="添加预约" onAction={() => setToast('请从预约表中选择服务与员工')} /><div className="toolbar"><div className="segmented">{[['day', '日'], ['week', '周'], ['month', '月']].map(([value, label]) => <button className={view === value ? 'selected' : ''} key={value} onClick={() => setView(value)}>{label}</button>)}</div><input placeholder="جست‌وجوی نام یا شماره مشتری" value={query} onChange={(event) => setQuery(event.target.value)} /><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">همه وضعیت‌ها</option>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button className="filter-button">فیلترها ◌</button></div><section className="admin-panel calendar-panel"><div className="calendar-strip"><button>‹</button><strong>{new Intl.DateTimeFormat('fa-IR', { month: 'long', year: 'numeric' }).format(new Date())}</strong><button>›</button><span>{employees.data.length} متخصص فعال · {services.data.length} خدمت</span></div>{resource.loading ? <Skeleton count={7} /> : filtered.length ? <div className="appointment-table">{filtered.map((item) => <AppointmentRow item={item} key={item.id} onClick={() => setSelected(item)} />)}</div> : <Empty title="نوبتی با این فیلتر پیدا نشد" text="فیلترها را تغییر دهید یا یک رزرو تازه بسازید." />}</section><Toast message={toast} />{selected && <AppointmentDrawer item={selected} close={() => setSelected(null)} onSaved={() => { setSelected(null); resource.reload(); setToast('نوبت به‌روزرسانی شد') }} />}</div> }
-function AppointmentDrawer({ item, close, onSaved }) { const [saving, setSaving] = useState(false); const changeStatus = async (status) => { setSaving(true); try { await api.patch(`admin/appointments/${item.id}/`, { status }); onSaved() } finally { setSaving(false) } }; return <div className="drawer-backdrop" onMouseDown={close}><aside className="admin-drawer" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" onClick={close}>×</button><span className="admin-kicker">جزئیات رزرو #{item.id}</span><h2>{item.customer_name || item.customer?.name || 'مشتری سالن'}</h2><p className="drawer-meta">{item.customer?.phone || item.customer_phone || 'شماره ثبت نشده'}</p><div className="drawer-section"><h3>خدمات رزرو</h3>{item.items?.length ? item.items.map((line) => <div className="drawer-item" key={line.id}><b>{line.service_name || `خدمت #${line.service}`}</b><span>{line.date} · {line.start_time} تا {line.end_time}</span><em>{toman(line.price_snapshot)}</em></div>) : <Empty />}</div><div className="drawer-actions"><button disabled={saving} onClick={() => changeStatus('confirmed')}>تأیید</button><button disabled={saving} onClick={() => changeStatus('completed')}>تکمیل</button><button className="danger" disabled={saving} onClick={() => changeStatus('cancelled')}>لغو رزرو</button></div><div className="drawer-section"><h3>تاریخچه وضعیت</h3>{item.status_history?.length ? item.status_history.map((history) => <p className="history-row" key={history.id}><b>{labels[history.status] || history.status}</b><span>{history.reason || 'بدون توضیح'}</span></p>) : <Empty title="تاریخچه‌ای ثبت نشده" />}</div></aside></div> }
+function Appointments() {
+  const resource = useResource("admin/appointments/");
+  const employees = useResource("admin/employees/");
+  const services = useResource("services/");
+  const [selected, setSelected] = useState(null);
+  const [view, setView] = useState("day");
+  const [status, setStatus] = useState("all");
+  const [query, setQuery] = useState("");
+  const [toast, setToast] = useState("");
+  const filtered = resource.data.filter(
+    (item) =>
+      (status === "all" || item.status === status) &&
+      (!query ||
+        JSON.stringify(item).toLowerCase().includes(query.toLowerCase())),
+  );
+  return (
+    <div className="admin-page">
+      <Header
+        eyebrow="运营"
+        title="预约管理"
+        action="添加预约"
+        onAction={() => setToast("请从预约表中选择服务与员工")}
+      />
+      <div className="toolbar">
+        <div className="segmented">
+          {[
+            ["day", "日"],
+            ["week", "周"],
+            ["month", "月"],
+          ].map(([value, label]) => (
+            <button
+              className={view === value ? "selected" : ""}
+              key={value}
+              onClick={() => setView(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <input
+          placeholder="جست‌وجوی نام یا شماره مشتری"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <select
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+        >
+          <option value="all">همه وضعیت‌ها</option>
+          {Object.entries(labels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <button className="filter-button">فیلترها ◌</button>
+      </div>
+      <section className="admin-panel calendar-panel">
+        <div className="calendar-strip">
+          <button>‹</button>
+          <strong>
+            {new Intl.DateTimeFormat("fa-IR", {
+              month: "long",
+              year: "numeric",
+            }).format(new Date())}
+          </strong>
+          <button>›</button>
+          <span>
+            {employees.data.length} متخصص فعال · {services.data.length} خدمت
+          </span>
+        </div>
+        {resource.loading ? (
+          <Skeleton count={7} />
+        ) : filtered.length ? (
+          <div className="appointment-table">
+            {filtered.map((item) => (
+              <AppointmentRow
+                item={item}
+                key={item.id}
+                onClick={() => setSelected(item)}
+              />
+            ))}
+          </div>
+        ) : (
+          <Empty
+            title="نوبتی با این فیلتر پیدا نشد"
+            text="فیلترها را تغییر دهید یا یک رزرو تازه بسازید."
+          />
+        )}
+      </section>
+      <Toast message={toast} />
+      {selected && (
+        <AppointmentDrawer
+          item={selected}
+          close={() => setSelected(null)}
+          onSaved={() => {
+            setSelected(null);
+            resource.reload();
+            setToast("نوبت به‌روزرسانی شد");
+          }}
+        />
+      )}
+    </div>
+  );
+}
+function AppointmentDrawer({ item, close, onSaved }) {
+  const [saving, setSaving] = useState(false);
+  const changeStatus = async (status) => {
+    setSaving(true);
+    try {
+      await api.patch(`admin/appointments/${item.id}/`, { status });
+      onSaved();
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="drawer-backdrop" onMouseDown={close}>
+      <aside
+        className="admin-drawer"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <button className="drawer-close" onClick={close}>
+          ×
+        </button>
+        <span className="admin-kicker">جزئیات رزرو #{item.id}</span>
+        <h2>{item.customer_name || item.customer?.name || "مشتری سالن"}</h2>
+        <p className="drawer-meta">
+          {item.customer?.phone || item.customer_phone || "شماره ثبت نشده"}
+        </p>
+        <div className="drawer-section">
+          <h3>خدمات رزرو</h3>
+          {item.items?.length ? (
+            item.items.map((line) => (
+              <div className="drawer-item" key={line.id}>
+                <b>{line.service_name || `خدمت #${line.service}`}</b>
+                <span>
+                  {line.date} · {line.start_time} تا {line.end_time}
+                </span>
+                <em>{toman(line.price_snapshot)}</em>
+              </div>
+            ))
+          ) : (
+            <Empty />
+          )}
+        </div>
+        <div className="drawer-actions">
+          <button disabled={saving} onClick={() => changeStatus("confirmed")}>
+            تأیید
+          </button>
+          <button disabled={saving} onClick={() => changeStatus("completed")}>
+            تکمیل
+          </button>
+          <button
+            className="danger"
+            disabled={saving}
+            onClick={() => changeStatus("cancelled")}
+          >
+            لغو رزرو
+          </button>
+        </div>
+        <div className="drawer-section">
+          <h3>تاریخچه وضعیت</h3>
+          {item.status_history?.length ? (
+            item.status_history.map((history) => (
+              <p className="history-row" key={history.id}>
+                <b>{labels[history.status] || history.status}</b>
+                <span>{history.reason || "بدون توضیح"}</span>
+              </p>
+            ))
+          ) : (
+            <Empty title="تاریخچه‌ای ثبت نشده" />
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+}
 
-function CrudPage({ type, endpoint, title, eyebrow, fields = [], uploads = false }) { const resource = useResource(endpoint); const [open, setOpen] = useState(false); const [form, setForm] = useState({}); const [toast, setToast] = useState(''); const submit = async (event) => { event.preventDefault(); let body = form; if (uploads) { body = new FormData(); Object.entries(form).filter(([, value]) => value !== '' && value !== undefined).forEach(([name, value]) => body.append(name, value)) } try { await api.post(endpoint, body); setOpen(false); setForm({}); resource.reload(); setToast('با موفقیت ذخیره شد') } catch { setToast('ذخیره اطلاعات انجام نشد') } }; return <div className="admin-page"><Header eyebrow={eyebrow} title={title} action={`افزودن ${type}`} onAction={() => setOpen(true)} /><section className="admin-panel"><div className="list-toolbar"><input placeholder={`جست‌وجو در ${title}`} /><span>{resource.data.length} مورد</span></div>{resource.loading ? <Skeleton count={6} /> : resource.data.length ? <div className="entity-list">{resource.data.map((item) => <article key={item.id}><div className="entity-avatar">{(item.persian_name || item.name || item.title || 'ب')[0]}</div><div><b>{item.persian_name || item.name || item.title || `مورد #${item.id}`}</b><small>{item.description || item.specialty || item.phone || 'اطلاعات تکمیلی ثبت نشده'}</small></div><span>{item.price ? toman(item.price) : item.is_active === false ? 'غیرفعال' : 'فعال'}</span><button onClick={() => { setForm(item); setOpen(true) }}>ویرایش</button></article>)}</div> : <Empty title={`${title} خالی است`} text={`برای شروع، اولین ${type} را اضافه کنید.`} />}</section>{open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><form className="admin-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><button type="button" className="drawer-close" onClick={() => setOpen(false)}>×</button><span className="admin-kicker">فرم اطلاعات</span><h2>{form.id ? 'ویرایش' : 'افزودن'} {type}</h2>{fields.map(([name, label, kind = 'text']) => <label key={name}>{label}{kind === 'select' ? <select value={form[name] || ''} onChange={(event) => setForm({ ...form, [name]: event.target.value })}><option value="">انتخاب کنید</option><option value="1">گزینه اول</option><option value="2">گزینه دوم</option></select> : <input type={kind} value={kind === 'file' ? undefined : form[name] || ''} onChange={(event) => setForm({ ...form, [name]: kind === 'file' ? event.target.files[0] : event.target.value })} />}</label>)}<button className="admin-primary" type="submit">ذخیره تغییرات</button></form></div>}<Toast message={toast} type={toast.includes('نشد') ? 'error' : 'success'} /></div> }
-function Finance() { return <CrudPage type="تراکنش" endpoint="admin/transactions/" title="مالی و پرداخت‌ها" eyebrow="حسابداری" fields={[["type", "نوع تراکنش", "select"], ["amount", "مبلغ"], ["description", "شرح"]]} /> }
-function Content() { return <CrudPage type="بخش محتوا" endpoint="admin/gallery/" title="محتوا و گالری" eyebrow="انتشارات" uploads fields={[["title", "عنوان"], ["category", "دسته‌بندی"], ["image", "تصویر", "file"], ["description", "توضیحات"]]} /> }
-function AdminRouter() { return <Routes><Route index element={<DashboardHome />} /><Route path="appointments" element={<Appointments />} /><Route path="employees" element={<CrudPage type="کارمند" endpoint="admin/employees/" title="مدیریت کارمندان" eyebrow="تیم سالن" fields={[["user", "حساب کاربری", "select"], ["specialty", "تخصص"], ["commission_rate", "درصد کمیسیون"]]} />} /><Route path="services" element={<CrudPage type="خدمت" endpoint="admin/services/" title="مدیریت خدمات" eyebrow="کاتالوگ" fields={[["persian_name", "نام فارسی"], ["name", "نام داخلی"], ["category", "دسته‌بندی", "select"], ["price", "قیمت"], ["duration", "مدت (دقیقه)"]]} />} /><Route path="customers" element={<CrudPage type="مشتری" endpoint="admin/users/" title="مدیریت مشتریان" eyebrow="ارتباط با مشتری" fields={[["first_name", "نام"], ["last_name", "نام خانوادگی"], ["phone", "شماره تماس"]]} />} /><Route path="finance" element={<Finance />} /><Route path="content" element={<Content />} /><Route path="*" element={<DashboardHome />} /></Routes> }
-export default AdminRouter
+function CrudPage({
+  type,
+  endpoint,
+  title,
+  eyebrow,
+  fields = [],
+  uploads = false,
+}) {
+  const resource = useResource(endpoint);
+  const [options, setOptions] = useState({});
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({});
+  const [toast, setToast] = useState("");
+  useEffect(() => {
+    const selectFields = fields.filter((field) => field.optionsEndpoint);
+    if (!selectFields.length) return;
+    Promise.all(
+      selectFields.map((field) =>
+        api
+          .get(field.optionsEndpoint)
+          .then(({ data }) => [field.name, unwrap(data)])
+          .catch(() => [field.name, []]),
+      ),
+    ).then((results) => setOptions(Object.fromEntries(results)));
+  }, [endpoint]);
+  const submit = async (event) => {
+    event.preventDefault();
+    let body = form;
+    if (uploads) {
+      body = new FormData();
+      Object.entries(form)
+        .filter(([, value]) => value !== "" && value !== undefined)
+        .forEach(([name, value]) => body.append(name, value));
+    }
+    try {
+      await api.post(endpoint, body);
+      setOpen(false);
+      setForm({});
+      resource.reload();
+      setToast("با موفقیت ذخیره شد");
+    } catch {
+      setToast("ذخیره اطلاعات انجام نشد");
+    }
+  };
+  return (
+    <div className="admin-page">
+      <Header
+        eyebrow={eyebrow}
+        title={title}
+        action={`افزودن ${type}`}
+        onAction={() => setOpen(true)}
+      />
+      <section className="admin-panel">
+        <div className="list-toolbar">
+          <input placeholder={`جست‌وجو در ${title}`} />
+          <span>{resource.data.length} مورد</span>
+        </div>
+        {resource.loading ? (
+          <Skeleton count={6} />
+        ) : resource.data.length ? (
+          <div className="entity-list">
+            {resource.data.map((item) => (
+              <article key={item.id}>
+                <div className="entity-avatar">
+                  {(item.persian_name || item.name || item.title || "ب")[0]}
+                </div>
+                <div>
+                  <b>
+                    {item.persian_name ||
+                      item.name ||
+                      item.title ||
+                      `مورد #${item.id}`}
+                  </b>
+                  <small>
+                    {item.description ||
+                      item.specialty ||
+                      item.phone ||
+                      "اطلاعات تکمیلی ثبت نشده"}
+                  </small>
+                </div>
+                <span>
+                  {item.price
+                    ? toman(item.price)
+                    : item.is_active === false
+                      ? "غیرفعال"
+                      : "فعال"}
+                </span>
+                <button
+                  onClick={() => {
+                    setForm(item);
+                    setOpen(true);
+                  }}
+                >
+                  ویرایش
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <Empty
+            title={`${title} خالی است`}
+            text={`برای شروع، اولین ${type} را اضافه کنید.`}
+          />
+        )}
+      </section>
+      {open && (
+        <div className="modal-backdrop" onMouseDown={() => setOpen(false)}>
+          <form
+            className="admin-modal"
+            onSubmit={submit}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="drawer-close"
+              onClick={() => setOpen(false)}
+            >
+              ×
+            </button>
+            <span className="admin-kicker">فرم اطلاعات</span>
+            <h2>
+              {form.id ? "ویرایش" : "افزودن"} {type}
+            </h2>
+            {fields.map((definition) => {
+              const field = Array.isArray(definition) ? { name: definition[0], label: definition[1], type: definition[2] } : definition;
+              return (
+              <label key={field.name}>
+                {field.label}
+                {field.type === "select" ? (
+                  <select
+                    value={form[field.name] || ""}
+                    onChange={(event) =>
+                      setForm({ ...form, [field.name]: event.target.value })
+                    }
+                  >
+                    <option value="">انتخاب کنید</option>
+                    {(options[field.name] || field.options || []).map((option) => (
+                      <option key={option.id || option.value} value={option.id || option.value}>
+                        {field.optionLabel ? field.optionLabel(option) : option.name || option.persian_name || option.label || `#${option.id}`}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type={field.type || "text"}
+                    value={field.type === "file" ? undefined : form[field.name] || ""}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        [field.name]:
+                          field.type === "file"
+                            ? event.target.files[0]
+                            : event.target.value,
+                      })
+                    }
+                  />
+                )}
+              </label>
+              );
+            })}
+            <button className="admin-primary" type="submit">
+              ذخیره تغییرات
+            </button>
+          </form>
+        </div>
+      )}
+      <Toast
+        message={toast}
+        type={toast.includes("نشد") ? "error" : "success"}
+      />
+    </div>
+  );
+}
+
+const employeeOptionLabel = (user) => user.first_name || user.username;
+const appointmentOptionLabel = (appointment) => `${appointment.customer_name || `رزرو #${appointment.id}`} (${appointment.confirmation_code})`;
+
+function EmployeeManagement() {
+  const resource = useResource("admin/employees/");
+  const eligibleUsers = useResource("admin/employee-eligible-users/");
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState("new");
+  const [form, setForm] = useState({ is_active: true });
+  const [errors, setErrors] = useState({});
+  const [toast, setToast] = useState("");
+  const update = (name, value) => setForm({ ...form, [name]: value });
+  const submit = async (event) => {
+    event.preventDefault();
+    const body = new FormData();
+    Object.entries(form).forEach(([name, value]) => {
+      if (value !== "" && value !== undefined && (mode === "new" || !["username", "password"].includes(name))) body.append(name, value);
+    });
+    if (mode === "existing") body.delete("username");
+    try {
+      await api.post("admin/employees/", body);
+      setOpen(false); setForm({ is_active: true }); setErrors({}); resource.reload(); setToast("کارمند اضافه شد");
+    } catch (error) {
+      setErrors(error.response?.data || { detail: "ذخیره اطلاعات انجام نشد" });
+    }
+  };
+  return <div className="admin-page"><Header eyebrow="تیم سالن" title="مدیریت کارمندان" action="افزودن کارمند" onAction={() => setOpen(true)} /><section className="admin-panel"><div className="list-toolbar"><input placeholder="جست‌وجو در کارمندان" /><span>{resource.data.length} مورد</span></div>{resource.loading ? <Skeleton count={6} /> : resource.data.length ? <div className="entity-list">{resource.data.map((employee) => <article key={employee.id}><div className="entity-avatar">{(employee.name || "ب")[0]}</div><div><b>{employee.name}</b><small>{employee.specialty || "تخصص ثبت نشده"}</small></div><span>{employee.is_active ? "فعال" : "غیرفعال"}</span></article>)}</div> : <Empty title="کارمندی ثبت نشده" />}</section>{open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><form className="admin-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><button type="button" className="drawer-close" onClick={() => setOpen(false)}>×</button><span className="admin-kicker">کارمند جدید</span><h2>افزودن کارمند</h2><div className="segmented"><button type="button" className={mode === "new" ? "selected" : ""} onClick={() => setMode("new")}>حساب جدید</button><button type="button" className={mode === "existing" ? "selected" : ""} onClick={() => setMode("existing")}>حساب موجود</button></div>{mode === "existing" ? <label>حساب متخصص<select value={form.user || ""} onChange={(event) => update("user", event.target.value)}><option value="">انتخاب کنید</option>{eligibleUsers.data.map((user) => <option key={user.id} value={user.id}>{employeeOptionLabel(user)}</option>)}</select>{errors.user && <small className="admin-field-error">{errors.user}</small>}</label> : <><label>نام کاربری<input value={form.username || ""} onChange={(event) => update("username", event.target.value)} />{errors.username && <small className="admin-field-error">{errors.username}</small>}</label><label>رمز عبور<input type="password" value={form.password || ""} onChange={(event) => update("password", event.target.value)} />{errors.password && <small className="admin-field-error">{errors.password}</small>}</label></>}<label>نام و نام خانوادگی<input value={form.name || ""} onChange={(event) => update("name", event.target.value)} /></label><label>شماره تماس<input type="tel" value={form.phone || ""} onChange={(event) => update("phone", event.target.value)} />{errors.phone && <small className="admin-field-error">{errors.phone}</small>}</label><label>تخصص<input value={form.specialty || ""} onChange={(event) => update("specialty", event.target.value)} /></label><label>درصد کمیسیون<input type="number" min="0" max="100" step="0.01" value={form.commission_rate || ""} onChange={(event) => update("commission_rate", event.target.value)} />{errors.commission_rate && <small className="admin-field-error">{errors.commission_rate}</small>}</label><label>تصویر پروفایل<input type="file" accept="image/*" onChange={(event) => update("profile_photo", event.target.files[0])} />{errors.profile_photo && <small className="admin-field-error">{errors.profile_photo}</small>}</label><label className="check-label"><input type="checkbox" checked={form.is_active} onChange={(event) => update("is_active", event.target.checked)} /> فعال</label>{errors.non_field_errors && <small className="admin-field-error">{errors.non_field_errors}</small>}<button className="admin-primary" type="submit">ایجاد کارمند</button></form></div>}<Toast message={toast} type="success" /></div>;
+}
+function Finance() {
+  return (
+    <>
+    <CrudPage
+      type="تراکنش"
+      endpoint="admin/transactions/"
+      title="مالی و پرداخت‌ها"
+      eyebrow="حسابداری"
+      fields={[
+        { name: "type", label: "نوع تراکنش", type: "select", optionsEndpoint: "admin/transaction-types/" },
+        { name: "amount", label: "مبلغ", type: "number" },
+        { name: "appointment", label: "نوبت", type: "select", optionsEndpoint: "admin/appointments/", optionLabel: appointmentOptionLabel },
+        { name: "description", label: "شرح" },
+      ]}
+    />
+    <CrudPage type="پرداخت" endpoint="admin/payments/" title="پرداخت‌ها" eyebrow="حسابداری" fields={[{ name: "appointment", label: "نوبت", type: "select", optionsEndpoint: "admin/appointments/", optionLabel: appointmentOptionLabel }, { name: "amount", label: "مبلغ", type: "number" }, { name: "provider_reference", label: "شناسه پرداخت" }]} />
+    </>
+  );
+}
+function Content() {
+  return (
+    <CrudPage
+      type="بخش محتوا"
+      endpoint="admin/gallery/"
+      title="محتوا و گالری"
+      eyebrow="انتشارات"
+      uploads
+      fields={[
+        ["title", "عنوان"],
+        ["category", "دسته‌بندی"],
+        ["image", "تصویر", "file"],
+        ["description", "توضیحات"],
+      ]}
+    />
+  );
+}
+function AdminRouter() {
+  return (
+    <Routes>
+      <Route index element={<DashboardHome />} />
+      <Route path="appointments" element={<Appointments />} />
+      <Route
+        path="employees"
+        element={
+          <EmployeeManagement />
+        }
+      />
+      <Route
+        path="services"
+        element={
+          <CrudPage
+            type="خدمت"
+            endpoint="admin/services/"
+            title="مدیریت خدمات"
+            eyebrow="کاتالوگ"
+            fields={[
+              { name: "persian_name", label: "نام فارسی" },
+              { name: "name", label: "نام داخلی" },
+              { name: "category", label: "دسته‌بندی", type: "select", optionsEndpoint: "admin/service-categories/" },
+              { name: "price", label: "قیمت", type: "number" },
+              { name: "duration", label: "مدت (دقیقه)", type: "number" },
+            ]}
+          />
+        }
+      />
+      <Route
+        path="customers"
+        element={
+          <CrudPage
+            type="مشتری"
+            endpoint="admin/users/"
+            title="مدیریت مشتریان"
+            eyebrow="ارتباط با مشتری"
+            fields={[{ name: "first_name", label: "نام" }, { name: "last_name", label: "نام خانوادگی" }, { name: "phone", label: "شماره تماس" }]}
+          />
+        }
+      />
+      <Route path="finance" element={<Finance />} />
+      <Route path="schedules" element={<CrudPage type="ساعات کاری" endpoint="admin/working-schedules/" title="ساعات کاری" eyebrow="تیم سالن" fields={[{ name: "employee", label: "متخصص", type: "select", optionsEndpoint: "admin/employees/" }, { name: "weekday", label: "روز هفته", type: "select", options: [{ value: 0, label: "دوشنبه" }, { value: 1, label: "سه‌شنبه" }, { value: 2, label: "چهارشنبه" }, { value: 3, label: "پنج‌شنبه" }, { value: 4, label: "جمعه" }, { value: 5, label: "شنبه" }, { value: 6, label: "یکشنبه" }] }, { name: "start_time", label: "شروع", type: "time" }, { name: "end_time", label: "پایان", type: "time" }]} />} />
+      <Route path="content" element={<Content />} />
+      <Route path="*" element={<DashboardHome />} />
+    </Routes>
+  );
+}
+export default AdminRouter;

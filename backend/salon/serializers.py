@@ -73,6 +73,81 @@ class EmployeeSelfProfileSerializer(serializers.ModelSerializer):
         return validate_image_upload(value)
 
 
+class AdminEmployeeSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source="user.get_full_name", read_only=True)
+
+    class Meta:
+        model = EmployeeProfile
+        fields = ("id", "user", "name", "specialty", "bio", "commission_rate", "is_active", "profile_photo")
+
+    def validate_profile_photo(self, value):
+        return validate_image_upload(value)
+
+
+class AdminEmployeeCreateSerializer(AdminEmployeeSerializer):
+    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False)
+    username = serializers.CharField(required=False)
+    password = serializers.CharField(write_only=True, required=False, min_length=8)
+    name = serializers.CharField(required=False, write_only=True, allow_blank=True)
+    phone = serializers.CharField(required=False, write_only=True, allow_blank=True)
+
+    class Meta(AdminEmployeeSerializer.Meta):
+        fields = AdminEmployeeSerializer.Meta.fields + ("username", "password", "phone")
+
+    def validate(self, attrs):
+        user = attrs.get("user")
+        username = attrs.get("username")
+        password = attrs.get("password")
+        if user and username:
+            raise serializers.ValidationError({"user": "یک کاربر موجود انتخاب کنید یا نام کاربری جدید وارد کنید، نه هر دو."})
+        if not user and not username:
+            raise serializers.ValidationError({"username": "نام کاربری جدید یا یک کاربر موجود الزامی است."})
+        if username:
+            if not password:
+                raise serializers.ValidationError({"password": "رمز عبور برای کاربر جدید الزامی است."})
+            if User.objects.filter(username=username).exists():
+                raise serializers.ValidationError({"username": "این نام کاربری قبلاً استفاده شده است."})
+        if user:
+            if user.role != "employee":
+                raise serializers.ValidationError({"user": "فقط حساب‌های با نقش متخصص قابل انتساب هستند."})
+            if EmployeeProfile.objects.filter(user=user).exists():
+                raise serializers.ValidationError({"user": "برای این حساب، پروفایل متخصص وجود دارد."})
+        return attrs
+
+    def create(self, validated_data):
+        user = validated_data.pop("user", None)
+        username = validated_data.pop("username", None)
+        password = validated_data.pop("password", None)
+        name = validated_data.pop("name", "")
+        phone = validated_data.pop("phone", "")
+        is_active = validated_data.get("is_active", True)
+        if user is None:
+            user = User.objects.create_user(username=username, password=password, first_name=name, phone=phone, role="employee", is_active=is_active)
+        else:
+            changes = []
+            if name:
+                user.first_name = name
+                changes.append("first_name")
+            if phone:
+                user.phone = phone
+                changes.append("phone")
+            if user.is_active != is_active:
+                user.is_active = is_active
+                changes.append("is_active")
+            if changes:
+                user.save(update_fields=changes)
+        return EmployeeProfile.objects.create(user=user, **validated_data)
+
+    def to_representation(self, instance):
+        return AdminEmployeeSerializer(instance, context=self.context).data
+
+
+class ServiceCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ServiceCategory
+        fields = ("id", "name", "is_active")
+
+
 class UserAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
