@@ -20,8 +20,7 @@ export const galleryImageUrl = (value) => {
 }
 api.interceptors.request.use((config) => {
   const token = getAccessToken()
-  const publicEndpoint = /^(services|employees|availability|appointments|gallery)\//.test(config.url || '')
-  if (token && !publicEndpoint) config.headers.Authorization = `Bearer ${token}`
+  if (token) config.headers.Authorization = `Bearer ${token}`
   if (!['get', 'head', 'options'].includes((config.method || 'get').toLowerCase())) {
     const csrf = document.cookie.split('; ').find((item) => item.startsWith('csrftoken='))?.split('=')[1]
     if (csrf) config.headers['X-CSRFToken'] = decodeURIComponent(csrf)
