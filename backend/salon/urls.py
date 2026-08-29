@@ -5,7 +5,7 @@ from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminServiceV
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView, BookingHoldView,
 					EmployeeAppointmentsView, EmployeeListView, EmployeeStatisticsView,
 					ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
-					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeeProfileView,
+					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
 					PaymentViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
 					EmployeeEarningsView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView)
 
@@ -23,6 +23,7 @@ router.register("admin/service-images", ServiceImageViewSet, basename="service-i
 router.register("admin/activity", AdminActionLogViewSet, basename="admin-activity")
 router.register("employee/appointment-items", EmployeeAppointmentItemViewSet, basename="employee-appointment-item")
 router.register("employee/time-off", EmployeeTimeOffViewSet, basename="employee-time-off")
+router.register("employee/schedule", EmployeeWorkingScheduleViewSet, basename="employee-schedule")
 
 urlpatterns = [
 	path("services/", ServiceListView.as_view(), name="service-list"),

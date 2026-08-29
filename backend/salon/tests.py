@@ -103,6 +103,29 @@ class AppointmentItemSchemaTests(TestCase):
         client.force_authenticate(self.customer)
         self.assertEqual(client.get("/api/v1/admin/statistics/").status_code, 403)
 
+    def test_employee_schedule_is_scoped_and_validated(self):
+        other_user = User.objects.create_user(username="schedule-other", role="employee")
+        other_employee = EmployeeProfile.objects.create(user=other_user)
+        other_schedule = WorkingSchedule.objects.create(employee=other_employee, weekday=1, start_time="09:00", end_time="17:00")
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        response = client.post("/api/v1/employee/schedule/", {"employee": other_employee.pk, "weekday": 1, "start_time": "09:00", "end_time": "17:00", "is_active": True})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["employee"], self.employee.pk)
+        own_schedule = response.data["id"]
+        schedule_data = client.get("/api/v1/employee/schedule/").data
+        schedules = schedule_data["results"] if "results" in schedule_data else schedule_data
+        self.assertEqual(schedules[0]["employee"], self.employee.pk)
+        self.assertEqual(client.patch(f"/api/v1/employee/schedule/{own_schedule}/", {"is_active": False}).status_code, 200)
+        self.assertEqual(client.get(f"/api/v1/employee/schedule/{other_schedule.pk}/").status_code, 404)
+
+        duplicate = client.post("/api/v1/employee/schedule/", {"weekday": 1, "start_time": "10:00", "end_time": "18:00", "is_active": True})
+        self.assertEqual(duplicate.status_code, 400)
+        invalid_range = client.post("/api/v1/employee/schedule/", {"weekday": 2, "start_time": "18:00", "end_time": "09:00", "is_active": True})
+        self.assertEqual(invalid_range.status_code, 400)
+        self.assertEqual(client.delete(f"/api/v1/employee/schedule/{own_schedule}/").status_code, 204)
+
     def test_commission_calculation_and_payment_refund_transitions(self):
         item = self.make_item()
         commission = EmployeeCommission.objects.create(appointment_item=item, commission_rate_snapshot=10, commission_amount=80)

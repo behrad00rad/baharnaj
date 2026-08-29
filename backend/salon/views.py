@@ -19,7 +19,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, record_failed_login
-from .serializers import AdminActionLogSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 class ServiceListView(generics.ListAPIView):
@@ -394,6 +394,20 @@ class EmployeeTimeOffViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(employee=EmployeeProfile.objects.get(user=self.request.user), created_by=self.request.user)
+
+
+class EmployeeWorkingScheduleViewSet(viewsets.ModelViewSet):
+    permission_classes = (IsEmployee,)
+    serializer_class = EmployeeWorkingScheduleSerializer
+
+    def get_queryset(self):
+        return WorkingSchedule.objects.filter(employee__user=self.request.user).select_related("employee__user")
+
+    def perform_create(self, serializer):
+        serializer.save(employee=self.request.user.employee_profile, created_by=self.request.user, updated_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
 
 
 class EmployeeEarningsView(generics.GenericAPIView):

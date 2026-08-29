@@ -209,9 +209,34 @@ class EmployeeServiceSerializer(serializers.ModelSerializer):
 
 
 class WorkingScheduleSerializer(serializers.ModelSerializer):
+    def validate(self, attrs):
+        employee = attrs.get("employee") or getattr(self.instance, "employee", None)
+        request = self.context.get("request")
+        if employee is None and request and request.user.is_authenticated and request.user.role == "employee":
+            employee = request.user.employee_profile
+
+        start_time = attrs.get("start_time", getattr(self.instance, "start_time", None))
+        end_time = attrs.get("end_time", getattr(self.instance, "end_time", None))
+        if start_time and end_time and start_time >= end_time:
+            raise serializers.ValidationError({"end_time": "End time must be after start time."})
+
+        weekday = attrs.get("weekday", getattr(self.instance, "weekday", None))
+        if employee and weekday is not None:
+            conflicts = WorkingSchedule.objects.filter(employee=employee, weekday=weekday)
+            if self.instance:
+                conflicts = conflicts.exclude(pk=self.instance.pk)
+            if conflicts.exists():
+                raise serializers.ValidationError({"weekday": "A working schedule already exists for this weekday."})
+        return attrs
+
     class Meta:
         model = WorkingSchedule
         fields = "__all__"
+
+
+class EmployeeWorkingScheduleSerializer(WorkingScheduleSerializer):
+    class Meta(WorkingScheduleSerializer.Meta):
+        read_only_fields = ("employee", "created_by", "updated_by", "created_at", "updated_at")
 
 
 class TimeOffSerializer(serializers.ModelSerializer):
