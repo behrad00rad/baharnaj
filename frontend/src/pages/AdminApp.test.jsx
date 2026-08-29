@@ -64,4 +64,12 @@ describe('admin CRUD forms', () => {
     await waitFor(() => expect(get).toHaveBeenCalledWith('admin/customer-options/'))
     expect(await screen.findByRole('option', { name: 'Customer' })).toHaveValue('2')
   })
+
+  it('selects a calendar day and requests that day from the backend', async () => {
+    render(<MemoryRouter initialEntries={['/appointments']}><AdminRouter /></MemoryRouter>)
+
+    const days = await screen.findAllByRole('button', { name: /[۰-۹]/ })
+    fireEvent.click(days[0])
+    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/start_date=.*&end_date=/)))
+  })
 })

@@ -183,6 +183,24 @@ class AppointmentItemSchemaTests(TestCase):
         revenue = client.get(f"/api/v1/admin/revenue/?period=day&date={timezone.localdate()}")
         self.assertEqual(revenue.status_code, 200)
         self.assertEqual(revenue.data["total"], self.service.price)
+        update = client.patch(f"/api/v1/admin/appointments/{response.data['id']}/", {"status": "completed"}, format="json")
+        self.assertEqual(update.status_code, 200)
+        self.assertEqual(update.data["status"], "completed")
+
+    def test_admin_can_create_sequential_services_for_assigned_employee(self):
+        admin = User.objects.create_user(username="multi-admin", role="admin")
+        second_service = Service.objects.create(category=self.service.category, name="Color", persian_name="Color", price=1200, duration=60)
+        EmployeeService.objects.create(employee=self.employee, service=second_service)
+        booking_date = date(2026, 8, 31)
+        WorkingSchedule.objects.create(employee=self.employee, weekday=booking_date.weekday(), start_time="09:00", end_time="20:00")
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.post("/api/v1/admin/appointments/", {"customer": self.customer_profile.pk, "items": [{"service": self.service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "10:00", "end_time": "11:00"}, {"service": second_service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "11:00", "end_time": "12:00"}]}, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(response.data["items"]), 2)
+        self.assertEqual([(item["start_time"], item["end_time"]) for item in response.data["items"]], [("10:00:00", "11:00:00"), ("11:00:00", "12:00:00")])
 
     def test_commission_calculation_and_payment_refund_transitions(self):
         item = self.make_item()

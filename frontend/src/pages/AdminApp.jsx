@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, Route, Routes, useNavigate } from "react-router-dom";
+import { toJalaali } from "jalaali-js";
+import { JalaliDatePicker } from "../components/DatePicker";
 import { api, toman } from "../shared/api";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -317,17 +319,17 @@ function Appointments() {
   return (
     <div className="admin-page">
       <Header
-        eyebrow="运营"
-        title="预约管理"
+        eyebrow="مدیریت نوبت‌ها"
+        title="نوبت‌ها"
         action="افزودن نوبت"
         onAction={() => setCreateOpen(true)}
       />
       <div className="toolbar">
         <div className="segmented">
           {[
-            ["day", "日"],
-            ["week", "周"],
-            ["month", "月"],
+            ["day", "روز"],
+            ["week", "هفته"],
+            ["month", "ماه"],
           ].map(([value, label]) => (
             <button
               className={view === value ? "selected" : ""}
@@ -384,6 +386,13 @@ function Appointments() {
           </select>
         </div>
       )}
+      <AppointmentCalendar
+        anchor={anchor}
+        onSelect={(date) => {
+          setAnchor(date);
+          setView("day");
+        }}
+      />
       <section className="admin-panel calendar-panel">
         <div className="calendar-strip">
           <button aria-label="بازه قبل" onClick={() => moveRange(-1)}>
@@ -448,6 +457,63 @@ function Appointments() {
     </div>
   );
 }
+function AppointmentCalendar({ anchor, onSelect }) {
+  const value = new Date(`${anchor}T00:00:00`);
+  const monthStart = new Date(value.getFullYear(), value.getMonth(), 1);
+  const start = new Date(monthStart);
+  start.setDate(start.getDate() - start.getDay());
+  const jalali = toJalaali(
+    value.getFullYear(),
+    value.getMonth() + 1,
+    value.getDate(),
+  );
+  return (
+    <section className="admin-panel appointment-calendar">
+      <div className="panel-title">
+        <div>
+          <span>تقویم شمسی</span>
+          <h2>
+            {new Intl.NumberFormat("fa-IR").format(jalali.jy)} /{" "}
+            {new Intl.NumberFormat("fa-IR").format(jalali.jm)}
+          </h2>
+        </div>
+      </div>
+      <div className="appointment-calendar-weekdays">
+        {["ی", "د", "س", "چ", "پ", "ج", "ش"].map((day) => (
+          <b key={day}>{day}</b>
+        ))}
+      </div>
+      <div className="appointment-calendar-days">
+        {Array.from({ length: 42 }, (_, index) => {
+          const day = new Date(start);
+          day.setDate(start.getDate() + index);
+          const iso = day.toISOString().slice(0, 10);
+          const local = toJalaali(
+            day.getFullYear(),
+            day.getMonth() + 1,
+            day.getDate(),
+          );
+          return (
+            <button
+              type="button"
+              key={iso}
+              className={
+                iso === anchor
+                  ? "selected"
+                  : day.getMonth() !== value.getMonth()
+                    ? "muted"
+                    : ""
+              }
+              onClick={() => onSelect(iso)}
+            >
+              {new Intl.NumberFormat("fa-IR").format(local.jd)}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 function shiftDate(value, days) {
   const next = new Date(`${value}T00:00:00`);
   next.setDate(next.getDate() + days);
@@ -477,35 +543,64 @@ function AdminAppointmentForm({ close, onCreated }) {
     status: "pending",
     payment_status: "",
   });
-  const [employees, setEmployees] = useState([]);
+  const [selections, setSelections] = useState([]);
+  const [employees, setEmployees] = useState({});
   const [slots, setSlots] = useState([]);
   const [newCustomer, setNewCustomer] = useState(false);
   const [error, setError] = useState("");
   const update = (name, value) => setForm({ ...form, [name]: value });
   useEffect(() => {
-    if (!form.service) return setEmployees([]);
-    api
-      .get(`employees/?service=${form.service}`)
-      .then(({ data }) => setEmployees(unwrap(data)))
-      .catch(() => setEmployees([]));
-  }, [form.service]);
+    selections.forEach((selection) => {
+      if (selection.service && !employees[selection.service])
+        api
+          .get(`employees/?service=${selection.service}`)
+          .then(({ data }) =>
+            setEmployees((current) => ({
+              ...current,
+              [selection.service]: unwrap(data),
+            })),
+          )
+          .catch(() =>
+            setEmployees((current) => ({
+              ...current,
+              [selection.service]: [],
+            })),
+          );
+    });
+  }, [selections, employees]);
   useEffect(() => {
-    if (!form.service || !form.employee || !form.date) return setSlots([]);
+    if (
+      !selections.length ||
+      selections.some(
+        (selection) => !selection.service || !selection.employee,
+      ) ||
+      !form.date
+    )
+      return setSlots([]);
     api
       .get(
-        `availability/?date=${form.date}&items=${encodeURIComponent(JSON.stringify([{ service: form.service, employee: form.employee }]))}`,
+        `availability/?date=${form.date}&items=${encodeURIComponent(JSON.stringify(selections.map(({ service, employee }) => ({ service, employee }))))}`,
       )
       .then(({ data }) => setSlots(data.slots || []))
       .catch(() => setSlots([]));
-  }, [form.service, form.employee, form.date]);
+  }, [selections, form.date]);
   const submit = async (event) => {
     event.preventDefault();
-    const selectedService = services.data.find(
-      (item) => String(item.id) === String(form.service),
-    );
-    if (!selectedService || !form.time) return;
-    const end = new Date(`2000-01-01T${form.time}:00`);
-    end.setMinutes(end.getMinutes() + Number(selectedService.duration));
+    if (!selections.length || !form.time) return;
+    let current = new Date(`2000-01-01T${form.time}:00`);
+    const items = selections.map((selection) => {
+      const service = services.data.find(
+        (item) => String(item.id) === String(selection.service),
+      );
+      const start_time = current.toTimeString().slice(0, 5);
+      current = new Date(current.getTime() + Number(service.duration) * 60000);
+      return {
+        ...selection,
+        date: form.date,
+        start_time,
+        end_time: current.toTimeString().slice(0, 5),
+      };
+    });
     try {
       await api.post("admin/appointments/", {
         ...(newCustomer
@@ -517,15 +612,7 @@ function AdminAppointmentForm({ close, onCreated }) {
         notes: form.notes || "",
         status: form.status,
         ...(form.payment_status && { payment_status: form.payment_status }),
-        items: [
-          {
-            service: form.service,
-            employee: form.employee,
-            date: form.date,
-            start_time: form.time,
-            end_time: end.toTimeString().slice(0, 5),
-          },
-        ],
+        items,
       });
       onCreated();
     } catch (requestError) {
@@ -592,43 +679,88 @@ function AdminAppointmentForm({ close, onCreated }) {
             </select>
           </label>
         )}
-        <label>
-          خدمت
-          <select
-            required
-            value={form.service || ""}
-            onChange={(event) => update("service", event.target.value)}
+        <fieldset className="admin-service-picker">
+          <legend>خدمات و متخصصان</legend>
+          {selections.map((selection, index) => (
+            <div className="appointment-line" key={index}>
+              <label>
+                خدمت
+                <select
+                  required
+                  value={selection.service || ""}
+                  onChange={(event) =>
+                    setSelections(
+                      selections.map((item, position) =>
+                        position === index
+                          ? {
+                              ...item,
+                              service: event.target.value,
+                              employee: "",
+                            }
+                          : item,
+                      ),
+                    )
+                  }
+                >
+                  <option value="">انتخاب کنید</option>
+                  {services.data.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.persian_name || item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                متخصص
+                <select
+                  required
+                  value={selection.employee || ""}
+                  onChange={(event) =>
+                    setSelections(
+                      selections.map((item, position) =>
+                        position === index
+                          ? { ...item, employee: event.target.value }
+                          : item,
+                      ),
+                    )
+                  }
+                >
+                  <option value="">انتخاب کنید</option>
+                  {(employees[selection.service] || []).map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                aria-label="حذف خدمت"
+                onClick={() =>
+                  setSelections(
+                    selections.filter((_, position) => position !== index),
+                  )
+                }
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="employee-action"
+            onClick={() =>
+              setSelections([...selections, { service: "", employee: "" }])
+            }
           >
-            <option value="">انتخاب کنید</option>
-            {services.data.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.persian_name || item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          متخصص
-          <select
-            required
-            value={form.employee || ""}
-            onChange={(event) => update("employee", event.target.value)}
-          >
-            <option value="">انتخاب کنید</option>
-            {employees.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            افزودن خدمت
+          </button>
+        </fieldset>
         <label>
           تاریخ
-          <input
-            required
-            type="date"
+          <JalaliDatePicker
             value={form.date}
-            onChange={(event) => update("date", event.target.value)}
+            onChange={(date) => update("date", date)}
           />
         </label>
         <label>

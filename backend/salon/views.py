@@ -20,7 +20,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 class ServiceListView(generics.ListAPIView):
@@ -270,7 +270,11 @@ class AdminAppointmentViewSet(AdminModelViewSet):
     serializer_class = AppointmentSerializer
 
     def get_serializer_class(self):
-        return AdminAppointmentCreateSerializer if self.action == "create" else AppointmentSerializer
+        if self.action == "create":
+            return AdminAppointmentCreateSerializer
+        if self.action in {"update", "partial_update"}:
+            return AdminAppointmentStatusSerializer
+        return AppointmentSerializer
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -292,11 +296,11 @@ class AdminAppointmentViewSet(AdminModelViewSet):
 
     def perform_update(self, serializer):
         appointment = self.get_object()
-        status_value = serializer.validated_data.pop("status", None)
-        if status_value:
-            appointment.set_status(status_value, changed_by=self.request.user, reason=serializer.validated_data.pop("status_reason", ""))
-        appointment = serializer.save(updated_by=self.request.user)
-        AdminActionLog.objects.create(actor=self.request.user, action="update", model_name="Appointment", object_id=str(appointment.pk), details={"fields": list(serializer.validated_data)})
+        status_value = serializer.validated_data["status"]
+        appointment.set_status(status_value, changed_by=self.request.user)
+        appointment.refresh_from_db()
+        serializer.instance = appointment
+        AdminActionLog.objects.create(actor=self.request.user, action="update", model_name="Appointment", object_id=str(appointment.pk), details={"fields": ["status"]})
 
 
 class AppointmentItemViewSet(AdminModelViewSet):

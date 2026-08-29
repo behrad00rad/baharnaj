@@ -319,6 +319,18 @@ class AdminAppointmentCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"customer": "یک مشتری انتخاب کنید یا نام و شماره مشتری جدید را وارد کنید."})
         return attrs
 
+    def validate_items(self, items):
+        if not items:
+            raise serializers.ValidationError("حداقل یک خدمت برای نوبت الزامی است.")
+        first_date = items[0]["date"]
+        for position, item in enumerate(items):
+            start = datetime.combine(first_date, item["start_time"])
+            if item["date"] != first_date or datetime.combine(first_date, item["end_time"]) - start != timedelta(minutes=item["service"].duration):
+                raise serializers.ValidationError("هر خدمت باید در همان تاریخ و به اندازه مدت خدمت زمان‌بندی شود.")
+            if position and item["start_time"] != items[position - 1]["end_time"]:
+                raise serializers.ValidationError("خدمات انتخاب‌شده باید پشت سر هم زمان‌بندی شوند.")
+        return items
+
     def create(self, validated_data):
         items = validated_data.pop("items")
         payment_status = validated_data.pop("payment_status", None)
@@ -342,6 +354,12 @@ class AdminAppointmentCreateSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         return AppointmentSerializer(instance, context=self.context).data
+
+
+class AdminAppointmentStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Appointment
+        fields = ("status",)
 
 
 class BookingHoldItemSerializer(serializers.ModelSerializer):
