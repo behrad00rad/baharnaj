@@ -33,4 +33,13 @@ describe('employee app', () => {
     await waitFor(() => expect(post).toHaveBeenCalledWith('employee/schedule/', expect.objectContaining({ weekday: 0 })))
     expect(post.mock.calls[0][1]).not.toHaveProperty('employee')
   })
+
+  it('keeps specialty and time-off administration out of the employee profile', async () => {
+    render(<MemoryRouter initialEntries={['/profile']}><EmployeeApp /></MemoryRouter>)
+
+    await waitFor(() => expect(screen.getByText('ساعات کاری من')).toBeInTheDocument())
+    expect(screen.queryByText('تخصص')).not.toBeInTheDocument()
+    expect(screen.queryByText('درخواست مرخصی')).not.toBeInTheDocument()
+    expect(screen.queryByText('ارسال درخواست')).not.toBeInTheDocument()
+  })
 })

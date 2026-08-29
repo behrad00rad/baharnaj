@@ -61,6 +61,18 @@ class EmployeeSerializer(serializers.ModelSerializer):
         return validate_image_upload(value)
 
 
+class EmployeeSelfProfileSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source="user.get_full_name", read_only=True)
+
+    class Meta:
+        model = EmployeeProfile
+        fields = ("id", "name", "bio", "profile_photo")
+        read_only_fields = ("id", "name")
+
+    def validate_profile_photo(self, value):
+        return validate_image_upload(value)
+
+
 class UserAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = User

@@ -128,6 +128,20 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(invalid_range.status_code, 400)
         self.assertEqual(client.delete(f"/api/v1/employee/schedule/{own_schedule}/").status_code, 204)
 
+    def test_employee_profile_does_not_expose_or_update_admin_specialty(self):
+        self.employee.specialty = "Hair color"
+        self.employee.save()
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        response = client.patch("/api/v1/employee/profile/", {"specialty": "Cutting", "bio": "Updated profile"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("specialty", response.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.specialty, "Hair color")
+        self.assertEqual(self.employee.bio, "Updated profile")
+
     def test_commission_calculation_and_payment_refund_transitions(self):
         item = self.make_item()
         commission = EmployeeCommission.objects.create(appointment_item=item, commission_rate_snapshot=10, commission_amount=80)
