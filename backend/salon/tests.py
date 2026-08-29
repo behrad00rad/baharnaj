@@ -105,6 +105,19 @@ class AppointmentItemSchemaTests(TestCase):
         client.force_authenticate(self.customer)
         self.assertEqual(client.get("/api/v1/admin/statistics/").status_code, 403)
 
+    def test_employee_appointments_can_be_filtered_by_selected_date(self):
+        other_appointment = Appointment.objects.create(customer=self.customer_profile)
+        AppointmentItem.objects.create(appointment=self.appointment, service=self.service, employee=self.employee, date=date(2026, 8, 30), start_time="09:00", end_time="10:00")
+        AppointmentItem.objects.create(appointment=other_appointment, service=self.service, employee=self.employee, date=date(2026, 8, 31), start_time="09:00", end_time="10:00")
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        first_day = client.get("/api/v1/employee/appointments/?date=2026-08-30")
+        second_day = client.get("/api/v1/employee/appointments/?date=2026-08-31")
+
+        self.assertEqual([item["id"] for item in first_day.data], [self.appointment.pk])
+        self.assertEqual([item["id"] for item in second_day.data], [other_appointment.pk])
+
     def test_employee_schedule_is_scoped_and_validated(self):
         other_user = User.objects.create_user(username="schedule-other", role="employee")
         other_employee = EmployeeProfile.objects.create(user=other_user)

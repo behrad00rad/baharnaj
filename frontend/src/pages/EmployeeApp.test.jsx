@@ -52,4 +52,26 @@ describe('employee app', () => {
     fireEvent.click(screen.getByRole('button', { name: 'ماهانه' }))
     await waitFor(() => expect(get).toHaveBeenCalledWith('employee/earnings/?period=month'))
   })
+
+  it('changes appointments and working hours when selecting another calendar day', async () => {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date())
+    const nextDate = new Date(`${today}T12:00:00`); nextDate.setDate(nextDate.getDate() + 1)
+    const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(nextDate)
+    const weekday = (date) => (new Date(`${date}T12:00:00`).getDay() + 6) % 7
+    get.mockImplementation((endpoint) => {
+      if (endpoint === 'employee/schedule/') return Promise.resolve({ data: [{ id: 1, weekday: weekday(today), start_time: '09:00:00', end_time: '17:00:00', is_active: true }, { id: 2, weekday: weekday(tomorrow), start_time: '11:00:00', end_time: '19:00:00', is_active: true }] })
+      if (endpoint === `employee/appointments/?date=${today}`) return Promise.resolve({ data: [{ id: 1, customer_name: 'مشتری امروز', status: 'confirmed', items: [{ date: today, start_time: '09:00', end_time: '10:00', service_name: 'کوتاهی' }] }] })
+      if (endpoint === `employee/appointments/?date=${tomorrow}`) return Promise.resolve({ data: [{ id: 2, customer_name: 'مشتری فردا', status: 'confirmed', items: [{ date: tomorrow, start_time: '11:00', end_time: '12:00', service_name: 'رنگ' }] }] })
+      return Promise.resolve({ data: [] })
+    })
+    render(<MemoryRouter initialEntries={['/calendar']}><EmployeeApp /></MemoryRouter>)
+
+    expect(await screen.findByText('مشتری امروز')).toBeInTheDocument()
+    expect(screen.getByText('بازه کاری 09:00 تا 17:00')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'هفته' }))
+    fireEvent.click(await screen.findByRole('button', { name: `انتخاب ${tomorrow}` }))
+    expect(await screen.findByText('مشتری فردا')).toBeInTheDocument()
+    expect(screen.getByText('بازه کاری 11:00 تا 19:00')).toBeInTheDocument()
+    expect(get).toHaveBeenCalledWith(`employee/appointments/?date=${tomorrow}`)
+  })
 })

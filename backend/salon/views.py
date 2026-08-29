@@ -102,7 +102,11 @@ class EmployeeAppointmentsView(generics.ListAPIView):
     permission_classes = (IsEmployee,)
 
     def get_queryset(self):
-        return Appointment.objects.filter(items__employee__user=self.request.user).prefetch_related("items")
+        queryset = Appointment.objects.filter(items__employee__user=self.request.user).prefetch_related("items")
+        selected_date = self.request.query_params.get("date")
+        if selected_date:
+            queryset = queryset.filter(items__date=selected_date)
+        return queryset.distinct()
 
 
 class EmployeeStatisticsView(generics.GenericAPIView):
