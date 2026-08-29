@@ -1,5 +1,6 @@
 from base64 import urlsafe_b64decode
 from datetime import date as date_type, datetime, time, timedelta
+import json
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
@@ -16,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
+from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, record_failed_login
 from .serializers import AdminActionLogSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
@@ -50,33 +51,48 @@ class AvailabilityView(generics.ListAPIView):
     permission_classes = (AllowAny,)
     throttle_scope = "guest_booking"
     def list(self, request, *args, **kwargs):
+        raw_items = request.query_params.get("items")
+        if raw_items:
+            try:
+                selected_items = json.loads(raw_items)
+            except json.JSONDecodeError:
+                return Response({"detail": "جزئیات خدمات نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            selected_items = [{"service": value, "employee": request.query_params.get("employee")} for value in request.query_params.get("service", "").split(",") if value]
         service_values = [value for value in request.query_params.get("service", "").split(",") if value]
-        employee_id = request.query_params.get("employee")
         date_value = request.query_params.get("date")
-        if not all((service_values, employee_id, date_value)):
+        if not selected_items or not date_value:
             return Response({"detail": "خدمت، متخصص و تاریخ الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            services = list(Service.objects.filter(pk__in=service_values, is_active=True, is_bookable=True))
-            employee = EmployeeProfile.objects.filter(pk=employee_id, is_active=True, service_links__service_id__in=service_values, service_links__is_active=True).distinct().first()
             appointment_date = datetime.strptime(date_value, "%Y-%m-%d").date()
+            segments = []
+            for selected in selected_items:
+                service = Service.objects.filter(pk=selected["service"], is_active=True, is_bookable=True).first()
+                employee = EmployeeProfile.objects.filter(pk=selected["employee"], is_active=True).first()
+                if not service or not employee or not EmployeeService.objects.filter(employee=employee, service=service, is_active=True).exists():
+                    return Response({"date": date_value, "slots": []})
+                segments.append((service, employee))
         except ValueError:
-            return Response({"date": date_value, "slots": []})
-        if employee is None or len(services) != len(set(service_values)) or EmployeeService.objects.filter(employee=employee, service_id__in=service_values, is_active=True).values("service_id").distinct().count() != len(set(service_values)):
             return Response({"date": date_value, "slots": []})
         if appointment_date < timezone.localdate():
             return Response({"date": date_value, "slots": []})
-        duration = sum(service.duration for service in services)
-        items = AppointmentItem.objects.filter(employee=employee, date=appointment_date, appointment__status__in=("pending", "confirmed"))
-        schedule = employee.working_schedules.filter(weekday=appointment_date.weekday(), is_active=True).first()
-        if not schedule:
-            return Response({"date": date_value, "slots": []})
         slots = []
-        current = datetime.combine(appointment_date, max(schedule.start_time, time(8)))
-        closing = datetime.combine(appointment_date, min(schedule.end_time, time(20)))
-        while current + timedelta(minutes=duration) <= closing:
-            start, end = current.time(), (current + timedelta(minutes=duration)).time()
-            if not items.filter(start_time__lt=end, end_time__gt=start).exists():
-                slots.append(start.strftime("%H:%M"))
+        current = datetime.combine(appointment_date, time(8))
+        closing = datetime.combine(appointment_date, time(20))
+        while current < closing:
+            segment_start = current
+            available = True
+            for service, employee in segments:
+                segment_end = segment_start + timedelta(minutes=service.duration)
+                schedule = employee.working_schedules.filter(weekday=appointment_date.weekday(), is_active=True, start_time__lte=segment_start.time(), end_time__gte=segment_end.time()).first()
+                appointment_conflict = AppointmentItem.objects.filter(employee=employee, date=appointment_date, appointment__status__in=("pending", "confirmed"), start_time__lt=segment_end.time(), end_time__gt=segment_start.time()).exists()
+                hold_conflict = BookingHoldItem.objects.filter(employee=employee, date=appointment_date, hold__expires_at__gt=timezone.now(), start_time__lt=segment_end.time(), end_time__gt=segment_start.time()).exists()
+                if not schedule or employee.time_off.filter(start_date__lte=appointment_date, end_date__gte=appointment_date).exists() or appointment_conflict or hold_conflict:
+                    available = False
+                    break
+                segment_start = segment_end
+            if available:
+                slots.append(current.strftime("%H:%M"))
             current += timedelta(minutes=30)
         return Response({"date": date_value, "slots": slots})
 
@@ -122,20 +138,30 @@ class BookingHoldView(generics.CreateAPIView):
     throttle_scope = "guest_booking"
     serializer_class = BookingHoldSerializer
 
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
+        held_items = serializer.validated_data["items"]
         from .validators import validate_no_employee_overlap
-        if not data["employee"].working_schedules.filter(weekday=data["date"].weekday(), is_active=True, start_time__lte=data["start_time"], end_time__gte=data["end_time"]).exists():
-            return Response({"detail": "زمان انتخاب‌شده خارج از ساعات کاری متخصص است."}, status=status.HTTP_400_BAD_REQUEST)
-        if data["employee"].time_off.filter(start_date__lte=data["date"], end_date__gte=data["date"]).exists():
-            return Response({"detail": "متخصص در این تاریخ در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
-        validate_no_employee_overlap(employee=data["employee"], date=data["date"], start_time=data["start_time"], end_time=data["end_time"])
-        if BookingHold.objects.filter(employee=data["employee"], date=data["date"], expires_at__gt=timezone.now(), start_time__lt=data["end_time"], end_time__gt=data["start_time"]).exists():
-            return Response({"detail": "این زمان موقتاً در اختیار مشتری دیگری است."}, status=status.HTTP_409_CONFLICT)
-        hold = BookingHold.objects.create(expires_at=timezone.now() + timedelta(minutes=5), **data)
+        for item in held_items:
+            if not item["employee"].working_schedules.filter(weekday=item["date"].weekday(), is_active=True, start_time__lte=item["start_time"], end_time__gte=item["end_time"]).exists():
+                return Response({"detail": "زمان انتخاب‌شده خارج از ساعات کاری متخصص است."}, status=status.HTTP_400_BAD_REQUEST)
+            if item["employee"].time_off.filter(start_date__lte=item["date"], end_date__gte=item["date"]).exists():
+                return Response({"detail": "متخصص در این تاریخ در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
+            validate_no_employee_overlap(employee=item["employee"], date=item["date"], start_time=item["start_time"], end_time=item["end_time"])
+            if BookingHoldItem.objects.filter(employee=item["employee"], date=item["date"], hold__expires_at__gt=timezone.now(), start_time__lt=item["end_time"], end_time__gt=item["start_time"]).exists():
+                return Response({"detail": "این زمان موقتاً در اختیار مشتری دیگری است."}, status=status.HTTP_409_CONFLICT)
+        first_item = held_items[0]
+        hold = BookingHold.objects.create(owner=request.user if request.user.is_authenticated else None, expires_at=timezone.now() + timedelta(minutes=5), **first_item)
+        BookingHoldItem.objects.bulk_create([BookingHoldItem(hold=hold, **item) for item in held_items])
         return Response(self.get_serializer(hold).data, status=status.HTTP_201_CREATED)
+
+
+class BookingHoldDeleteView(generics.DestroyAPIView):
+    permission_classes = (AllowAny,)
+    lookup_field = "token"
+    queryset = BookingHold.objects.all()
 
 
 class WaitlistView(generics.CreateAPIView):

@@ -1,7 +1,9 @@
-from datetime import date
+import json
+from datetime import date, timedelta
 
 from django.db import IntegrityError
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, Payment, Refund, Service, ServiceCategory, TimeOff, User, WorkingSchedule
@@ -143,3 +145,46 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertFalse(AppointmentItem.objects.filter(start_time="09:00").exists())
         self.appointment.set_status("cancelled", changed_by=self.customer, reason="customer request")
         self.assertEqual(self.appointment.status_history.get().reason, "customer request")
+
+    def test_multi_service_booking_hold_and_confirmation_contract(self):
+        second_service = Service.objects.create(category=self.service.category, name="Color", persian_name="Color", price=1200, duration=60)
+        EmployeeService.objects.create(employee=self.employee, service=second_service)
+        booking_date = date(2026, 8, 31)
+        WorkingSchedule.objects.create(employee=self.employee, weekday=booking_date.weekday(), start_time="09:00", end_time="20:00")
+        items = [
+            {"service": self.service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "10:00", "end_time": "11:00"},
+            {"service": second_service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "11:00", "end_time": "12:00"},
+        ]
+        client = APIClient()
+        client.force_authenticate(self.customer)
+        availability = client.get("/api/v1/availability/", {"date": str(booking_date), "items": json.dumps([{key: item[key] for key in ("service", "employee")} for item in items])})
+        self.assertIn("10:00", availability.data["slots"])
+        hold_response = client.post("/api/v1/booking-holds/", {"items": items}, format="json")
+        self.assertEqual(hold_response.status_code, 201)
+        self.assertEqual(len(hold_response.data["items"]), 2)
+
+        overreach = client.post("/api/v1/appointments/", {"hold_token": hold_response.data["token"], "items": [*items, {"service": self.service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "12:00", "end_time": "13:00"}]}, format="json")
+        self.assertEqual(overreach.status_code, 400)
+        other_user = User.objects.create_user(username="other-booker")
+        client.force_authenticate(other_user)
+        self.assertEqual(client.post("/api/v1/appointments/", {"hold_token": hold_response.data["token"], "items": items}, format="json").status_code, 400)
+
+        client.force_authenticate(self.customer)
+        response = client.post("/api/v1/appointments/", {"hold_token": hold_response.data["token"], "items": items}, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual([(item["start_time"], item["end_time"]) for item in response.data["items"]], [("10:00:00", "11:00:00"), ("11:00:00", "12:00:00")])
+        self.assertEqual(sum(item["price_snapshot"] for item in response.data["items"]), 2000)
+        self.assertEqual(response.data["customer_name"], "customer")
+        self.assertEqual(response.data["customer_phone"], "")
+        self.assertEqual(response.data["items"][0]["service_name"], "Cut")
+        self.assertEqual(response.data["items"][0]["employee_name"], "employee")
+        self.assertEqual(response.data["items"][0]["completion_status"], "pending")
+        self.assertEqual(response.data["items"][0]["status"], "pending")
+
+        expired_items = [{**item, "start_time": f"{14 + index:02}:00", "end_time": f"{15 + index:02}:00"} for index, item in enumerate(items)]
+        expired_hold = client.post("/api/v1/booking-holds/", {"items": expired_items}, format="json")
+        self.assertEqual(expired_hold.status_code, 201)
+        from .models import BookingHold
+        BookingHold.objects.filter(token=expired_hold.data["token"]).update(expires_at=timezone.now() - timedelta(seconds=1))
+        client.force_authenticate(other_user)
+        self.assertEqual(client.post("/api/v1/booking-holds/", {"items": expired_items}, format="json").status_code, 201)

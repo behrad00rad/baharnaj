@@ -8,7 +8,7 @@ from rest_framework import serializers
 from .models import (
     AccountLogin, AdminActionLog, Appointment, AppointmentItem, CustomerProfile, EmployeeProfile,
     EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage,
-    BookingHold, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
+    BookingHold, BookingHoldItem, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
 )
 from .validators import validate_no_employee_overlap
 from .security import validate_image_upload, validate_phone
@@ -83,9 +83,16 @@ class ServiceImageSerializer(serializers.ModelSerializer):
 
 
 class AppointmentItemSerializer(serializers.ModelSerializer):
+    service_name = serializers.CharField(source="service.persian_name", read_only=True)
+    employee_name = serializers.SerializerMethodField()
+    status = serializers.CharField(source="completion_status", read_only=True)
+
+    def get_employee_name(self, obj):
+        return obj.employee.user.get_full_name() or obj.employee.user.username
+
     class Meta:
         model = AppointmentItem
-        fields = ("id", "service", "employee", "date", "start_time", "end_time", "price_snapshot", "duration_snapshot", "notes", "completion_status")
+        fields = ("id", "service", "service_name", "employee", "employee_name", "date", "start_time", "end_time", "price_snapshot", "duration_snapshot", "notes", "completion_status", "status")
         read_only_fields = ("id", "price_snapshot", "duration_snapshot")
 
     def validate(self, attrs):
@@ -112,8 +119,8 @@ class AppointmentItemSerializer(serializers.ModelSerializer):
 
 class AppointmentSerializer(serializers.ModelSerializer):
     items = AppointmentItemSerializer(many=True)
-    customer_name = serializers.CharField(write_only=True, required=False)
-    customer_phone = serializers.CharField(write_only=True, required=False)
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
     hold_token = serializers.UUIDField(write_only=True, required=False)
     create_account = serializers.BooleanField(write_only=True, required=False, default=False)
     account_password = serializers.CharField(write_only=True, required=False, min_length=8)
@@ -123,15 +130,22 @@ class AppointmentSerializer(serializers.ModelSerializer):
         fields = ("id", "customer", "items", "status", "notes", "created_by", "updated_by", "created_at", "updated_at", "confirmation_code", "customer_name", "customer_phone", "hold_token", "create_account", "account_password")
         read_only_fields = ("id", "customer", "created_by", "updated_by", "created_at", "updated_at")
 
+    def get_customer_name(self, obj):
+        return obj.customer.user.get_full_name() or obj.customer.user.username
+
+    def get_customer_phone(self, obj):
+        return obj.customer.user.phone
+
     def validate_items(self, items):
         if not items:
             raise serializers.ValidationError("حداقل یک خدمت برای نوبت الزامی است.")
+        first_date = items[0]["date"]
         for position, item in enumerate(items):
-            for other in items[position + 1:]:
-                if item["employee"] != other["employee"] or item["date"] != other["date"]:
-                    continue
-                if item["start_time"] < other["end_time"] and item["end_time"] > other["start_time"]:
-                    raise serializers.ValidationError("ردیف‌های نوبت برای یک متخصص هم‌پوشانی دارند.")
+            start = datetime.combine(first_date, item["start_time"])
+            if item["date"] != first_date or datetime.combine(first_date, item["end_time"]) - start != timedelta(minutes=item["service"].duration):
+                raise serializers.ValidationError("هر خدمت باید در همان تاریخ و به اندازه مدت خدمت زمان‌بندی شود.")
+            if position and item["start_time"] != items[position - 1]["end_time"]:
+                raise serializers.ValidationError("خدمات انتخاب‌شده باید پشت سر هم زمان‌بندی شوند.")
         return items
 
     def validate_customer_phone(self, value):
@@ -142,8 +156,8 @@ class AppointmentSerializer(serializers.ModelSerializer):
         hold_token = validated_data.pop("hold_token", None)
         create_account = validated_data.pop("create_account", False)
         account_password = validated_data.pop("account_password", None)
-        name = validated_data.pop("customer_name", "مشتری آنلاین")
-        phone = validated_data.pop("customer_phone", "")
+        name = self.initial_data.get("customer_name", "مشتری آنلاین")
+        phone = self.initial_data.get("customer_phone", "")
         request = self.context.get("request")
         customer = request.user if request and request.user.is_authenticated else None
         if customer is None:
@@ -153,10 +167,11 @@ class AppointmentSerializer(serializers.ModelSerializer):
             customer.set_password(account_password)
             customer.save(update_fields=("username", "password"))
         customer_profile, _ = CustomerProfile.objects.get_or_create(user=customer)
-        if hold_token:
-            hold = BookingHold.objects.filter(token=hold_token, expires_at__gt=timezone.now()).first()
-            if not hold or not any(item["employee"] == hold.employee and item["service"] == hold.service and item["date"] == hold.date and item["start_time"] == hold.start_time for item in item_data):
-                raise serializers.ValidationError("این زمان دیگر در اختیار شما نیست.")
+        hold = BookingHold.objects.filter(token=hold_token, expires_at__gt=timezone.now()).first() if hold_token else None
+        held_items = {(item.employee_id, item.service_id, item.date, item.start_time, item.end_time) for item in hold.items.all()} if hold else set()
+        submitted_items = {(item["employee"].pk, item["service"].pk, item["date"], item["start_time"], item["end_time"]) for item in item_data}
+        if not hold or (hold.owner_id and hold.owner_id != customer.pk) or submitted_items != held_items:
+            raise serializers.ValidationError("این زمان دیگر در اختیار شما نیست.")
         appointment = Appointment.objects.create(customer=customer_profile, created_by=customer, **validated_data)
         AppointmentItem.objects.bulk_create([
             AppointmentItem(
@@ -169,17 +184,24 @@ class AppointmentSerializer(serializers.ModelSerializer):
             )
             for item in item_data
         ])
-        if hold_token:
-            BookingHold.objects.filter(token=hold_token).delete()
+        BookingHold.objects.filter(token=hold_token).delete()
         from .notifications import send_booking_confirmation
         send_booking_confirmation(appointment)
         return appointment
 
 
+class BookingHoldItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BookingHoldItem
+        fields = ("employee", "service", "date", "start_time", "end_time")
+
+
 class BookingHoldSerializer(serializers.ModelSerializer):
+    items = BookingHoldItemSerializer(many=True)
+
     class Meta:
         model = BookingHold
-        fields = ("token", "employee", "service", "date", "start_time", "end_time", "expires_at")
+        fields = ("token", "items", "expires_at")
         read_only_fields = ("token", "expires_at")
 
 

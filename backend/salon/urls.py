@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminServiceViewSet,
-					AdminUserViewSet,
+					AdminUserViewSet, BookingHoldDeleteView,
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView, BookingHoldView,
 					EmployeeAppointmentsView, EmployeeListView, EmployeeStatisticsView,
 					ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
@@ -32,6 +32,7 @@ urlpatterns = [
 	path("availability/", AvailabilityView.as_view(), name="availability-list"),
 	path("appointments/", AppointmentCreateView.as_view(), name="appointment-create"),
 	path("booking-holds/", BookingHoldView.as_view(), name="booking-hold-create"),
+	path("booking-holds/<uuid:token>/", BookingHoldDeleteView.as_view(), name="booking-hold-delete"),
 	path("waitlist/", WaitlistView.as_view(), name="waitlist-create"),
 	path("customer/booking/", CustomerBookingView.as_view(), name="customer-booking-lookup"),
 	path("customer/history/", CustomerHistoryView.as_view(), name="customer-history"),
