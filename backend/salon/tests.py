@@ -1,7 +1,9 @@
-from datetime import date
+import json
+from datetime import date, timedelta
 
 from django.db import IntegrityError
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, Payment, Refund, Service, ServiceCategory, TimeOff, User, WorkingSchedule
@@ -103,6 +105,116 @@ class AppointmentItemSchemaTests(TestCase):
         client.force_authenticate(self.customer)
         self.assertEqual(client.get("/api/v1/admin/statistics/").status_code, 403)
 
+    def test_employee_appointments_can_be_filtered_by_selected_date(self):
+        other_appointment = Appointment.objects.create(customer=self.customer_profile)
+        AppointmentItem.objects.create(appointment=self.appointment, service=self.service, employee=self.employee, date=date(2026, 8, 30), start_time="09:00", end_time="10:00")
+        AppointmentItem.objects.create(appointment=other_appointment, service=self.service, employee=self.employee, date=date(2026, 8, 31), start_time="09:00", end_time="10:00")
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        first_day = client.get("/api/v1/employee/appointments/?date=2026-08-30")
+        second_day = client.get("/api/v1/employee/appointments/?date=2026-08-31")
+
+        self.assertEqual([item["id"] for item in first_day.data], [self.appointment.pk])
+        self.assertEqual([item["id"] for item in second_day.data], [other_appointment.pk])
+
+    def test_employee_schedule_is_scoped_and_validated(self):
+        other_user = User.objects.create_user(username="schedule-other", role="employee")
+        other_employee = EmployeeProfile.objects.create(user=other_user)
+        other_schedule = WorkingSchedule.objects.create(employee=other_employee, weekday=1, start_time="09:00", end_time="17:00")
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        response = client.post("/api/v1/employee/schedule/", {"employee": other_employee.pk, "weekday": 1, "start_time": "09:00", "end_time": "17:00", "is_active": True})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["employee"], self.employee.pk)
+        own_schedule = response.data["id"]
+        schedule_data = client.get("/api/v1/employee/schedule/").data
+        schedules = schedule_data["results"] if "results" in schedule_data else schedule_data
+        self.assertEqual(schedules[0]["employee"], self.employee.pk)
+        self.assertEqual(client.patch(f"/api/v1/employee/schedule/{own_schedule}/", {"is_active": False}).status_code, 200)
+        self.assertEqual(client.get(f"/api/v1/employee/schedule/{other_schedule.pk}/").status_code, 404)
+
+        duplicate = client.post("/api/v1/employee/schedule/", {"weekday": 1, "start_time": "10:00", "end_time": "18:00", "is_active": True})
+        self.assertEqual(duplicate.status_code, 400)
+        invalid_range = client.post("/api/v1/employee/schedule/", {"weekday": 2, "start_time": "18:00", "end_time": "09:00", "is_active": True})
+        self.assertEqual(invalid_range.status_code, 400)
+        self.assertEqual(client.delete(f"/api/v1/employee/schedule/{own_schedule}/").status_code, 204)
+
+    def test_employee_profile_does_not_expose_or_update_admin_specialty(self):
+        self.employee.specialty = "Hair color"
+        self.employee.save()
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        response = client.patch("/api/v1/employee/profile/", {"specialty": "Cutting", "bio": "Updated profile"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("specialty", response.data)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.specialty, "Hair color")
+        self.assertEqual(self.employee.bio, "Updated profile")
+
+    def test_admin_employee_creation_contract(self):
+        admin = User.objects.create_user(username="admin", role="admin")
+        client = APIClient()
+        client.force_authenticate(admin)
+        new_employee = client.post("/api/v1/admin/employees/", {"username": "new-stylist", "password": "safe-password", "name": "New Stylist", "phone": "09121234567", "commission_rate": "15.50", "is_active": True, "services": [self.service.pk]}, format="json")
+        self.assertEqual(new_employee.status_code, 201)
+        self.assertEqual(new_employee.data["commission_rate"], "15.50")
+        self.assertEqual(new_employee.data["service_ids"], [self.service.pk])
+        self.assertEqual(User.objects.get(username="new-stylist").role, "employee")
+
+        existing_user = User.objects.create_user(username="eligible", role="employee")
+        existing_employee = client.post("/api/v1/admin/employees/", {"user": existing_user.pk, "name": "Existing Stylist", "commission_rate": "20.00"}, format="json")
+        self.assertEqual(existing_employee.status_code, 201)
+        self.assertEqual(existing_employee.data["user"], existing_user.pk)
+        self.assertEqual(client.patch(f"/api/v1/admin/employees/{existing_employee.data['id']}/", {"services": [self.service.pk]}, format="json").data["service_ids"], [self.service.pk])
+        self.assertIn(existing_employee.data["id"], [employee["id"] for employee in client.get(f"/api/v1/employees/?service={self.service.pk}").data])
+
+        for role in ("customer", "admin"):
+            ineligible_user = User.objects.create_user(username=f"{role}-user", role=role)
+            response = client.post("/api/v1/admin/employees/", {"user": ineligible_user.pk}, format="json")
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("user", response.data)
+        duplicate = client.post("/api/v1/admin/employees/", {"username": "new-stylist", "password": "safe-password"}, format="json")
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn("username", duplicate.data)
+
+    def test_admin_appointments_filter_create_and_revenue(self):
+        admin = User.objects.create_user(username="calendar-admin", role="admin")
+        booking_date = date(2026, 8, 31)
+        WorkingSchedule.objects.create(employee=self.employee, weekday=booking_date.weekday(), start_time="09:00", end_time="20:00")
+        client = APIClient()
+        client.force_authenticate(admin)
+        response = client.post("/api/v1/admin/appointments/", {"customer": self.customer_profile.pk, "status": "confirmed", "payment_status": "paid", "notes": "admin booking", "items": [{"service": self.service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "10:00", "end_time": "11:00"}]}, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["items"][0]["service"], self.service.pk)
+        self.assertEqual(response.data["status"], "confirmed")
+        appointments = client.get(f"/api/v1/admin/appointments/?start_date={booking_date}&end_date={booking_date}&status=confirmed&employee={self.employee.pk}&service={self.service.pk}")
+        self.assertEqual([item["id"] for item in appointments.data], [response.data["id"]])
+        revenue = client.get(f"/api/v1/admin/revenue/?period=day&date={timezone.localdate()}")
+        self.assertEqual(revenue.status_code, 200)
+        self.assertEqual(revenue.data["total"], self.service.price)
+        update = client.patch(f"/api/v1/admin/appointments/{response.data['id']}/", {"status": "completed"}, format="json")
+        self.assertEqual(update.status_code, 200)
+        self.assertEqual(update.data["status"], "completed")
+
+    def test_admin_can_create_sequential_services_for_assigned_employee(self):
+        admin = User.objects.create_user(username="multi-admin", role="admin")
+        second_service = Service.objects.create(category=self.service.category, name="Color", persian_name="Color", price=1200, duration=60)
+        EmployeeService.objects.create(employee=self.employee, service=second_service)
+        booking_date = date(2026, 8, 31)
+        WorkingSchedule.objects.create(employee=self.employee, weekday=booking_date.weekday(), start_time="09:00", end_time="20:00")
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.post("/api/v1/admin/appointments/", {"customer": self.customer_profile.pk, "items": [{"service": self.service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "10:00", "end_time": "11:00"}, {"service": second_service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "11:00", "end_time": "12:00"}]}, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(response.data["items"]), 2)
+        self.assertEqual([(item["start_time"], item["end_time"]) for item in response.data["items"]], [("10:00:00", "11:00:00"), ("11:00:00", "12:00:00")])
+
     def test_commission_calculation_and_payment_refund_transitions(self):
         item = self.make_item()
         commission = EmployeeCommission.objects.create(appointment_item=item, commission_rate_snapshot=10, commission_amount=80)
@@ -113,6 +225,35 @@ class AppointmentItemSchemaTests(TestCase):
         refund.complete(self.customer)
         self.assertEqual(payment.status, "refunded")
 
+    def test_employee_earnings_periods_use_snapshots_commissions_and_payment_status(self):
+        today = timezone.localdate()
+        WorkingSchedule.objects.create(employee=self.employee, weekday=today.weekday(), start_time="09:00", end_time="20:00")
+        current_item = AppointmentItem.objects.create(appointment=self.appointment, service=self.service, employee=self.employee, date=today, start_time="10:00", end_time="11:00", price_snapshot=800, duration_snapshot=60, completion_status="completed")
+        EmployeeCommission.objects.create(appointment_item=current_item, commission_rate_snapshot=10, commission_amount=80)
+        Payment.objects.create(appointment=self.appointment, amount=800, status="paid")
+        month_appointment = Appointment.objects.create(customer=self.customer_profile)
+        month_date = today.replace(day=1 if today.day > 1 else 2)
+        month_item = AppointmentItem.objects.create(appointment=month_appointment, service=self.service, employee=self.employee, date=month_date, start_time="12:00", end_time="13:00", price_snapshot=500, duration_snapshot=60, completion_status="completed")
+        EmployeeCommission.objects.create(appointment_item=month_item, commission_rate_snapshot=10, commission_amount=50)
+        Payment.objects.create(appointment=month_appointment, amount=500, status="pending")
+        other_appointment = Appointment.objects.create(customer=self.customer_profile)
+        older_item = AppointmentItem.objects.create(appointment=other_appointment, service=self.service, employee=self.employee, date=today - timedelta(days=40), start_time="10:00", end_time="11:00", price_snapshot=1200, duration_snapshot=60, completion_status="completed")
+        EmployeeCommission.objects.create(appointment_item=older_item, commission_rate_snapshot=20, commission_amount=240)
+        Payment.objects.create(appointment=other_appointment, amount=1200, status="pending")
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        day = client.get("/api/v1/employee/earnings/?period=day")
+        month = client.get("/api/v1/employee/earnings/?period=month")
+
+        self.assertEqual(day.data["gross_service_revenue"], 800)
+        self.assertEqual(day.data["employee_commission"], 80)
+        self.assertEqual(day.data["items"][0]["payment_status"], "paid")
+        self.assertEqual(month.data["gross_service_revenue"], 1600)
+        self.assertEqual(month.data["employee_commission"], 130)
+        self.assertEqual(month.data["payment_statuses"]["pending"], 1)
+        self.assertNotEqual(day.data["gross_service_revenue"], month.data["gross_service_revenue"])
+
     def test_reschedule_revalidates_and_cancellation_history(self):
         WorkingSchedule.objects.create(employee=self.employee, weekday=5, start_time="09:00", end_time="20:00")
         item = self.make_item()
@@ -120,3 +261,54 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertFalse(AppointmentItem.objects.filter(start_time="09:00").exists())
         self.appointment.set_status("cancelled", changed_by=self.customer, reason="customer request")
         self.assertEqual(self.appointment.status_history.get().reason, "customer request")
+
+    def test_multi_service_booking_hold_and_confirmation_contract(self):
+        second_service = Service.objects.create(category=self.service.category, name="Color", persian_name="Color", price=1200, duration=60)
+        EmployeeService.objects.create(employee=self.employee, service=second_service)
+        booking_date = date(2026, 8, 31)
+        WorkingSchedule.objects.create(employee=self.employee, weekday=booking_date.weekday(), start_time="09:00", end_time="20:00")
+        items = [
+            {"service": self.service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "10:00", "end_time": "11:00"},
+            {"service": second_service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "11:00", "end_time": "12:00"},
+        ]
+        client = APIClient()
+        client.force_authenticate(self.customer)
+        availability = client.get("/api/v1/availability/", {"date": str(booking_date), "items": json.dumps([{key: item[key] for key in ("service", "employee")} for item in items])})
+        self.assertIn("10:00", availability.data["slots"])
+        hold_response = client.post("/api/v1/booking-holds/", {"items": items}, format="json")
+        self.assertEqual(hold_response.status_code, 201)
+        self.assertEqual(len(hold_response.data["items"]), 2)
+
+        overreach = client.post("/api/v1/appointments/", {"hold_token": hold_response.data["token"], "items": [*items, {"service": self.service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "12:00", "end_time": "13:00"}]}, format="json")
+        self.assertEqual(overreach.status_code, 400)
+        other_user = User.objects.create_user(username="other-booker")
+        client.force_authenticate(other_user)
+        self.assertEqual(client.post("/api/v1/appointments/", {"hold_token": hold_response.data["token"], "items": items}, format="json").status_code, 400)
+
+        client.force_authenticate(self.customer)
+        response = client.post("/api/v1/appointments/", {"hold_token": hold_response.data["token"], "items": items}, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual([(item["start_time"], item["end_time"]) for item in response.data["items"]], [("10:00:00", "11:00:00"), ("11:00:00", "12:00:00")])
+        self.assertEqual(sum(item["price_snapshot"] for item in response.data["items"]), 2000)
+        self.assertEqual(response.data["customer_name"], "customer")
+        self.assertEqual(response.data["customer_phone"], "")
+        self.assertEqual(response.data["items"][0]["service_name"], "Cut")
+        self.assertEqual(response.data["items"][0]["employee_name"], "employee")
+        self.assertEqual(response.data["items"][0]["completion_status"], "pending")
+        self.assertEqual(response.data["items"][0]["status"], "pending")
+
+        expired_items = [{**item, "start_time": f"{14 + index:02}:00", "end_time": f"{15 + index:02}:00"} for index, item in enumerate(items)]
+        expired_hold = client.post("/api/v1/booking-holds/", {"items": expired_items}, format="json")
+        self.assertEqual(expired_hold.status_code, 201)
+        from .models import BookingHold
+        BookingHold.objects.filter(token=expired_hold.data["token"]).update(expires_at=timezone.now() - timedelta(seconds=1))
+        client.force_authenticate(other_user)
+        self.assertEqual(client.post("/api/v1/booking-holds/", {"items": expired_items}, format="json").status_code, 201)
+
+        guest_items = [{**item, "start_time": f"{16 + index:02}:00", "end_time": f"{17 + index:02}:00"} for index, item in enumerate(items)]
+        client.force_authenticate(user=None)
+        guest_hold = client.post("/api/v1/booking-holds/", {"items": guest_items}, format="json")
+        self.assertEqual(guest_hold.status_code, 201)
+        guest_booking = client.post("/api/v1/appointments/", {"customer_name": "Guest", "customer_phone": "09121234567", "hold_token": guest_hold.data["token"], "items": guest_items}, format="json")
+        self.assertEqual(guest_booking.status_code, 201)
+        self.assertEqual(guest_booking.data["customer_name"], "Guest")

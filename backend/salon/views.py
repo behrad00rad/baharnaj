@@ -1,11 +1,12 @@
 from base64 import urlsafe_b64decode
 from datetime import date as date_type, datetime, time, timedelta
+import json
 
 from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
@@ -16,10 +17,10 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
+from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, record_failed_login
-from .serializers import AdminActionLogSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 class ServiceListView(generics.ListAPIView):
@@ -50,33 +51,48 @@ class AvailabilityView(generics.ListAPIView):
     permission_classes = (AllowAny,)
     throttle_scope = "guest_booking"
     def list(self, request, *args, **kwargs):
+        raw_items = request.query_params.get("items")
+        if raw_items:
+            try:
+                selected_items = json.loads(raw_items)
+            except json.JSONDecodeError:
+                return Response({"detail": "جزئیات خدمات نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            selected_items = [{"service": value, "employee": request.query_params.get("employee")} for value in request.query_params.get("service", "").split(",") if value]
         service_values = [value for value in request.query_params.get("service", "").split(",") if value]
-        employee_id = request.query_params.get("employee")
         date_value = request.query_params.get("date")
-        if not all((service_values, employee_id, date_value)):
+        if not selected_items or not date_value:
             return Response({"detail": "خدمت، متخصص و تاریخ الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            services = list(Service.objects.filter(pk__in=service_values, is_active=True, is_bookable=True))
-            employee = EmployeeProfile.objects.filter(pk=employee_id, is_active=True, service_links__service_id__in=service_values, service_links__is_active=True).distinct().first()
             appointment_date = datetime.strptime(date_value, "%Y-%m-%d").date()
+            segments = []
+            for selected in selected_items:
+                service = Service.objects.filter(pk=selected["service"], is_active=True, is_bookable=True).first()
+                employee = EmployeeProfile.objects.filter(pk=selected["employee"], is_active=True).first()
+                if not service or not employee or not EmployeeService.objects.filter(employee=employee, service=service, is_active=True).exists():
+                    return Response({"date": date_value, "slots": []})
+                segments.append((service, employee))
         except ValueError:
-            return Response({"date": date_value, "slots": []})
-        if employee is None or len(services) != len(set(service_values)) or EmployeeService.objects.filter(employee=employee, service_id__in=service_values, is_active=True).values("service_id").distinct().count() != len(set(service_values)):
             return Response({"date": date_value, "slots": []})
         if appointment_date < timezone.localdate():
             return Response({"date": date_value, "slots": []})
-        duration = sum(service.duration for service in services)
-        items = AppointmentItem.objects.filter(employee=employee, date=appointment_date, appointment__status__in=("pending", "confirmed"))
-        schedule = employee.working_schedules.filter(weekday=appointment_date.weekday(), is_active=True).first()
-        if not schedule:
-            return Response({"date": date_value, "slots": []})
         slots = []
-        current = datetime.combine(appointment_date, max(schedule.start_time, time(8)))
-        closing = datetime.combine(appointment_date, min(schedule.end_time, time(20)))
-        while current + timedelta(minutes=duration) <= closing:
-            start, end = current.time(), (current + timedelta(minutes=duration)).time()
-            if not items.filter(start_time__lt=end, end_time__gt=start).exists():
-                slots.append(start.strftime("%H:%M"))
+        current = datetime.combine(appointment_date, time(8))
+        closing = datetime.combine(appointment_date, time(20))
+        while current < closing:
+            segment_start = current
+            available = True
+            for service, employee in segments:
+                segment_end = segment_start + timedelta(minutes=service.duration)
+                schedule = employee.working_schedules.filter(weekday=appointment_date.weekday(), is_active=True, start_time__lte=segment_start.time(), end_time__gte=segment_end.time()).first()
+                appointment_conflict = AppointmentItem.objects.filter(employee=employee, date=appointment_date, appointment__status__in=("pending", "confirmed"), start_time__lt=segment_end.time(), end_time__gt=segment_start.time()).exists()
+                hold_conflict = BookingHoldItem.objects.filter(employee=employee, date=appointment_date, hold__expires_at__gt=timezone.now(), start_time__lt=segment_end.time(), end_time__gt=segment_start.time()).exists()
+                if not schedule or employee.time_off.filter(start_date__lte=appointment_date, end_date__gte=appointment_date).exists() or appointment_conflict or hold_conflict:
+                    available = False
+                    break
+                segment_start = segment_end
+            if available:
+                slots.append(current.strftime("%H:%M"))
             current += timedelta(minutes=30)
         return Response({"date": date_value, "slots": slots})
 
@@ -86,7 +102,11 @@ class EmployeeAppointmentsView(generics.ListAPIView):
     permission_classes = (IsEmployee,)
 
     def get_queryset(self):
-        return Appointment.objects.filter(items__employee__user=self.request.user).prefetch_related("items")
+        queryset = Appointment.objects.filter(items__employee__user=self.request.user).prefetch_related("items")
+        selected_date = self.request.query_params.get("date")
+        if selected_date:
+            queryset = queryset.filter(items__date=selected_date)
+        return queryset.distinct()
 
 
 class EmployeeStatisticsView(generics.GenericAPIView):
@@ -122,20 +142,30 @@ class BookingHoldView(generics.CreateAPIView):
     throttle_scope = "guest_booking"
     serializer_class = BookingHoldSerializer
 
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
+        held_items = serializer.validated_data["items"]
         from .validators import validate_no_employee_overlap
-        if not data["employee"].working_schedules.filter(weekday=data["date"].weekday(), is_active=True, start_time__lte=data["start_time"], end_time__gte=data["end_time"]).exists():
-            return Response({"detail": "زمان انتخاب‌شده خارج از ساعات کاری متخصص است."}, status=status.HTTP_400_BAD_REQUEST)
-        if data["employee"].time_off.filter(start_date__lte=data["date"], end_date__gte=data["date"]).exists():
-            return Response({"detail": "متخصص در این تاریخ در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
-        validate_no_employee_overlap(employee=data["employee"], date=data["date"], start_time=data["start_time"], end_time=data["end_time"])
-        if BookingHold.objects.filter(employee=data["employee"], date=data["date"], expires_at__gt=timezone.now(), start_time__lt=data["end_time"], end_time__gt=data["start_time"]).exists():
-            return Response({"detail": "این زمان موقتاً در اختیار مشتری دیگری است."}, status=status.HTTP_409_CONFLICT)
-        hold = BookingHold.objects.create(expires_at=timezone.now() + timedelta(minutes=5), **data)
+        for item in held_items:
+            if not item["employee"].working_schedules.filter(weekday=item["date"].weekday(), is_active=True, start_time__lte=item["start_time"], end_time__gte=item["end_time"]).exists():
+                return Response({"detail": "زمان انتخاب‌شده خارج از ساعات کاری متخصص است."}, status=status.HTTP_400_BAD_REQUEST)
+            if item["employee"].time_off.filter(start_date__lte=item["date"], end_date__gte=item["date"]).exists():
+                return Response({"detail": "متخصص در این تاریخ در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
+            validate_no_employee_overlap(employee=item["employee"], date=item["date"], start_time=item["start_time"], end_time=item["end_time"])
+            if BookingHoldItem.objects.filter(employee=item["employee"], date=item["date"], hold__expires_at__gt=timezone.now(), start_time__lt=item["end_time"], end_time__gt=item["start_time"]).exists():
+                return Response({"detail": "این زمان موقتاً در اختیار مشتری دیگری است."}, status=status.HTTP_409_CONFLICT)
+        first_item = held_items[0]
+        hold = BookingHold.objects.create(owner=request.user if request.user.is_authenticated else None, expires_at=timezone.now() + timedelta(minutes=5), **first_item)
+        BookingHoldItem.objects.bulk_create([BookingHoldItem(hold=hold, **item) for item in held_items])
         return Response(self.get_serializer(hold).data, status=status.HTTP_201_CREATED)
+
+
+class BookingHoldDeleteView(generics.DestroyAPIView):
+    permission_classes = (AllowAny,)
+    lookup_field = "token"
+    queryset = BookingHold.objects.all()
 
 
 class WaitlistView(generics.CreateAPIView):
@@ -194,7 +224,14 @@ class AdminGalleryViewSet(AdminModelViewSet):
 
 class AdminEmployeeViewSet(AdminModelViewSet):
     queryset = EmployeeProfile.objects.select_related("user")
-    serializer_class = EmployeeSerializer
+    serializer_class = AdminEmployeeSerializer
+
+    def get_serializer_class(self):
+        return AdminEmployeeCreateSerializer if self.action == "create" else AdminEmployeeSerializer
+
+    def perform_create(self, serializer):
+        employee = serializer.save()
+        AdminActionLog.objects.create(actor=self.request.user, action="create", model_name="EmployeeProfile", object_id=str(employee.pk), details={"username": employee.user.username})
 
     def perform_update(self, serializer):
         employee = serializer.save()
@@ -206,17 +243,68 @@ class AdminUserViewSet(AdminModelViewSet):
     serializer_class = UserAdminSerializer
 
 
+class AdminEmployeeEligibleUsersView(generics.ListAPIView):
+    permission_classes = (IsAdmin,)
+    serializer_class = UserAdminSerializer
+
+    def get_queryset(self):
+        return User.objects.filter(role="employee", employee_profile__isnull=True).order_by("username")
+
+
+class AdminCustomerOptionsView(generics.ListAPIView):
+    permission_classes = (IsAdmin,)
+    serializer_class = AdminCustomerOptionSerializer
+    queryset = CustomerProfile.objects.select_related("user").order_by("user__first_name", "user__username")
+
+
+class AdminTransactionTypesView(generics.GenericAPIView):
+    permission_classes = (IsAdmin,)
+
+    def get(self, request):
+        return Response([{"value": value, "label": label} for value, label in Transaction.TYPE_CHOICES])
+
+
+class AdminServiceCategoryViewSet(AdminModelViewSet):
+    queryset = ServiceCategory.objects.order_by("name")
+    serializer_class = ServiceCategorySerializer
+
+
 class AdminAppointmentViewSet(AdminModelViewSet):
     queryset = Appointment.objects.select_related("customer__user").prefetch_related("items__service", "items__employee__user")
     serializer_class = AppointmentSerializer
 
+    def get_serializer_class(self):
+        if self.action == "create":
+            return AdminAppointmentCreateSerializer
+        if self.action in {"update", "partial_update"}:
+            return AdminAppointmentStatusSerializer
+        return AppointmentSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        start_date = self.request.query_params.get("start_date")
+        end_date = self.request.query_params.get("end_date")
+        if start_date:
+            queryset = queryset.filter(items__date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(items__date__lte=end_date)
+        for query_name, lookup in (("status", "status"), ("employee", "items__employee_id"), ("service", "items__service_id")):
+            value = self.request.query_params.get(query_name)
+            if value:
+                queryset = queryset.filter(**{lookup: value})
+        return queryset.distinct()
+
+    def perform_create(self, serializer):
+        appointment = serializer.save()
+        AdminActionLog.objects.create(actor=self.request.user, action="create", model_name="Appointment", object_id=str(appointment.pk), details={"status": appointment.status})
+
     def perform_update(self, serializer):
         appointment = self.get_object()
-        status_value = serializer.validated_data.pop("status", None)
-        if status_value:
-            appointment.set_status(status_value, changed_by=self.request.user, reason=serializer.validated_data.pop("status_reason", ""))
-        appointment = serializer.save(updated_by=self.request.user)
-        AdminActionLog.objects.create(actor=self.request.user, action="update", model_name="Appointment", object_id=str(appointment.pk), details={"fields": list(serializer.validated_data)})
+        status_value = serializer.validated_data["status"]
+        appointment.set_status(status_value, changed_by=self.request.user)
+        appointment.refresh_from_db()
+        serializer.instance = appointment
+        AdminActionLog.objects.create(actor=self.request.user, action="update", model_name="Appointment", object_id=str(appointment.pk), details={"fields": ["status"]})
 
 
 class AppointmentItemViewSet(AdminModelViewSet):
@@ -237,6 +325,27 @@ class TransactionViewSet(AdminModelViewSet):
 class PaymentViewSet(AdminModelViewSet):
     queryset = Payment.objects.select_related("appointment")
     serializer_class = PaymentSerializer
+
+
+class AdminRevenueView(generics.GenericAPIView):
+    permission_classes = (IsAdmin,)
+
+    def get(self, request):
+        period = request.query_params.get("period", "day")
+        anchor = request.query_params.get("date")
+        try:
+            current = datetime.strptime(anchor, "%Y-%m-%d").date() if anchor else timezone.localdate()
+        except ValueError:
+            return Response({"detail": "تاریخ نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+        if period == "week":
+            start, end = current - timedelta(days=current.weekday()), current + timedelta(days=6 - current.weekday())
+        elif period == "month":
+            start = current.replace(day=1)
+            end = (start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        else:
+            start = end = current
+        total = Payment.objects.filter(status="paid", created_at__date__range=(start, end)).aggregate(total=Sum("amount"))["total"] or 0
+        return Response({"period": period, "start_date": start, "end_date": end, "total": total})
 
 
 class ServiceImageViewSet(AdminModelViewSet):
@@ -375,7 +484,7 @@ class EmployeeAppointmentItemViewSet(viewsets.ModelViewSet):
 
 class EmployeeProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = (IsOwnEmployeeObject,)
-    serializer_class = EmployeeSerializer
+    serializer_class = EmployeeSelfProfileSerializer
 
     def get_object(self):
         return EmployeeProfile.objects.get(user=self.request.user)
@@ -396,9 +505,41 @@ class EmployeeTimeOffViewSet(viewsets.ModelViewSet):
         serializer.save(employee=EmployeeProfile.objects.get(user=self.request.user), created_by=self.request.user)
 
 
+class EmployeeWorkingScheduleViewSet(viewsets.ModelViewSet):
+    permission_classes = (IsEmployee,)
+    serializer_class = EmployeeWorkingScheduleSerializer
+
+    def get_queryset(self):
+        return WorkingSchedule.objects.filter(employee__user=self.request.user).select_related("employee__user")
+
+    def perform_create(self, serializer):
+        serializer.save(employee=self.request.user.employee_profile, created_by=self.request.user, updated_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+
 class EmployeeEarningsView(generics.GenericAPIView):
     permission_classes = (IsEmployee,)
 
     def get(self, request):
-        items = AppointmentItem.objects.filter(employee__user=request.user, completion_status="completed").select_related("service")
-        return Response({"items": [{"date": item.date, "service": item.service.persian_name, "price": item.price_snapshot, "payment_status": "unknown", "commission": sum(c.commission_amount for c in item.commissions.all())} for item in items], "total": sum(item.price_snapshot for item in items)})
+        period = request.query_params.get("period", "day")
+        current = timezone.localdate()
+        if period == "week":
+            start_date, end_date = current - timedelta(days=current.weekday()), current + timedelta(days=6 - current.weekday())
+        elif period == "month":
+            start_date = current.replace(day=1)
+            end_date = (start_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        elif period == "day":
+            start_date = end_date = current
+        else:
+            return Response({"detail": "بازه زمانی نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+
+        items = AppointmentItem.objects.filter(employee__user=request.user, date__range=(start_date, end_date)).select_related("service", "appointment").prefetch_related("commissions", "appointment__payments")
+        rows = []
+        for item in items:
+            payment_statuses = [payment.status for payment in item.appointment.payments.all()]
+            payment_status = "paid" if "paid" in payment_statuses else "refunded" if "refunded" in payment_statuses else "pending" if "pending" in payment_statuses else "unpaid"
+            commission = sum(record.commission_amount for record in item.commissions.all())
+            rows.append({"date": item.date, "service": item.service.persian_name, "gross_service_revenue": item.price_snapshot, "employee_commission": commission, "payment_status": payment_status})
+        return Response({"period": period, "start_date": start_date, "end_date": end_date, "items": rows, "gross_service_revenue": sum(row["gross_service_revenue"] for row in rows), "employee_commission": sum(row["employee_commission"] for row in rows), "payment_statuses": {key: sum(row["payment_status"] == key for row in rows) for key in ("paid", "pending", "refunded", "unpaid")}})

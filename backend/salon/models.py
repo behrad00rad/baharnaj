@@ -240,6 +240,7 @@ class AppointmentItem(models.Model):
 
 class BookingHold(models.Model):
     token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     employee = models.ForeignKey(EmployeeProfile, on_delete=models.CASCADE)
     service = models.ForeignKey(Service, on_delete=models.CASCADE)
     date = models.DateField()
@@ -251,6 +252,15 @@ class BookingHold(models.Model):
     @property
     def active(self):
         return self.expires_at > timezone.now()
+
+
+class BookingHoldItem(models.Model):
+    hold = models.ForeignKey(BookingHold, on_delete=models.CASCADE, related_name="items")
+    employee = models.ForeignKey(EmployeeProfile, on_delete=models.CASCADE)
+    service = models.ForeignKey(Service, on_delete=models.CASCADE)
+    date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
 
 
 class WaitlistEntry(models.Model):
