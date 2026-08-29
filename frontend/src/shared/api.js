@@ -1,5 +1,15 @@
 import axios from 'axios'
-import { clearSessionState, getAccessToken, setSession } from './auth'
+import { clearSessionState, getAccessToken, getRole, setSession } from './auth'
+
+export const applyRefreshSession = (payload = {}) => {
+  const nextAccessToken = payload.access ?? payload.access_token
+  const nextRole = payload.role ?? payload.user?.role ?? getRole()
+
+  if (!nextAccessToken) return null
+
+  setSession(nextAccessToken, nextRole)
+  return { access: nextAccessToken, role: nextRole }
+}
 
 // One client owns API authentication and refresh behavior for every page.
 export const api = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '/api/v1/', withCredentials: true })
@@ -25,7 +35,7 @@ api.interceptors.response.use((response) => response, async (error) => {
     originalRequest._retried = true
     try {
       const { data } = await api.post('auth/token/refresh/')
-      setSession(data.access)
+      applyRefreshSession(data)
       originalRequest.headers.Authorization = `Bearer ${data.access}`
       return api(originalRequest)
     } catch {
