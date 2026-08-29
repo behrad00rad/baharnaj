@@ -515,5 +515,23 @@ class EmployeeEarningsView(generics.GenericAPIView):
     permission_classes = (IsEmployee,)
 
     def get(self, request):
-        items = AppointmentItem.objects.filter(employee__user=request.user, completion_status="completed").select_related("service")
-        return Response({"items": [{"date": item.date, "service": item.service.persian_name, "price": item.price_snapshot, "payment_status": "unknown", "commission": sum(c.commission_amount for c in item.commissions.all())} for item in items], "total": sum(item.price_snapshot for item in items)})
+        period = request.query_params.get("period", "day")
+        current = timezone.localdate()
+        if period == "week":
+            start_date, end_date = current - timedelta(days=current.weekday()), current + timedelta(days=6 - current.weekday())
+        elif period == "month":
+            start_date = current.replace(day=1)
+            end_date = (start_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        elif period == "day":
+            start_date = end_date = current
+        else:
+            return Response({"detail": "بازه زمانی نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+
+        items = AppointmentItem.objects.filter(employee__user=request.user, date__range=(start_date, end_date)).select_related("service", "appointment").prefetch_related("commissions", "appointment__payments")
+        rows = []
+        for item in items:
+            payment_statuses = [payment.status for payment in item.appointment.payments.all()]
+            payment_status = "paid" if "paid" in payment_statuses else "refunded" if "refunded" in payment_statuses else "pending" if "pending" in payment_statuses else "unpaid"
+            commission = sum(record.commission_amount for record in item.commissions.all())
+            rows.append({"date": item.date, "service": item.service.persian_name, "gross_service_revenue": item.price_snapshot, "employee_commission": commission, "payment_status": payment_status})
+        return Response({"period": period, "start_date": start_date, "end_date": end_date, "items": rows, "gross_service_revenue": sum(row["gross_service_revenue"] for row in rows), "employee_commission": sum(row["employee_commission"] for row in rows), "payment_statuses": {key: sum(row["payment_status"] == key for row in rows) for key in ("paid", "pending", "refunded", "unpaid")}})

@@ -194,6 +194,35 @@ class AppointmentItemSchemaTests(TestCase):
         refund.complete(self.customer)
         self.assertEqual(payment.status, "refunded")
 
+    def test_employee_earnings_periods_use_snapshots_commissions_and_payment_status(self):
+        today = timezone.localdate()
+        WorkingSchedule.objects.create(employee=self.employee, weekday=today.weekday(), start_time="09:00", end_time="20:00")
+        current_item = AppointmentItem.objects.create(appointment=self.appointment, service=self.service, employee=self.employee, date=today, start_time="10:00", end_time="11:00", price_snapshot=800, duration_snapshot=60, completion_status="completed")
+        EmployeeCommission.objects.create(appointment_item=current_item, commission_rate_snapshot=10, commission_amount=80)
+        Payment.objects.create(appointment=self.appointment, amount=800, status="paid")
+        month_appointment = Appointment.objects.create(customer=self.customer_profile)
+        month_date = today.replace(day=1 if today.day > 1 else 2)
+        month_item = AppointmentItem.objects.create(appointment=month_appointment, service=self.service, employee=self.employee, date=month_date, start_time="12:00", end_time="13:00", price_snapshot=500, duration_snapshot=60, completion_status="completed")
+        EmployeeCommission.objects.create(appointment_item=month_item, commission_rate_snapshot=10, commission_amount=50)
+        Payment.objects.create(appointment=month_appointment, amount=500, status="pending")
+        other_appointment = Appointment.objects.create(customer=self.customer_profile)
+        older_item = AppointmentItem.objects.create(appointment=other_appointment, service=self.service, employee=self.employee, date=today - timedelta(days=40), start_time="10:00", end_time="11:00", price_snapshot=1200, duration_snapshot=60, completion_status="completed")
+        EmployeeCommission.objects.create(appointment_item=older_item, commission_rate_snapshot=20, commission_amount=240)
+        Payment.objects.create(appointment=other_appointment, amount=1200, status="pending")
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        day = client.get("/api/v1/employee/earnings/?period=day")
+        month = client.get("/api/v1/employee/earnings/?period=month")
+
+        self.assertEqual(day.data["gross_service_revenue"], 800)
+        self.assertEqual(day.data["employee_commission"], 80)
+        self.assertEqual(day.data["items"][0]["payment_status"], "paid")
+        self.assertEqual(month.data["gross_service_revenue"], 1600)
+        self.assertEqual(month.data["employee_commission"], 130)
+        self.assertEqual(month.data["payment_statuses"]["pending"], 1)
+        self.assertNotEqual(day.data["gross_service_revenue"], month.data["gross_service_revenue"])
+
     def test_reschedule_revalidates_and_cancellation_history(self):
         WorkingSchedule.objects.create(employee=self.employee, weekday=5, start_time="09:00", end_time="20:00")
         item = self.make_item()

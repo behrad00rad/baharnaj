@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import EmployeeApp from './EmployeeApp'
 import { MemoryRouter } from 'react-router-dom'
@@ -41,5 +41,15 @@ describe('employee app', () => {
     expect(screen.queryByText('تخصص')).not.toBeInTheDocument()
     expect(screen.queryByText('درخواست مرخصی')).not.toBeInTheDocument()
     expect(screen.queryByText('ارسال درخواست')).not.toBeInTheDocument()
+  })
+
+  it('reloads finance data for the selected period', async () => {
+    render(<MemoryRouter initialEntries={['/earnings']}><EmployeeApp /></MemoryRouter>)
+
+    await waitFor(() => expect(get).toHaveBeenCalledWith('employee/earnings/?period=day'))
+    fireEvent.click(screen.getByRole('button', { name: 'هفتگی' }))
+    await waitFor(() => expect(get).toHaveBeenCalledWith('employee/earnings/?period=week'))
+    fireEvent.click(screen.getByRole('button', { name: 'ماهانه' }))
+    await waitFor(() => expect(get).toHaveBeenCalledWith('employee/earnings/?period=month'))
   })
 })
