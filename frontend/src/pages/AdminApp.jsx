@@ -584,40 +584,60 @@ function CrudPage({
               {form.id ? "ویرایش" : "افزودن"} {type}
             </h2>
             {fields.map((definition) => {
-              const field = Array.isArray(definition) ? { name: definition[0], label: definition[1], type: definition[2] } : definition;
+              const field = Array.isArray(definition)
+                ? {
+                    name: definition[0],
+                    label: definition[1],
+                    type: definition[2],
+                  }
+                : definition;
               return (
-              <label key={field.name}>
-                {field.label}
-                {field.type === "select" ? (
-                  <select
-                    value={form[field.name] || ""}
-                    onChange={(event) =>
-                      setForm({ ...form, [field.name]: event.target.value })
-                    }
-                  >
-                    <option value="">انتخاب کنید</option>
-                    {(options[field.name] || field.options || []).map((option) => (
-                      <option key={option.id || option.value} value={option.id || option.value}>
-                        {field.optionLabel ? field.optionLabel(option) : option.name || option.persian_name || option.label || `#${option.id}`}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type={field.type || "text"}
-                    value={field.type === "file" ? undefined : form[field.name] || ""}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        [field.name]:
-                          field.type === "file"
-                            ? event.target.files[0]
-                            : event.target.value,
-                      })
-                    }
-                  />
-                )}
-              </label>
+                <label key={field.name}>
+                  {field.label}
+                  {field.type === "select" ? (
+                    <select
+                      value={form[field.name] || ""}
+                      onChange={(event) =>
+                        setForm({ ...form, [field.name]: event.target.value })
+                      }
+                    >
+                      <option value="">انتخاب کنید</option>
+                      {(options[field.name] || field.options || []).map(
+                        (option) => (
+                          <option
+                            key={option.id || option.value}
+                            value={option.id || option.value}
+                          >
+                            {field.optionLabel
+                              ? field.optionLabel(option)
+                              : option.name ||
+                                option.persian_name ||
+                                option.label ||
+                                `#${option.id}`}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  ) : (
+                    <input
+                      type={field.type || "text"}
+                      value={
+                        field.type === "file"
+                          ? undefined
+                          : form[field.name] || ""
+                      }
+                      onChange={(event) =>
+                        setForm({
+                          ...form,
+                          [field.name]:
+                            field.type === "file"
+                              ? event.target.files[0]
+                              : event.target.value,
+                        })
+                      }
+                    />
+                  )}
+                </label>
               );
             })}
             <button className="admin-primary" type="submit">
@@ -635,13 +655,16 @@ function CrudPage({
 }
 
 const employeeOptionLabel = (user) => user.first_name || user.username;
-const appointmentOptionLabel = (appointment) => `${appointment.customer_name || `رزرو #${appointment.id}`} (${appointment.confirmation_code})`;
+const appointmentOptionLabel = (appointment) =>
+  `${appointment.customer_name || `رزرو #${appointment.id}`} (${appointment.confirmation_code})`;
 
 function EmployeeManagement() {
   const resource = useResource("admin/employees/");
   const eligibleUsers = useResource("admin/employee-eligible-users/");
+  const services = useResource("services/");
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState("new");
+  const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ is_active: true });
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState("");
@@ -650,34 +673,261 @@ function EmployeeManagement() {
     event.preventDefault();
     const body = new FormData();
     Object.entries(form).forEach(([name, value]) => {
-      if (value !== "" && value !== undefined && (mode === "new" || !["username", "password"].includes(name))) body.append(name, value);
+      if (name === "services") {
+        value.forEach((serviceId) => body.append("services", serviceId));
+        return;
+      }
+      if (
+        value !== "" &&
+        value !== undefined &&
+        (mode === "new" || !["username", "password"].includes(name))
+      )
+        body.append(name, value);
     });
     if (mode === "existing") body.delete("username");
     try {
-      await api.post("admin/employees/", body);
-      setOpen(false); setForm({ is_active: true }); setErrors({}); resource.reload(); setToast("کارمند اضافه شد");
+      if (editing) await api.patch(`admin/employees/${editing}/`, body);
+      else await api.post("admin/employees/", body);
+      setOpen(false);
+      setEditing(null);
+      setForm({ is_active: true });
+      setErrors({});
+      resource.reload();
+      setToast("کارمند اضافه شد");
     } catch (error) {
       setErrors(error.response?.data || { detail: "ذخیره اطلاعات انجام نشد" });
     }
   };
-  return <div className="admin-page"><Header eyebrow="تیم سالن" title="مدیریت کارمندان" action="افزودن کارمند" onAction={() => setOpen(true)} /><section className="admin-panel"><div className="list-toolbar"><input placeholder="جست‌وجو در کارمندان" /><span>{resource.data.length} مورد</span></div>{resource.loading ? <Skeleton count={6} /> : resource.data.length ? <div className="entity-list">{resource.data.map((employee) => <article key={employee.id}><div className="entity-avatar">{(employee.name || "ب")[0]}</div><div><b>{employee.name}</b><small>{employee.specialty || "تخصص ثبت نشده"}</small></div><span>{employee.is_active ? "فعال" : "غیرفعال"}</span></article>)}</div> : <Empty title="کارمندی ثبت نشده" />}</section>{open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><form className="admin-modal" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><button type="button" className="drawer-close" onClick={() => setOpen(false)}>×</button><span className="admin-kicker">کارمند جدید</span><h2>افزودن کارمند</h2><div className="segmented"><button type="button" className={mode === "new" ? "selected" : ""} onClick={() => setMode("new")}>حساب جدید</button><button type="button" className={mode === "existing" ? "selected" : ""} onClick={() => setMode("existing")}>حساب موجود</button></div>{mode === "existing" ? <label>حساب متخصص<select value={form.user || ""} onChange={(event) => update("user", event.target.value)}><option value="">انتخاب کنید</option>{eligibleUsers.data.map((user) => <option key={user.id} value={user.id}>{employeeOptionLabel(user)}</option>)}</select>{errors.user && <small className="admin-field-error">{errors.user}</small>}</label> : <><label>نام کاربری<input value={form.username || ""} onChange={(event) => update("username", event.target.value)} />{errors.username && <small className="admin-field-error">{errors.username}</small>}</label><label>رمز عبور<input type="password" value={form.password || ""} onChange={(event) => update("password", event.target.value)} />{errors.password && <small className="admin-field-error">{errors.password}</small>}</label></>}<label>نام و نام خانوادگی<input value={form.name || ""} onChange={(event) => update("name", event.target.value)} /></label><label>شماره تماس<input type="tel" value={form.phone || ""} onChange={(event) => update("phone", event.target.value)} />{errors.phone && <small className="admin-field-error">{errors.phone}</small>}</label><label>تخصص<input value={form.specialty || ""} onChange={(event) => update("specialty", event.target.value)} /></label><label>درصد کمیسیون<input type="number" min="0" max="100" step="0.01" value={form.commission_rate || ""} onChange={(event) => update("commission_rate", event.target.value)} />{errors.commission_rate && <small className="admin-field-error">{errors.commission_rate}</small>}</label><label>تصویر پروفایل<input type="file" accept="image/*" onChange={(event) => update("profile_photo", event.target.files[0])} />{errors.profile_photo && <small className="admin-field-error">{errors.profile_photo}</small>}</label><label className="check-label"><input type="checkbox" checked={form.is_active} onChange={(event) => update("is_active", event.target.checked)} /> فعال</label>{errors.non_field_errors && <small className="admin-field-error">{errors.non_field_errors}</small>}<button className="admin-primary" type="submit">ایجاد کارمند</button></form></div>}<Toast message={toast} type="success" /></div>;
+  return (
+    <div className="admin-page">
+      <Header
+        eyebrow="تیم سالن"
+        title="مدیریت کارمندان"
+        action="افزودن کارمند"
+        onAction={() => setOpen(true)}
+      />
+      <section className="admin-panel">
+        <div className="list-toolbar">
+          <input placeholder="جست‌وجو در کارمندان" />
+          <span>{resource.data.length} مورد</span>
+        </div>
+        {resource.loading ? (
+          <Skeleton count={6} />
+        ) : resource.data.length ? (
+          <div className="entity-list">
+            {resource.data.map((employee) => (
+              <article key={employee.id}>
+                <div className="entity-avatar">{(employee.name || "ب")[0]}</div>
+                <div>
+                  <b>{employee.name}</b>
+                  <small>{employee.specialty || "تخصص ثبت نشده"}</small>
+                </div>
+                <span>{employee.is_active ? "فعال" : "غیرفعال"}</span>
+                <button onClick={() => { setEditing(employee.id); setForm({ ...employee, services: employee.service_ids || [] }); setErrors({}); setOpen(true); }}>ویرایش</button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <Empty title="کارمندی ثبت نشده" />
+        )}
+      </section>
+      {open && (
+        <div className="modal-backdrop" onMouseDown={() => setOpen(false)}>
+          <form
+            className="admin-modal"
+            onSubmit={submit}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="drawer-close"
+              onClick={() => setOpen(false)}
+            >
+              ×
+            </button>
+            <span className="admin-kicker">{editing ? "ویرایش کارمند" : "کارمند جدید"}</span>
+            <h2>{editing ? "ویرایش کارمند" : "افزودن کارمند"}</h2>
+            {!editing && <div className="segmented">
+              <button
+                type="button"
+                className={mode === "new" ? "selected" : ""}
+                onClick={() => setMode("new")}
+              >
+                حساب جدید
+              </button>
+              <button
+                type="button"
+                className={mode === "existing" ? "selected" : ""}
+                onClick={() => setMode("existing")}
+              >
+                حساب موجود
+              </button>
+            </div>}
+            {!editing && mode === "existing" ? (
+              <label>
+                حساب متخصص
+                <select
+                  value={form.user || ""}
+                  onChange={(event) => update("user", event.target.value)}
+                >
+                  <option value="">انتخاب کنید</option>
+                  {eligibleUsers.data.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {employeeOptionLabel(user)}
+                    </option>
+                  ))}
+                </select>
+                {errors.user && (
+                  <small className="admin-field-error">{errors.user}</small>
+                )}
+              </label>
+            ) : !editing ? (
+              <>
+                <label>
+                  نام کاربری
+                  <input
+                    value={form.username || ""}
+                    onChange={(event) => update("username", event.target.value)}
+                  />
+                  {errors.username && (
+                    <small className="admin-field-error">
+                      {errors.username}
+                    </small>
+                  )}
+                </label>
+                <label>
+                  رمز عبور
+                  <input
+                    type="password"
+                    value={form.password || ""}
+                    onChange={(event) => update("password", event.target.value)}
+                  />
+                  {errors.password && (
+                    <small className="admin-field-error">
+                      {errors.password}
+                    </small>
+                  )}
+                </label>
+              </>
+            ) : null}
+            <label>
+              نام و نام خانوادگی
+              <input
+                value={form.name || ""}
+                onChange={(event) => update("name", event.target.value)}
+              />
+            </label>
+            <label>
+              شماره تماس
+              <input
+                type="tel"
+                value={form.phone || ""}
+                onChange={(event) => update("phone", event.target.value)}
+              />
+              {errors.phone && (
+                <small className="admin-field-error">{errors.phone}</small>
+              )}
+            </label>
+            <fieldset className="admin-service-picker"><legend>خدمات قابل ارائه</legend>{services.data.filter((service) => service.is_active && service.is_bookable).map((service) => <label key={service.id} className="check-label"><input type="checkbox" checked={(form.services || []).map(String).includes(String(service.id))} onChange={(event) => update("services", event.target.checked ? [...(form.services || []), service.id] : (form.services || []).filter((id) => String(id) !== String(service.id)))} /> {service.persian_name || service.name}</label>)}</fieldset>
+            <label>
+              درصد کمیسیون
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={form.commission_rate || ""}
+                onChange={(event) =>
+                  update("commission_rate", event.target.value)
+                }
+              />
+              {errors.commission_rate && (
+                <small className="admin-field-error">
+                  {errors.commission_rate}
+                </small>
+              )}
+            </label>
+            <label>
+              تصویر پروفایل
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) =>
+                  update("profile_photo", event.target.files[0])
+                }
+              />
+              {errors.profile_photo && (
+                <small className="admin-field-error">
+                  {errors.profile_photo}
+                </small>
+              )}
+            </label>
+            <label className="check-label">
+              <input
+                type="checkbox"
+                checked={form.is_active}
+                onChange={(event) => update("is_active", event.target.checked)}
+              />{" "}
+              فعال
+            </label>
+            {errors.non_field_errors && (
+              <small className="admin-field-error">
+                {errors.non_field_errors}
+              </small>
+            )}
+            <button className="admin-primary" type="submit">
+              {editing ? "ذخیره تغییرات" : "ایجاد کارمند"}
+            </button>
+          </form>
+        </div>
+      )}
+      <Toast message={toast} type="success" />
+    </div>
+  );
 }
 function Finance() {
   return (
     <>
-    <CrudPage
-      type="تراکنش"
-      endpoint="admin/transactions/"
-      title="مالی و پرداخت‌ها"
-      eyebrow="حسابداری"
-      fields={[
-        { name: "type", label: "نوع تراکنش", type: "select", optionsEndpoint: "admin/transaction-types/" },
-        { name: "amount", label: "مبلغ", type: "number" },
-        { name: "appointment", label: "نوبت", type: "select", optionsEndpoint: "admin/appointments/", optionLabel: appointmentOptionLabel },
-        { name: "description", label: "شرح" },
-      ]}
-    />
-    <CrudPage type="پرداخت" endpoint="admin/payments/" title="پرداخت‌ها" eyebrow="حسابداری" fields={[{ name: "appointment", label: "نوبت", type: "select", optionsEndpoint: "admin/appointments/", optionLabel: appointmentOptionLabel }, { name: "amount", label: "مبلغ", type: "number" }, { name: "provider_reference", label: "شناسه پرداخت" }]} />
+      <CrudPage
+        type="تراکنش"
+        endpoint="admin/transactions/"
+        title="مالی و پرداخت‌ها"
+        eyebrow="حسابداری"
+        fields={[
+          {
+            name: "type",
+            label: "نوع تراکنش",
+            type: "select",
+            optionsEndpoint: "admin/transaction-types/",
+          },
+          { name: "amount", label: "مبلغ", type: "number" },
+          {
+            name: "appointment",
+            label: "نوبت",
+            type: "select",
+            optionsEndpoint: "admin/appointments/",
+            optionLabel: appointmentOptionLabel,
+          },
+          { name: "description", label: "شرح" },
+        ]}
+      />
+      <CrudPage
+        type="پرداخت"
+        endpoint="admin/payments/"
+        title="پرداخت‌ها"
+        eyebrow="حسابداری"
+        fields={[
+          {
+            name: "appointment",
+            label: "نوبت",
+            type: "select",
+            optionsEndpoint: "admin/appointments/",
+            optionLabel: appointmentOptionLabel,
+          },
+          { name: "amount", label: "مبلغ", type: "number" },
+          { name: "provider_reference", label: "شناسه پرداخت" },
+        ]}
+      />
     </>
   );
 }
@@ -703,12 +953,7 @@ function AdminRouter() {
     <Routes>
       <Route index element={<DashboardHome />} />
       <Route path="appointments" element={<Appointments />} />
-      <Route
-        path="employees"
-        element={
-          <EmployeeManagement />
-        }
-      />
+      <Route path="employees" element={<EmployeeManagement />} />
       <Route
         path="services"
         element={
@@ -720,7 +965,12 @@ function AdminRouter() {
             fields={[
               { name: "persian_name", label: "نام فارسی" },
               { name: "name", label: "نام داخلی" },
-              { name: "category", label: "دسته‌بندی", type: "select", optionsEndpoint: "admin/service-categories/" },
+              {
+                name: "category",
+                label: "دسته‌بندی",
+                type: "select",
+                optionsEndpoint: "admin/service-categories/",
+              },
               { name: "price", label: "قیمت", type: "number" },
               { name: "duration", label: "مدت (دقیقه)", type: "number" },
             ]}
@@ -735,12 +985,50 @@ function AdminRouter() {
             endpoint="admin/users/"
             title="مدیریت مشتریان"
             eyebrow="ارتباط با مشتری"
-            fields={[{ name: "first_name", label: "نام" }, { name: "last_name", label: "نام خانوادگی" }, { name: "phone", label: "شماره تماس" }]}
+            fields={[
+              { name: "first_name", label: "نام" },
+              { name: "last_name", label: "نام خانوادگی" },
+              { name: "phone", label: "شماره تماس" },
+            ]}
           />
         }
       />
       <Route path="finance" element={<Finance />} />
-      <Route path="schedules" element={<CrudPage type="ساعات کاری" endpoint="admin/working-schedules/" title="ساعات کاری" eyebrow="تیم سالن" fields={[{ name: "employee", label: "متخصص", type: "select", optionsEndpoint: "admin/employees/" }, { name: "weekday", label: "روز هفته", type: "select", options: [{ value: 0, label: "دوشنبه" }, { value: 1, label: "سه‌شنبه" }, { value: 2, label: "چهارشنبه" }, { value: 3, label: "پنج‌شنبه" }, { value: 4, label: "جمعه" }, { value: 5, label: "شنبه" }, { value: 6, label: "یکشنبه" }] }, { name: "start_time", label: "شروع", type: "time" }, { name: "end_time", label: "پایان", type: "time" }]} />} />
+      <Route
+        path="schedules"
+        element={
+          <CrudPage
+            type="ساعات کاری"
+            endpoint="admin/working-schedules/"
+            title="ساعات کاری"
+            eyebrow="تیم سالن"
+            fields={[
+              {
+                name: "employee",
+                label: "متخصص",
+                type: "select",
+                optionsEndpoint: "admin/employees/",
+              },
+              {
+                name: "weekday",
+                label: "روز هفته",
+                type: "select",
+                options: [
+                  { value: 0, label: "دوشنبه" },
+                  { value: 1, label: "سه‌شنبه" },
+                  { value: 2, label: "چهارشنبه" },
+                  { value: 3, label: "پنج‌شنبه" },
+                  { value: 4, label: "جمعه" },
+                  { value: 5, label: "شنبه" },
+                  { value: 6, label: "یکشنبه" },
+                ],
+              },
+              { name: "start_time", label: "شروع", type: "time" },
+              { name: "end_time", label: "پایان", type: "time" },
+            ]}
+          />
+        }
+      />
       <Route path="content" element={<Content />} />
       <Route path="*" element={<DashboardHome />} />
     </Routes>

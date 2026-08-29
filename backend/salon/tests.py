@@ -146,15 +146,18 @@ class AppointmentItemSchemaTests(TestCase):
         admin = User.objects.create_user(username="admin", role="admin")
         client = APIClient()
         client.force_authenticate(admin)
-        new_employee = client.post("/api/v1/admin/employees/", {"username": "new-stylist", "password": "safe-password", "name": "New Stylist", "phone": "09121234567", "commission_rate": "15.50", "is_active": True}, format="json")
+        new_employee = client.post("/api/v1/admin/employees/", {"username": "new-stylist", "password": "safe-password", "name": "New Stylist", "phone": "09121234567", "commission_rate": "15.50", "is_active": True, "services": [self.service.pk]}, format="json")
         self.assertEqual(new_employee.status_code, 201)
         self.assertEqual(new_employee.data["commission_rate"], "15.50")
+        self.assertEqual(new_employee.data["service_ids"], [self.service.pk])
         self.assertEqual(User.objects.get(username="new-stylist").role, "employee")
 
         existing_user = User.objects.create_user(username="eligible", role="employee")
         existing_employee = client.post("/api/v1/admin/employees/", {"user": existing_user.pk, "name": "Existing Stylist", "commission_rate": "20.00"}, format="json")
         self.assertEqual(existing_employee.status_code, 201)
         self.assertEqual(existing_employee.data["user"], existing_user.pk)
+        self.assertEqual(client.patch(f"/api/v1/admin/employees/{existing_employee.data['id']}/", {"services": [self.service.pk]}, format="json").data["service_ids"], [self.service.pk])
+        self.assertIn(existing_employee.data["id"], [employee["id"] for employee in client.get(f"/api/v1/employees/?service={self.service.pk}").data])
 
         for role in ("customer", "admin"):
             ineligible_user = User.objects.create_user(username=f"{role}-user", role=role)

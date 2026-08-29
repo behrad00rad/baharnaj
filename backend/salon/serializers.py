@@ -75,13 +75,26 @@ class EmployeeSelfProfileSerializer(serializers.ModelSerializer):
 
 class AdminEmployeeSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source="user.get_full_name", read_only=True)
+    services = serializers.PrimaryKeyRelatedField(queryset=Service.objects.filter(is_active=True, is_bookable=True), many=True, required=False, write_only=True)
+    service_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeProfile
-        fields = ("id", "user", "name", "specialty", "bio", "commission_rate", "is_active", "profile_photo")
+        fields = ("id", "user", "name", "specialty", "bio", "commission_rate", "is_active", "profile_photo", "services", "service_ids")
 
     def validate_profile_photo(self, value):
         return validate_image_upload(value)
+
+    def get_service_ids(self, obj):
+        return list(obj.service_links.filter(is_active=True).values_list("service_id", flat=True))
+
+    def update(self, instance, validated_data):
+        services = validated_data.pop("services", None)
+        employee = super().update(instance, validated_data)
+        if services is not None:
+            EmployeeService.objects.filter(employee=employee).delete()
+            EmployeeService.objects.bulk_create([EmployeeService(employee=employee, service=service) for service in services])
+        return employee
 
 
 class AdminEmployeeCreateSerializer(AdminEmployeeSerializer):
@@ -115,6 +128,7 @@ class AdminEmployeeCreateSerializer(AdminEmployeeSerializer):
         return attrs
 
     def create(self, validated_data):
+        services = validated_data.pop("services", [])
         user = validated_data.pop("user", None)
         username = validated_data.pop("username", None)
         password = validated_data.pop("password", None)
@@ -136,7 +150,9 @@ class AdminEmployeeCreateSerializer(AdminEmployeeSerializer):
                 changes.append("is_active")
             if changes:
                 user.save(update_fields=changes)
-        return EmployeeProfile.objects.create(user=user, **validated_data)
+        employee = EmployeeProfile.objects.create(user=user, **validated_data)
+        EmployeeService.objects.bulk_create([EmployeeService(employee=employee, service=service) for service in services])
+        return employee
 
     def to_representation(self, instance):
         return AdminEmployeeSerializer(instance, context=self.context).data
