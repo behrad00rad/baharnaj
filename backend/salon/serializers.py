@@ -99,7 +99,7 @@ class AppointmentItemSerializer(serializers.ModelSerializer):
         service = attrs.get("service", self.instance.service if self.instance else None)
         employee = attrs.get("employee", self.instance.employee if self.instance else None)
         request = self.context.get("request")
-        if request and request.user.role == "employee" and employee.user_id != request.user.id:
+        if request and request.user.is_authenticated and request.user.role == "employee" and employee.user_id != request.user.id:
             raise serializers.ValidationError("هر متخصص فقط می‌تواند ردیف‌های خودش را مدیریت کند.")
         if not service.is_active or not service.is_bookable or not EmployeeService.objects.filter(employee=employee, service=service, is_active=True).exists():
             raise serializers.ValidationError("این متخصص این خدمت را ارائه نمی‌دهد.")

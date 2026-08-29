@@ -188,3 +188,11 @@ class AppointmentItemSchemaTests(TestCase):
         BookingHold.objects.filter(token=expired_hold.data["token"]).update(expires_at=timezone.now() - timedelta(seconds=1))
         client.force_authenticate(other_user)
         self.assertEqual(client.post("/api/v1/booking-holds/", {"items": expired_items}, format="json").status_code, 201)
+
+        guest_items = [{**item, "start_time": f"{16 + index:02}:00", "end_time": f"{17 + index:02}:00"} for index, item in enumerate(items)]
+        client.force_authenticate(user=None)
+        guest_hold = client.post("/api/v1/booking-holds/", {"items": guest_items}, format="json")
+        self.assertEqual(guest_hold.status_code, 201)
+        guest_booking = client.post("/api/v1/appointments/", {"customer_name": "Guest", "customer_phone": "09121234567", "hold_token": guest_hold.data["token"], "items": guest_items}, format="json")
+        self.assertEqual(guest_booking.status_code, 201)
+        self.assertEqual(guest_booking.data["customer_name"], "Guest")
