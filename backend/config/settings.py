@@ -164,7 +164,13 @@ if DEBUG:
         "http://127.0.0.1:5174",
     ]
     CORS_ALLOWED_ORIGIN_REGEXES = [r"^https://.*-5173\.app\.github\.dev$"]
-    CSRF_TRUSTED_ORIGINS = configured_origins + ["https://*.app.github.dev"]
+    CSRF_TRUSTED_ORIGINS = configured_origins + [
+        "http://localhost:8000",
+        "https://localhost:8000",
+        "http://127.0.0.1:8000",
+        "https://127.0.0.1:8000",
+        "https://*.app.github.dev",
+    ]
 else:
     CORS_ALLOWED_ORIGINS = configured_origins
     CSRF_TRUSTED_ORIGINS = configured_origins
