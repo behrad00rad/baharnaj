@@ -2,6 +2,7 @@ import json
 import base64
 import tempfile
 from datetime import date, timedelta
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.db import IntegrityError
@@ -9,7 +10,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from .models import Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, Payment, Refund, Service, ServiceCategory, TimeOff, User, WorkingSchedule
+from .models import Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Refund, Service, ServiceCategory, TimeOff, User, WorkingSchedule
 
 
 class AppointmentItemSchemaTests(TestCase):
@@ -186,6 +187,8 @@ class AppointmentItemSchemaTests(TestCase):
 
     def test_employee_profile_accepts_multipart_photo(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import RequestFactory
+        from django.views.static import serve
         client = APIClient()
         client.force_authenticate(self.employee.user)
         png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
@@ -197,9 +200,47 @@ class AppointmentItemSchemaTests(TestCase):
                 format="multipart",
             )
 
-        self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.data["profile_photo_url"].startswith("http://testserver/media/profiles/"))
+            image_path = urlsplit(response.data["profile_photo_url"]).path.removeprefix(settings.MEDIA_URL)
+            image_response = serve(RequestFactory().get(response.data["profile_photo_url"]), image_path, document_root=media_root)
+            self.assertEqual(image_response.status_code, 200)
+            self.assertEqual(image_response["Content-Type"], "image/png")
+
         self.employee.refresh_from_db()
         self.assertTrue(self.employee.profile_photo.name.startswith("profiles/"))
+
+    def test_gallery_upload_returns_public_backend_and_retrievable_media(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import RequestFactory
+        from django.views.static import serve
+        admin = User.objects.create_user(username="media-admin", role="admin")
+        client = APIClient()
+        client.force_authenticate(admin)
+        png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(
+            MEDIA_ROOT=media_root,
+            PUBLIC_BACKEND_URL="https://your-backend-domain.example.com",
+        ):
+            created = client.post(
+                "/api/v1/admin/gallery/",
+                {"title": "New upload", "image": SimpleUploadedFile("gallery.png", png, content_type="image/png")},
+                format="multipart",
+            )
+            self.assertEqual(created.status_code, 201)
+            self.assertTrue(created.data["image_url"].startswith("https://your-backend-domain.example.com/media/gallery/"))
+
+            public_item = client.get("/api/v1/gallery/").data[0]
+            image_path = urlsplit(public_item["image_url"]).path.removeprefix(settings.MEDIA_URL)
+            image_response = serve(RequestFactory().get(public_item["image_url"]), image_path, document_root=media_root)
+            self.assertEqual(image_response.status_code, 200)
+            self.assertEqual(image_response["Content-Type"], "image/png")
+
+    def test_gallery_preserves_existing_absolute_image_url(self):
+        GalleryAsset.objects.create(title="External", image_url="https://cdn.example.com/gallery.jpg")
+        response = APIClient().get("/api/v1/gallery/")
+        self.assertEqual(response.data[0]["image_url"], "https://cdn.example.com/gallery.jpg")
 
     def test_employee_can_change_only_own_password(self):
         self.employee.user.set_password("old-password-8472")

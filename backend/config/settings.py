@@ -35,7 +35,13 @@ CODESPACES_DOMAIN = os.getenv("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN", "app.g
 CODESPACE_BACKEND_HOST = f"{CODESPACE_NAME}-8000.{CODESPACES_DOMAIN}" if CODESPACE_NAME else ""
 CODESPACE_FRONTEND_ORIGIN = f"https://{CODESPACE_NAME}-5173.{CODESPACES_DOMAIN}" if CODESPACE_NAME else ""
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", ",".join(filter(None, ["localhost", "127.0.0.1", CODESPACE_BACKEND_HOST]))).split(",")
-PUBLIC_BACKEND_URL = os.getenv("PUBLIC_BACKEND_URL", f"https://{CODESPACE_BACKEND_HOST}" if CODESPACE_BACKEND_HOST else "").rstrip("/")
+# Vite proxies the README development API URL to Django over localhost, so a
+# Codespace needs its dynamically provided public backend origin here.
+PUBLIC_BACKEND_URL = (
+    os.getenv("PUBLIC_BACKEND_URL")
+    or (f"https://{CODESPACE_BACKEND_HOST}" if CODESPACE_BACKEND_HOST else "")
+).rstrip("/")
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
 # Application definition

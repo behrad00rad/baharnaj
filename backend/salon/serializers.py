@@ -17,11 +17,11 @@ from .validators import validate_no_employee_overlap
 from .security import validate_image_upload, validate_phone
 
 
-def absolute_gallery_url(request, value):
-    if not value or not value.startswith("/"):
+def absolute_media_url(request, value):
+    if not value or value.startswith(("http://", "https://")):
         return value
     if settings.PUBLIC_BACKEND_URL:
-        return f"{settings.PUBLIC_BACKEND_URL}{value}"
+        return f"{settings.PUBLIC_BACKEND_URL}/{value.lstrip('/')}"
     return request.build_absolute_uri(value) if request else value
 
 
@@ -50,7 +50,7 @@ class GalleryAssetSerializer(serializers.ModelSerializer):
         return validate_image_upload(value)
 
     def get_image_url(self, obj):
-        return absolute_gallery_url(self.context.get("request"), obj.image.url if obj.image else obj.image_url)
+        return absolute_media_url(self.context.get("request"), obj.image.url if obj.image else obj.image_url)
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
@@ -63,7 +63,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
 
     def get_profile_photo_url(self, obj):
-        return absolute_gallery_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
+        return absolute_media_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
 
     def validate_profile_photo(self, value):
         if isinstance(value, str):
@@ -82,7 +82,7 @@ class EmployeeSelfProfileSerializer(serializers.ModelSerializer):
         extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
 
     def get_profile_photo_url(self, obj):
-        return absolute_gallery_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
+        return absolute_media_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
 
     def validate_profile_photo(self, value):
         if isinstance(value, str):
@@ -128,7 +128,7 @@ class AdminEmployeeSerializer(serializers.ModelSerializer):
         extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
 
     def get_profile_photo_url(self, obj):
-        return absolute_gallery_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
+        return absolute_media_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
 
     def validate_profile_photo(self, value):
         if isinstance(value, str):
@@ -237,9 +237,15 @@ class ServiceAdminSerializer(serializers.ModelSerializer):
 
 
 class ServiceImageSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
     class Meta:
         model = ServiceImage
         fields = "__all__"
+        extra_kwargs = {"image": {"write_only": True}}
+
+    def get_image_url(self, obj):
+        return absolute_media_url(self.context.get("request"), obj.image.url if obj.image else obj.image_url)
 
     def validate_image(self, value):
         return validate_image_upload(value)
