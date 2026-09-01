@@ -42,6 +42,19 @@ describe('admin CRUD forms', () => {
     expect(await screen.findByRole('option', { name: 'Eligible User' })).toHaveValue('9')
   })
 
+  it('allows an admin to confirm a pending employee payment report', async () => {
+    get
+      .mockResolvedValueOnce({ data: [{ id: 31, appointment: 20, amount: 800, payment_method: 'cash', status: 'pending', customer_name: 'Customer', reporter_name: 'Stylist', created_by: 2 }] })
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: [] })
+    render(<MemoryRouter initialEntries={['/finance']}><AdminRouter /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'تأیید' }))
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('admin/payments/31/confirm/'))
+  })
+
   it('loads real service categories instead of placeholder options', async () => {
     render(<MemoryRouter initialEntries={['/services']}><AdminRouter /></MemoryRouter>)
 

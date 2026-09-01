@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.db import transaction
-from django.db.models import Count, Prefetch, Sum
+from django.db.models import Count, Prefetch, Q, Sum
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
@@ -22,7 +22,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, GalleryCategorySerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, GalleryCategorySerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 class ServiceListView(generics.ListAPIView):
@@ -132,19 +132,52 @@ class EmployeeAppointmentsView(generics.ListAPIView):
         return queryset.distinct()
 
 
+class EmployeeSelfServiceListView(generics.ListAPIView):
+    permission_classes = (IsEmployee,)
+    serializer_class = ServiceSerializer
+
+    def get_queryset(self):
+        return Service.objects.filter(employee_links__employee__user=self.request.user, employee_links__is_active=True, is_active=True, is_bookable=True).distinct()
+
+
+class EmployeeCustomerOptionsView(generics.ListAPIView):
+    permission_classes = (IsEmployee,)
+    serializer_class = AdminCustomerOptionSerializer
+
+    def get_queryset(self):
+        query = self.request.query_params.get("q", "").strip()
+        if not query:
+            return CustomerProfile.objects.none()
+        return CustomerProfile.objects.filter(Q(user__first_name__icontains=query) | Q(user__last_name__icontains=query) | Q(user__phone__icontains=query)).select_related("user")[:20]
+
+
+class EmployeeSelfBookingView(generics.CreateAPIView):
+    permission_classes = (IsEmployee,)
+    serializer_class = EmployeeSelfBookingSerializer
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        appointment = serializer.save()
+        return Response(EmployeeAppointmentSerializer(appointment, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
+
 class EmployeeStatisticsView(generics.GenericAPIView):
     permission_classes = (IsEmployee,)
 
     def get(self, request):
         today = timezone.localdate()
+        now = timezone.localtime().time()
         today_items = AppointmentItem.objects.filter(employee__user=request.user, date=today)
         completed_items = today_items.filter(completion_status="completed")
         commissions = EmployeeCommission.objects.filter(appointment_item__employee__user=request.user, appointment_item__date=today)
         next_item = (
-            today_items.exclude(completion_status__in=("completed", "cancelled"))
-            .filter(start_time__gte=timezone.localtime().time())
+            AppointmentItem.objects.filter(employee__user=request.user, appointment__status__in=("pending", "confirmed"))
+            .exclude(completion_status__in=("completed", "cancelled"))
+            .filter(Q(date__gt=today) | Q(date=today, start_time__gte=now))
             .select_related("appointment__customer__user", "service")
-            .order_by("start_time")
+            .order_by("date", "start_time")
             .first()
         )
         return Response({
@@ -153,6 +186,7 @@ class EmployeeStatisticsView(generics.GenericAPIView):
             "remaining_services": today_items.exclude(completion_status__in=("completed", "cancelled")).count(),
             "employee_commission": commissions.aggregate(total=Sum("commission_amount"))["total"] or 0,
             "next_appointment": EmployeeAppointmentSerializer(next_item.appointment, context={"request": request}).data if next_item else None,
+            "next_appointment_item": AppointmentItemSerializer(next_item, context={"request": request}).data if next_item else None,
         })
 
 
@@ -423,8 +457,37 @@ class TransactionViewSet(viewsets.ReadOnlyModelViewSet):
 class PaymentViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAdmin,)
     http_method_names = ("get", "post", "head", "options")
-    queryset = Payment.objects.select_related("appointment").prefetch_related("refunds").order_by("-created_at")
+    queryset = Payment.objects.select_related("appointment__customer__user", "created_by", "reviewed_by").prefetch_related("refunds").order_by("-created_at")
     serializer_class = PaymentSerializer
+
+    @action(detail=True, methods=("post",))
+    @transaction.atomic
+    def confirm(self, request, pk=None):
+        payment = self.get_object()
+        if payment.status != "pending":
+            return Response({"detail": "فقط پرداخت گزارش‌شده قابل تأیید است."}, status=status.HTTP_400_BAD_REQUEST)
+        appointment = Appointment.objects.select_for_update().get(pk=payment.appointment_id)
+        if payment.amount > appointment.remaining_total:
+            return Response({"detail": "مبلغ پرداخت از مانده نوبت بیشتر است."}, status=status.HTTP_400_BAD_REQUEST)
+        payment.mark_paid(changed_by=request.user)
+        Transaction.objects.get_or_create(
+            payment=payment,
+            defaults={"type": "payment", "amount": payment.amount, "appointment": appointment, "description": payment.notes, "created_by": request.user, "updated_by": request.user},
+        )
+        return Response(self.get_serializer(payment).data)
+
+    @action(detail=True, methods=("post",))
+    @transaction.atomic
+    def reject(self, request, pk=None):
+        payment = self.get_object()
+        if payment.status != "pending":
+            return Response({"detail": "فقط پرداخت گزارش‌شده قابل رد است."}, status=status.HTTP_400_BAD_REQUEST)
+        payment.status = "failed"
+        payment.reviewed_by = request.user
+        payment.reviewed_at = timezone.now()
+        payment.updated_by = request.user
+        payment.save(update_fields=("status", "reviewed_by", "reviewed_at", "updated_by", "updated_at"))
+        return Response(self.get_serializer(payment).data)
 
 
 class RefundViewSet(viewsets.ModelViewSet):
@@ -636,6 +699,48 @@ class EmployeePasswordChangeView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response({"detail": "رمز عبور با موفقیت تغییر کرد."})
+
+
+class EmployeeAppointmentPaymentReportView(generics.GenericAPIView):
+    permission_classes = (IsEmployee,)
+    serializer_class = PaymentSerializer
+
+    def get_appointment(self, request, appointment_id):
+        return generics.get_object_or_404(
+            Appointment.objects.filter(items__employee__user=request.user).distinct(),
+            pk=appointment_id,
+        )
+
+    def get(self, request, appointment_id):
+        appointment = self.get_appointment(request, appointment_id)
+        payments = Payment.objects.filter(appointment=appointment).select_related("created_by", "reviewed_by", "appointment__customer__user").order_by("-created_at")
+        return Response({
+            "appointment_total": appointment.appointment_total,
+            "paid_total": appointment.net_paid,
+            "remaining_total": appointment.remaining_total,
+            "payments": self.get_serializer(payments, many=True).data,
+        })
+
+    @transaction.atomic
+    def post(self, request, appointment_id):
+        appointment = self.get_appointment(request, appointment_id)
+        if appointment.status == "cancelled":
+            return Response({"detail": "ثبت پرداخت برای نوبت لغوشده ممکن نیست."}, status=status.HTTP_400_BAD_REQUEST)
+        report_serializer = EmployeePaymentReportSerializer(data=request.data)
+        report_serializer.is_valid(raise_exception=True)
+        amount = report_serializer.validated_data["amount"]
+        if amount > appointment.remaining_total:
+            return Response({"detail": "مبلغ پرداخت از مانده نوبت بیشتر است."}, status=status.HTTP_400_BAD_REQUEST)
+        payment = Payment.objects.create(
+            appointment=appointment,
+            amount=amount,
+            payment_method=report_serializer.validated_data["payment_method"],
+            notes=report_serializer.validated_data.get("notes", ""),
+            status="pending",
+            created_by=request.user,
+            updated_by=request.user,
+        )
+        return Response(self.get_serializer(payment).data, status=status.HTTP_201_CREATED)
 
 
 class EmployeeTimeOffViewSet(viewsets.ModelViewSet):

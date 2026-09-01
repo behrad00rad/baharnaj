@@ -358,6 +358,8 @@ class Payment(AuditedModel):
     paid_at = models.DateTimeField(null=True, blank=True)
     provider_reference = models.CharField(max_length=255, blank=True)
     notes = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="reviewed_payments")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=("status", "paid_at"), name="payment_status_paid_idx")]
@@ -369,7 +371,9 @@ class Payment(AuditedModel):
         self.status = "paid"
         self.paid_at = timezone.now()
         self.updated_by = changed_by
-        self.save(update_fields=("status", "paid_at", "updated_by", "updated_at"))
+        self.reviewed_by = changed_by
+        self.reviewed_at = timezone.now()
+        self.save(update_fields=("status", "paid_at", "updated_by", "reviewed_by", "reviewed_at", "updated_at"))
 
     def refund(self, changed_by=None):
         if self.status != "paid":

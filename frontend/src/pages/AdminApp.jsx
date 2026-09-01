@@ -1334,6 +1334,21 @@ function Finance() {
   const refunds = useResource("admin/refunds/");
   const transactions = useResource("admin/transactions/");
   const commissions = useResource("admin/commissions/");
+  const [reviewingPayment, setReviewingPayment] = useState(null);
+  const [reviewError, setReviewError] = useState("");
+  const reviewPayment = async (payment, action) => {
+    setReviewingPayment(payment.id);
+    setReviewError("");
+    try {
+      await api.post(`admin/payments/${payment.id}/${action}/`);
+      payments.reload();
+      transactions.reload();
+    } catch (error) {
+      setReviewError(firstError(error, "بررسی پرداخت انجام نشد"));
+    } finally {
+      setReviewingPayment(null);
+    }
+  };
   const section = (title, resource, render) => (
     <section className="admin-panel">
       <div className="panel-title">
@@ -1362,11 +1377,19 @@ function Finance() {
             <div className="entity-avatar">پ</div>
             <div>
               <b>{toman(item.amount)}</b>
-              <small>نوبت #{item.appointment} · {item.payment_method}</small>
+              <small>نوبت #{item.appointment} · {item.customer_name || "مشتری"} · {item.payment_method}</small>
+              {item.created_by && <small>گزارش‌دهنده: {item.reporter_name || "کارمند"}</small>}
             </div>
-            <span>{item.status}</span>
+            <span>{item.status === "pending" ? "در انتظار تأیید" : item.status === "paid" ? "تأیید شده" : item.status === "failed" ? "رد شده" : item.status}</span>
+            {item.status === "pending" && (
+              <div className="finance-review-actions">
+                <button className="admin-primary" disabled={reviewingPayment === item.id} onClick={() => reviewPayment(item, "confirm")}>تأیید</button>
+                <button className="admin-secondary" disabled={reviewingPayment === item.id} onClick={() => reviewPayment(item, "reject")}>رد</button>
+              </div>
+            )}
           </article>
         ))}
+        {reviewError && <small className="admin-field-error">{reviewError}</small>}
         {section("بازپرداخت‌ها", refunds, (item) => (
           <article key={item.id}>
             <div className="entity-avatar">ب</div>

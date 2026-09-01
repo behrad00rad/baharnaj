@@ -19,6 +19,24 @@ describe('employee app', () => {
     expect(get).toHaveBeenCalledWith('employee/statistics/')
   })
 
+  it('shows the item selected as the next appointment', async () => {
+    get.mockImplementation((endpoint) => {
+      if (endpoint.startsWith('employee/appointments/?date=')) return Promise.resolve({ data: [] })
+      if (endpoint === 'employee/statistics/') return Promise.resolve({ data: {
+        today_total: 1, completed_services: 0, remaining_services: 1, employee_commission: 0,
+        next_appointment: { id: 1, customer_name: 'مشتری بعدی', items: [{ service_name: 'خدمت قبلی', start_time: '09:00' }] },
+        next_appointment_item: { service_name: 'خدمت بعدی', duration_snapshot: 60, start_time: '14:00' },
+      } })
+      return Promise.resolve({ data: [] })
+    })
+
+    render(<MemoryRouter><EmployeeApp /></MemoryRouter>)
+
+    expect(await screen.findByText('خدمت بعدی · 60 دقیقه')).toBeInTheDocument()
+    expect(screen.getByText('14:00')).toBeInTheDocument()
+    expect(screen.queryByText('خدمت قبلی')).not.toBeInTheDocument()
+  })
+
   it('renders calendar loading/empty state and employee action payload shape', async () => {
     render(<MemoryRouter initialEntries={['/calendar']}><EmployeeApp /></MemoryRouter>)
     expect(screen.getByText('تقویم')).toBeInTheDocument()
@@ -27,7 +45,7 @@ describe('employee app', () => {
   })
 
   it('uses the employee schedule endpoint for weekly hours', async () => {
-    render(<MemoryRouter initialEntries={['/profile']}><EmployeeApp /></MemoryRouter>)
+    render(<MemoryRouter initialEntries={['/availability']}><EmployeeApp /></MemoryRouter>)
     await waitFor(() => expect(get).toHaveBeenCalledWith('employee/schedule/'))
     await waitFor(() => expect(screen.getAllByText('ذخیره')).toHaveLength(7))
     screen.getAllByText('ذخیره')[0].click()
@@ -35,13 +53,13 @@ describe('employee app', () => {
     expect(post.mock.calls[0][1]).not.toHaveProperty('employee')
   })
 
-  it('keeps specialty and time-off administration out of the employee profile', async () => {
+  it('keeps availability administration out of the employee profile', async () => {
     render(<MemoryRouter initialEntries={['/profile']}><EmployeeApp /></MemoryRouter>)
 
-    await waitFor(() => expect(screen.getByText('ساعات کاری من')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('مدیریت برنامه کاری')).toBeInTheDocument())
+    expect(screen.queryByText('ساعات کاری من')).not.toBeInTheDocument()
     expect(screen.queryByText('تخصص')).not.toBeInTheDocument()
-    expect(screen.queryByText('درخواست مرخصی')).not.toBeInTheDocument()
-    expect(screen.queryByText('ارسال درخواست')).not.toBeInTheDocument()
+    expect(screen.queryByText('ثبت مرخصی')).not.toBeInTheDocument()
     expect(screen.queryByText('خدمات قابل ارائه')).not.toBeInTheDocument()
   })
 
@@ -92,6 +110,44 @@ describe('employee app', () => {
 
     await waitFor(() => expect(post).toHaveBeenCalledWith('employee/appointment-items/12/action/', expect.objectContaining({ status: 'complete', notes: 'کار تکمیل شد' })))
     expect(await screen.findByText('ثبت وضعیت ممکن نیست')).toBeInTheDocument()
+  })
+
+  it('reports a payment only from the opened assigned appointment', async () => {
+    const current = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date())
+    get.mockImplementation((endpoint) => {
+      if (endpoint === `employee/appointments/?date=${current}`) return Promise.resolve({ data: [{ id: 1, customer_name: 'مشتری', items: [{ id: 12, date: current, start_time: '10:00', end_time: '11:00', service_name: 'کوتاهی' }] }] })
+      if (endpoint === 'employee/statistics/') return Promise.resolve({ data: { today_total: 1, completed_services: 0, remaining_services: 1, employee_commission: 0, next_appointment: null } })
+      if (endpoint === 'employee/appointments/1/payments/') return Promise.resolve({ data: { paid_total: 200, remaining_total: 600, payments: [] } })
+      return Promise.resolve({ data: [] })
+    })
+    render(<MemoryRouter><EmployeeApp /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByRole('button', { name: /مشتری.*کوتاهی/ }))
+    fireEvent.change(await screen.findByLabelText('مبلغ'), { target: { value: '500' } })
+    fireEvent.click(screen.getByRole('button', { name: 'ثبت پرداخت' }))
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('employee/appointments/1/payments/', { amount: 500, payment_method: 'cash', notes: '' }))
+  })
+
+  it('creates a self appointment without an employee selector or employee payload', async () => {
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date())
+    get.mockImplementation((endpoint) => {
+      if (endpoint === 'employee/services/') return Promise.resolve({ data: [{ id: 5, persian_name: 'کوتاهی', duration: 60 }] })
+      if (endpoint === 'employee/profile/') return Promise.resolve({ data: { id: 8 } })
+      if (endpoint.startsWith(`availability/?date=${today}`)) return Promise.resolve({ data: { slots: ['10:00'] } })
+      return Promise.resolve({ data: [] })
+    })
+    render(<MemoryRouter initialEntries={['/appointments/new']}><EmployeeApp /></MemoryRouter>)
+
+    fireEvent.change(await screen.findByLabelText('نام مشتری جدید'), { target: { value: 'مشتری جدید' } })
+    fireEvent.change(screen.getByLabelText('شماره تماس'), { target: { value: '09121234567' } })
+    fireEvent.click(screen.getByLabelText(/کوتاهی/))
+    fireEvent.click(await screen.findByRole('button', { name: '10:00' }))
+    fireEvent.click(screen.getByRole('button', { name: 'ثبت نوبت' }))
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('employee/appointments/create/', expect.objectContaining({ services: [5], start_time: '10:00' })))
+    expect(post.mock.calls.at(-1)[1]).not.toHaveProperty('employee')
+    expect(screen.queryByText('متخصص')).not.toBeInTheDocument()
   })
 
   it('loads only the selected employee week range for the calendar', async () => {

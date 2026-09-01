@@ -3,11 +3,11 @@ from rest_framework.routers import DefaultRouter
 from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminGalleryCategoryView, AdminServiceViewSet,
 					AdminUserViewSet, AdminCustomerOptionsView, AdminEmployeeEligibleUsersView, AdminRevenueView, AdminServiceCategoryViewSet, AdminTransactionTypesView, BookingHoldDeleteView,
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView, BookingHoldView,
-					EmployeeAppointmentsView, EmployeeListView, EmployeeStatisticsView, GalleryCategoryListView,
+										EmployeeAppointmentsView, EmployeeCustomerOptionsView, EmployeeListView, EmployeeSelfBookingView, EmployeeSelfServiceListView, EmployeeStatisticsView, GalleryCategoryListView,
 					ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
 					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
 					PaymentViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
-					EmployeeEarningsView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView)
+										EmployeeEarningsView, EmployeeAppointmentPaymentReportView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView)
 
 router = DefaultRouter()
 router.register("admin/services", AdminServiceViewSet, basename="admin-service")
@@ -41,6 +41,10 @@ urlpatterns = [
 	path("customer/booking/", CustomerBookingView.as_view(), name="customer-booking-lookup"),
 	path("customer/history/", CustomerHistoryView.as_view(), name="customer-history"),
 	path("employee/appointments/", EmployeeAppointmentsView.as_view(), name="employee-appointments"),
+	path("employee/appointments/create/", EmployeeSelfBookingView.as_view(), name="employee-appointment-create"),
+	path("employee/services/", EmployeeSelfServiceListView.as_view(), name="employee-service-list"),
+	path("employee/customers/", EmployeeCustomerOptionsView.as_view(), name="employee-customer-options"),
+	path("employee/appointments/<int:appointment_id>/payments/", EmployeeAppointmentPaymentReportView.as_view(), name="employee-appointment-payments"),
 	path("employee/statistics/", EmployeeStatisticsView.as_view(), name="employee-statistics"),
 	path("employee/profile/", EmployeeProfileView.as_view(), name="employee-profile"),
 	path("employee/password/", EmployeePasswordChangeView.as_view(), name="employee-password-change"),

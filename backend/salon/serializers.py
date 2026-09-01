@@ -445,6 +445,62 @@ class EmployeeAppointmentSerializer(serializers.ModelSerializer):
         return obj.customer.user.phone
 
 
+class EmployeeSelfBookingSerializer(serializers.Serializer):
+    customer = serializers.PrimaryKeyRelatedField(queryset=CustomerProfile.objects.all(), required=False)
+    customer_name = serializers.CharField(required=False, allow_blank=False)
+    customer_phone = serializers.CharField(required=False, allow_blank=False)
+    services = serializers.PrimaryKeyRelatedField(queryset=Service.objects.filter(is_active=True, is_bookable=True), many=True)
+    date = serializers.DateField()
+    start_time = serializers.TimeField()
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        if not attrs.get("customer") and not (attrs.get("customer_name") and attrs.get("customer_phone")):
+            raise serializers.ValidationError({"customer": "یک مشتری را انتخاب کنید یا نام و شماره مشتری جدید را وارد کنید."})
+        if attrs["date"] < timezone.localdate():
+            raise serializers.ValidationError({"date": "تاریخ نوبت نمی‌تواند در گذشته باشد."})
+        employee = self.context["request"].user.employee_profile
+        start = datetime.combine(attrs["date"], attrs["start_time"])
+        item_data = []
+        for service in attrs["services"]:
+            end = start + timedelta(minutes=service.duration)
+            serializer = AppointmentItemSerializer(
+                data={"service": service.pk, "employee": employee.pk, "date": attrs["date"], "start_time": start.time(), "end_time": end.time()},
+                context=self.context,
+            )
+            serializer.is_valid(raise_exception=True)
+            item_data.append(serializer.validated_data)
+            start = end
+        attrs["items"] = item_data
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        request = self.context["request"]
+        customer = validated_data.pop("customer", None)
+        name = validated_data.pop("customer_name", "")
+        phone = validated_data.pop("customer_phone", "")
+        services = validated_data.pop("services")
+        validated_data.pop("date")
+        validated_data.pop("start_time")
+        item_data = validated_data.pop("items")
+        if customer is None:
+            phone = validate_phone(phone)
+            user = User.objects.filter(phone=phone, role="customer").first()
+            if user is None:
+                user = User.objects.create_user(username=f"employee_guest_{phone}_{uuid4().hex[:8]}", first_name=name, phone=phone, role="customer")
+            elif name and user.get_full_name() != name:
+                user.first_name = name
+                user.save(update_fields=("first_name",))
+            customer, _ = CustomerProfile.objects.get_or_create(user=user)
+        appointment = Appointment.objects.create(customer=customer, created_by=request.user, updated_by=request.user, **validated_data)
+        AppointmentItem.objects.bulk_create([
+            AppointmentItem(appointment=appointment, created_by=request.user, updated_by=request.user, price_snapshot=item["service"].price, duration_snapshot=item["service"].duration, **item)
+            for item in item_data
+        ])
+        return appointment
+
+
 class AdminAppointmentCreateSerializer(serializers.ModelSerializer):
     items = AppointmentItemSerializer(many=True)
     customer = serializers.PrimaryKeyRelatedField(queryset=CustomerProfile.objects.all(), required=False)
@@ -533,11 +589,14 @@ class TransactionSerializer(serializers.ModelSerializer):
 class PaymentSerializer(serializers.ModelSerializer):
     refunded_total = serializers.SerializerMethodField()
     refundable_total = serializers.SerializerMethodField()
+    reporter_name = serializers.CharField(source="created_by.get_full_name", read_only=True)
+    customer_name = serializers.CharField(source="appointment.customer.user.get_full_name", read_only=True)
+    reviewed_by_name = serializers.CharField(source="reviewed_by.get_full_name", read_only=True)
 
     class Meta:
         model = Payment
         fields = "__all__"
-        read_only_fields = ("status", "paid_at", "created_by", "updated_by", "created_at", "updated_at")
+        read_only_fields = ("status", "paid_at", "created_by", "updated_by", "reviewed_by", "reviewed_at", "created_at", "updated_at")
 
     def get_refunded_total(self, obj):
         return sum(refund.amount for refund in obj.refunds.all() if refund.status == "completed")
@@ -564,6 +623,17 @@ class PaymentSerializer(serializers.ModelSerializer):
         payment = Payment.objects.create(status="paid", paid_at=timezone.now(), created_by=actor, updated_by=actor, **validated_data)
         Transaction.objects.create(type="payment", amount=payment.amount, appointment=payment.appointment, payment=payment, description=payment.notes, created_by=actor, updated_by=actor)
         return payment
+
+
+class EmployeePaymentReportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ("amount", "payment_method", "notes")
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("مبلغ پرداخت باید بیشتر از صفر باشد.")
+        return value
 
 
 class RefundSerializer(serializers.ModelSerializer):
