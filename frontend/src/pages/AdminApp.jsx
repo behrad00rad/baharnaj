@@ -905,6 +905,10 @@ function CrudPage({
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({});
   const [toast, setToast] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [optionDrafts, setOptionDrafts] = useState({});
+  const [optionErrors, setOptionErrors] = useState({});
+  const [optionSaving, setOptionSaving] = useState({});
   useEffect(() => {
     const selectFields = fields.filter((field) => field.optionsEndpoint);
     if (!selectFields.length) return;
@@ -917,23 +921,49 @@ function CrudPage({
       ),
     ).then((results) => setOptions(Object.fromEntries(results)));
   }, [endpoint]);
+  const createOption = async (field) => {
+    const name = (optionDrafts[field.name] || "").trim();
+    if (!name) {
+      setOptionErrors({ ...optionErrors, [field.name]: "نام دسته‌بندی را وارد کنید" });
+      return;
+    }
+    setOptionSaving({ ...optionSaving, [field.name]: true });
+    setOptionErrors({ ...optionErrors, [field.name]: "" });
+    try {
+      const { data } = await api.post(field.createEndpoint, { name });
+      setOptions({ ...options, [field.name]: [...(options[field.name] || []), data] });
+      setForm({ ...form, [field.name]: data.id });
+      setOptionDrafts({ ...optionDrafts, [field.name]: "" });
+    } catch (error) {
+      const detail = error.response?.data?.name || error.response?.data?.detail;
+      setOptionErrors({ ...optionErrors, [field.name]: Array.isArray(detail) ? detail.join(" ") : detail || "ثبت دسته‌بندی انجام نشد" });
+    } finally {
+      setOptionSaving({ ...optionSaving, [field.name]: false });
+    }
+  };
   const submit = async (event) => {
     event.preventDefault();
+    if (saving) return;
+    setSaving(true);
     let body = form;
     if (uploads) {
       body = new FormData();
       Object.entries(form)
-        .filter(([, value]) => value !== "" && value !== undefined)
+        .filter(([name, value]) => !["id", "image_url", "category_name", "created_at"].includes(name) && value !== "" && value !== undefined)
         .forEach(([name, value]) => body.append(name, value));
     }
     try {
-      await api.post(endpoint, body);
+      if (form.id) await api.patch(`${endpoint}${form.id}/`, body);
+      else await api.post(endpoint, body);
       setOpen(false);
       setForm({});
       resource.reload();
       setToast("با موفقیت ذخیره شد");
-    } catch {
-      setToast("ذخیره اطلاعات انجام نشد");
+    } catch (error) {
+      const detail = error.response?.data?.detail || Object.values(error.response?.data || {})[0];
+      setToast(Array.isArray(detail) ? detail.join(" ") : detail || "ذخیره اطلاعات انجام نشد");
+    } finally {
+      setSaving(false);
     }
   };
   return (
@@ -1027,29 +1057,45 @@ function CrudPage({
                 <label key={field.name}>
                   {field.label}
                   {field.type === "select" ? (
-                    <select
-                      value={form[field.name] || ""}
-                      onChange={(event) =>
-                        setForm({ ...form, [field.name]: event.target.value })
-                      }
-                    >
-                      <option value="">انتخاب کنید</option>
-                      {(options[field.name] || field.options || []).map(
-                        (option) => (
-                          <option
-                            key={option.id || option.value}
-                            value={option.id || option.value}
-                          >
-                            {field.optionLabel
-                              ? field.optionLabel(option)
-                              : option.name ||
-                                option.persian_name ||
-                                option.label ||
-                                `#${option.id}`}
-                          </option>
-                        ),
+                    <>
+                      <select
+                        value={form[field.name] || ""}
+                        onChange={(event) =>
+                          setForm({ ...form, [field.name]: event.target.value })
+                        }
+                      >
+                        <option value="">انتخاب کنید</option>
+                        {(options[field.name] || field.options || []).map(
+                          (option) => (
+                            <option
+                              key={option.id || option.value}
+                              value={option.id || option.value}
+                            >
+                              {field.optionLabel
+                                ? field.optionLabel(option)
+                                : option.name ||
+                                  option.persian_name ||
+                                  option.label ||
+                                  `#${option.id}`}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                      {field.createEndpoint && (
+                        <span className="admin-inline-option">
+                          <input
+                            aria-label="نام دسته‌بندی جدید"
+                            placeholder="نام دسته‌بندی جدید"
+                            value={optionDrafts[field.name] || ""}
+                            onChange={(event) => setOptionDrafts({ ...optionDrafts, [field.name]: event.target.value })}
+                          />
+                          <button type="button" disabled={optionSaving[field.name]} onClick={() => createOption(field)}>
+                            {optionSaving[field.name] ? "در حال ذخیره..." : "+ افزودن دسته‌بندی جدید"}
+                          </button>
+                          {optionErrors[field.name] && <small className="admin-field-error">{optionErrors[field.name]}</small>}
+                        </span>
                       )}
-                    </select>
+                    </>
                   ) : (
                     <input
                       type={field.type || "text"}
@@ -1072,8 +1118,8 @@ function CrudPage({
                 </label>
               );
             })}
-            <button className="admin-primary" type="submit">
-              ذخیره تغییرات
+            <button className="admin-primary" type="submit" disabled={saving}>
+              {saving ? "در حال ذخیره..." : "ذخیره تغییرات"}
             </button>
           </form>
         </div>
@@ -1448,9 +1494,16 @@ function Content() {
       uploads
       fields={[
         ["title", "عنوان"],
-        ["category", "دسته‌بندی"],
+        {
+          name: "category",
+          label: "دسته‌بندی",
+          type: "select",
+          optionsEndpoint: "admin/gallery-categories/",
+          createEndpoint: "admin/gallery-categories/",
+        },
         ["image", "تصویر", "file"],
         ["description", "توضیحات"],
+        ["display_order", "ترتیب نمایش", "number"],
       ]}
     />
   );

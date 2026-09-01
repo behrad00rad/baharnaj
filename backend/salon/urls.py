@@ -1,9 +1,9 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminServiceViewSet,
+from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminGalleryCategoryView, AdminServiceViewSet,
 					AdminUserViewSet, AdminCustomerOptionsView, AdminEmployeeEligibleUsersView, AdminRevenueView, AdminServiceCategoryViewSet, AdminTransactionTypesView, BookingHoldDeleteView,
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView, BookingHoldView,
-					EmployeeAppointmentsView, EmployeeListView, EmployeeStatisticsView,
+					EmployeeAppointmentsView, EmployeeListView, EmployeeStatisticsView, GalleryCategoryListView,
 					ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
 					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
 					PaymentViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
@@ -29,6 +29,7 @@ router.register("employee/schedule", EmployeeWorkingScheduleViewSet, basename="e
 urlpatterns = [
 	path("services/", ServiceListView.as_view(), name="service-list"),
 	path("gallery/", GalleryListView.as_view(), name="gallery-list"),
+	path("gallery/categories/", GalleryCategoryListView.as_view(), name="gallery-category-list"),
 	path("employees/", EmployeeListView.as_view(), name="employee-list"),
 	path("availability/", AvailabilityView.as_view(), name="availability-list"),
 	path("appointments/", AppointmentCreateView.as_view(), name="appointment-create"),
@@ -43,6 +44,7 @@ urlpatterns = [
 	path("employee/password/", EmployeePasswordChangeView.as_view(), name="employee-password-change"),
 	path("employee/earnings/", EmployeeEarningsView.as_view(), name="employee-earnings"),
 	path("admin/statistics/", AdminStatisticsView.as_view(), name="admin-statistics"),
+	path("admin/gallery-categories/", AdminGalleryCategoryView.as_view(), name="admin-gallery-category-list"),
 	path("admin/employee-eligible-users/", AdminEmployeeEligibleUsersView.as_view(), name="admin-employee-eligible-users"),
 	path("admin/customer-options/", AdminCustomerOptionsView.as_view(), name="admin-customer-options"),
 	path("admin/transaction-types/", AdminTransactionTypesView.as_view(), name="admin-transaction-types"),

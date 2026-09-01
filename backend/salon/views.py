@@ -18,10 +18,10 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
+from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeProfile, EmployeeService, GalleryAsset, GalleryCategory, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeePasswordChangeSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeePasswordChangeSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, GalleryCategorySerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 class ServiceListView(generics.ListAPIView):
@@ -32,8 +32,14 @@ class ServiceListView(generics.ListAPIView):
 
 class GalleryListView(generics.ListAPIView):
     permission_classes = (AllowAny,)
-    queryset = GalleryAsset.objects.filter(is_published=True)
+    queryset = GalleryAsset.objects.filter(is_published=True).select_related("category")
     serializer_class = GalleryAssetSerializer
+
+
+class GalleryCategoryListView(generics.ListAPIView):
+    permission_classes = (AllowAny,)
+    queryset = GalleryCategory.objects.filter(is_active=True)
+    serializer_class = GalleryCategorySerializer
 
 
 class EmployeeListView(generics.ListAPIView):
@@ -219,8 +225,14 @@ class AdminServiceViewSet(AdminModelViewSet):
 
 
 class AdminGalleryViewSet(AdminModelViewSet):
-    queryset = GalleryAsset.objects.all()
-    serializer_class = GalleryAssetSerializer
+    queryset = GalleryAsset.objects.select_related("category")
+    serializer_class = AdminGalleryAssetSerializer
+
+
+class AdminGalleryCategoryView(generics.ListCreateAPIView):
+    permission_classes = (IsAdmin,)
+    queryset = GalleryCategory.objects.filter(is_active=True)
+    serializer_class = GalleryCategorySerializer
 
 
 class AdminEmployeeViewSet(AdminModelViewSet):

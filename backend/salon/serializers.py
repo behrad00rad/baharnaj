@@ -10,7 +10,7 @@ from rest_framework import serializers
 
 from .models import (
     AccountLogin, AdminActionLog, Appointment, AppointmentItem, CustomerProfile, EmployeeProfile,
-    EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage,
+    EmployeeService, GalleryAsset, GalleryCategory, Payment, Service, ServiceCategory, ServiceImage,
     BookingHold, BookingHoldItem, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
 )
 from .validators import validate_no_employee_overlap
@@ -40,6 +40,7 @@ class ServiceSerializer(serializers.ModelSerializer):
 
 class GalleryAssetSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
+    category = serializers.CharField(source="category.name", read_only=True)
 
     class Meta:
         model = GalleryAsset
@@ -51,6 +52,34 @@ class GalleryAssetSerializer(serializers.ModelSerializer):
 
     def get_image_url(self, obj):
         return absolute_media_url(self.context.get("request"), obj.image.url if obj.image else obj.image_url)
+
+
+class GalleryCategorySerializer(serializers.ModelSerializer):
+    is_active = serializers.BooleanField(required=False, default=True)
+
+    class Meta:
+        model = GalleryCategory
+        fields = ("id", "name", "is_active", "display_order")
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("نام دسته‌بندی نمی‌تواند خالی باشد.")
+        duplicate = GalleryCategory.objects.filter(name__iexact=value)
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise serializers.ValidationError("این دسته‌بندی قبلاً ثبت شده است.")
+        return value
+
+
+class AdminGalleryAssetSerializer(GalleryAssetSerializer):
+    category = serializers.PrimaryKeyRelatedField(queryset=GalleryCategory.objects.filter(is_active=True))
+    category_name = serializers.CharField(source="category.name", read_only=True)
+    is_published = serializers.BooleanField(required=False, default=True)
+
+    class Meta(GalleryAssetSerializer.Meta):
+        fields = GalleryAssetSerializer.Meta.fields + ("category_name", "is_published")
 
 
 class EmployeeSerializer(serializers.ModelSerializer):

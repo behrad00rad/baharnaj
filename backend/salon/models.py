@@ -353,7 +353,7 @@ class Refund(AuditedModel):
 
 class GalleryAsset(models.Model):
     title = models.CharField(max_length=160, blank=True)
-    category = models.CharField(max_length=80, blank=True)
+    category = models.ForeignKey("GalleryCategory", on_delete=models.PROTECT, related_name="assets", null=True, blank=True)
     image_url = models.URLField(max_length=500, blank=True)
     image = models.ImageField(upload_to="gallery/", blank=True)
     description = models.TextField(blank=True)
@@ -363,6 +363,24 @@ class GalleryAsset(models.Model):
 
     class Meta:
         ordering = ("display_order", "-created_at")
+
+
+class GalleryCategory(models.Model):
+    name = models.CharField(max_length=80, unique=True)
+    is_active = models.BooleanField(default=True)
+    display_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("display_order", "name")
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.strip()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
 
 
 class Promotion(models.Model):

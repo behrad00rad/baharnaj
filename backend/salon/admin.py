@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from .models import (
     AccountLogin, Appointment, AppointmentItem, AppointmentStatusHistory, CustomerProfile,
-    EmployeeProfile, EmployeeService, GalleryAsset, HomepageSection, Payment, Promotion,
+    EmployeeProfile, EmployeeService, GalleryAsset, GalleryCategory, HomepageSection, Payment, Promotion,
     Refund, SalonSettings, ScheduleException, Service, ServiceCategory, ServiceImage,
     TimeOff, Transaction, User, WorkingSchedule,
 )
@@ -20,7 +20,7 @@ admin.site.register((CustomerProfile, EmployeeProfile, EmployeeService, ServiceC
 admin.site.register((WorkingSchedule, ScheduleException, TimeOff))
 admin.site.register((Appointment, AppointmentItem, AppointmentStatusHistory))
 admin.site.register((Payment, Transaction, Refund))
-admin.site.register((GalleryAsset, Promotion, HomepageSection, SalonSettings, AccountLogin))
+admin.site.register((GalleryAsset, GalleryCategory, Promotion, HomepageSection, SalonSettings, AccountLogin))
 
 
 @admin.register(Service)
