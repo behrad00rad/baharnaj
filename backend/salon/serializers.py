@@ -3,22 +3,26 @@ from django.utils import timezone
 from uuid import uuid4
 
 from django.conf import settings
+from django.contrib.auth import password_validation
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
+from django.db.models import Sum
 from rest_framework import serializers
 
 from .models import (
-    AccountLogin, AdminActionLog, Appointment, AppointmentItem, CustomerProfile, EmployeeProfile,
-    EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage,
+    AccountLogin, AdminActionLog, Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile,
+    EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, ServiceImage,
     BookingHold, BookingHoldItem, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
 )
 from .validators import validate_no_employee_overlap
 from .security import validate_image_upload, validate_phone
 
 
-def absolute_gallery_url(request, value):
-    if not value or not value.startswith("/"):
+def absolute_media_url(request, value):
+    if not value or value.startswith(("http://", "https://")):
         return value
     if settings.PUBLIC_BACKEND_URL:
-        return f"{settings.PUBLIC_BACKEND_URL}{value}"
+        return f"{settings.PUBLIC_BACKEND_URL}/{value.lstrip('/')}"
     return request.build_absolute_uri(value) if request else value
 
 
@@ -37,6 +41,7 @@ class ServiceSerializer(serializers.ModelSerializer):
 
 class GalleryAssetSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
+    category = serializers.CharField(source="category.name", read_only=True)
 
     class Meta:
         model = GalleryAsset
@@ -47,7 +52,35 @@ class GalleryAssetSerializer(serializers.ModelSerializer):
         return validate_image_upload(value)
 
     def get_image_url(self, obj):
-        return absolute_gallery_url(self.context.get("request"), obj.image.url if obj.image else obj.image_url)
+        return absolute_media_url(self.context.get("request"), obj.image.url if obj.image else obj.image_url)
+
+
+class GalleryCategorySerializer(serializers.ModelSerializer):
+    is_active = serializers.BooleanField(required=False, default=True)
+
+    class Meta:
+        model = GalleryCategory
+        fields = ("id", "name", "is_active", "display_order")
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("نام دسته‌بندی نمی‌تواند خالی باشد.")
+        duplicate = GalleryCategory.objects.filter(name__iexact=value)
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise serializers.ValidationError("این دسته‌بندی قبلاً ثبت شده است.")
+        return value
+
+
+class AdminGalleryAssetSerializer(GalleryAssetSerializer):
+    category = serializers.PrimaryKeyRelatedField(queryset=GalleryCategory.objects.filter(is_active=True))
+    category_name = serializers.CharField(source="category.name", read_only=True)
+    is_published = serializers.BooleanField(required=False, default=True)
+
+    class Meta(GalleryAssetSerializer.Meta):
+        fields = GalleryAssetSerializer.Meta.fields + ("category_name", "is_published")
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
@@ -60,7 +93,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
 
     def get_profile_photo_url(self, obj):
-        return absolute_gallery_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
+        return absolute_media_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
 
     def validate_profile_photo(self, value):
         if isinstance(value, str):
@@ -79,12 +112,38 @@ class EmployeeSelfProfileSerializer(serializers.ModelSerializer):
         extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
 
     def get_profile_photo_url(self, obj):
-        return absolute_gallery_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
+        return absolute_media_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
 
     def validate_profile_photo(self, value):
         if isinstance(value, str):
             raise serializers.ValidationError("لطفاً یک فایل تصویر جدید انتخاب کنید.")
         return validate_image_upload(value)
+
+
+class EmployeePasswordChangeSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True)
+    new_password_confirm = serializers.CharField(write_only=True)
+
+    def validate_current_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("رمز عبور فعلی صحیح نیست.")
+        return value
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise serializers.ValidationError({"new_password_confirm": "تکرار رمز عبور جدید مطابقت ندارد."})
+        try:
+            password_validation.validate_password(attrs["new_password"], self.context["request"].user)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError({"new_password": list(error.messages)}) from error
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.context["request"].user
+        user.set_password(self.validated_data["new_password"])
+        user.save(update_fields=("password",))
+        return user
 
 
 class AdminEmployeeSerializer(serializers.ModelSerializer):
@@ -99,7 +158,7 @@ class AdminEmployeeSerializer(serializers.ModelSerializer):
         extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
 
     def get_profile_photo_url(self, obj):
-        return absolute_gallery_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
+        return absolute_media_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
 
     def validate_profile_photo(self, value):
         if isinstance(value, str):
@@ -148,6 +207,7 @@ class AdminEmployeeCreateSerializer(AdminEmployeeSerializer):
                 raise serializers.ValidationError({"user": "برای این حساب، پروفایل متخصص وجود دارد."})
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         services = validated_data.pop("services", [])
         user = validated_data.pop("user", None)
@@ -207,9 +267,15 @@ class ServiceAdminSerializer(serializers.ModelSerializer):
 
 
 class ServiceImageSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
     class Meta:
         model = ServiceImage
         fields = "__all__"
+        extra_kwargs = {"image": {"write_only": True}}
+
+    def get_image_url(self, obj):
+        return absolute_media_url(self.context.get("request"), obj.image.url if obj.image else obj.image_url)
 
     def validate_image(self, value):
         return validate_image_upload(value)
@@ -226,7 +292,7 @@ class AppointmentItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = AppointmentItem
         fields = ("id", "service", "service_name", "employee", "employee_name", "date", "start_time", "end_time", "price_snapshot", "duration_snapshot", "notes", "completion_status", "status")
-        read_only_fields = ("id", "price_snapshot", "duration_snapshot")
+        read_only_fields = ("id", "price_snapshot", "duration_snapshot", "completion_status", "status")
 
     def validate(self, attrs):
         service = attrs.get("service", self.instance.service if self.instance else None)
@@ -257,10 +323,17 @@ class AppointmentSerializer(serializers.ModelSerializer):
     hold_token = serializers.UUIDField(write_only=True, required=False)
     create_account = serializers.BooleanField(write_only=True, required=False, default=False)
     account_password = serializers.CharField(write_only=True, required=False, min_length=8)
+    appointment_total = serializers.IntegerField(read_only=True)
+    paid_total = serializers.IntegerField(read_only=True)
+    refunded_total = serializers.IntegerField(read_only=True)
+    net_paid = serializers.IntegerField(read_only=True)
+    remaining_total = serializers.IntegerField(read_only=True)
+    payment_status = serializers.CharField(read_only=True)
+    payments = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
-        fields = ("id", "customer", "items", "status", "notes", "created_by", "updated_by", "created_at", "updated_at", "confirmation_code", "customer_name", "customer_phone", "hold_token", "create_account", "account_password")
+        fields = ("id", "customer", "items", "status", "notes", "created_by", "updated_by", "created_at", "updated_at", "confirmation_code", "customer_name", "customer_phone", "hold_token", "create_account", "account_password", "appointment_total", "paid_total", "refunded_total", "net_paid", "remaining_total", "payment_status", "payments")
         read_only_fields = ("id", "customer", "created_by", "updated_by", "created_at", "updated_at")
 
     def get_customer_name(self, obj):
@@ -268,6 +341,31 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
     def get_customer_phone(self, obj):
         return obj.customer.user.phone
+
+    def get_payments(self, obj):
+        return [
+            {
+                "id": payment.id,
+                "amount": payment.amount,
+                "payment_method": payment.payment_method,
+                "status": payment.status,
+                "paid_at": payment.paid_at,
+                "provider_reference": payment.provider_reference,
+                "notes": payment.notes,
+                "refunded_total": sum(refund.amount for refund in payment.refunds.all() if refund.status == "completed"),
+                "refunds": [
+                    {
+                        "id": refund.id,
+                        "amount": refund.amount,
+                        "reason": refund.reason,
+                        "status": refund.status,
+                        "created_at": refund.created_at,
+                    }
+                    for refund in payment.refunds.all()
+                ],
+            }
+            for payment in obj.payments.all()
+        ]
 
     def validate_items(self, items):
         if not items:
@@ -323,16 +421,95 @@ class AppointmentSerializer(serializers.ModelSerializer):
         return appointment
 
 
+class EmployeeAppointmentSerializer(serializers.ModelSerializer):
+    items = serializers.SerializerMethodField()
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
+    payment_status = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = Appointment
+        fields = ("id", "items", "status", "notes", "customer_name", "customer_phone", "payment_status")
+
+    def get_items(self, obj):
+        request = self.context.get("request")
+        items = getattr(obj, "employee_items", None)
+        if items is None:
+            items = obj.items.filter(employee__user=request.user)
+        return AppointmentItemSerializer(items, many=True, context=self.context).data
+
+    def get_customer_name(self, obj):
+        return obj.customer.user.get_full_name() or obj.customer.user.username
+
+    def get_customer_phone(self, obj):
+        return obj.customer.user.phone
+
+
+class EmployeeSelfBookingSerializer(serializers.Serializer):
+    customer = serializers.PrimaryKeyRelatedField(queryset=CustomerProfile.objects.all(), required=False)
+    customer_name = serializers.CharField(required=False, allow_blank=False)
+    customer_phone = serializers.CharField(required=False, allow_blank=False)
+    services = serializers.PrimaryKeyRelatedField(queryset=Service.objects.filter(is_active=True, is_bookable=True), many=True)
+    date = serializers.DateField()
+    start_time = serializers.TimeField()
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        if not attrs.get("customer") and not (attrs.get("customer_name") and attrs.get("customer_phone")):
+            raise serializers.ValidationError({"customer": "یک مشتری را انتخاب کنید یا نام و شماره مشتری جدید را وارد کنید."})
+        if attrs["date"] < timezone.localdate():
+            raise serializers.ValidationError({"date": "تاریخ نوبت نمی‌تواند در گذشته باشد."})
+        employee = self.context["request"].user.employee_profile
+        start = datetime.combine(attrs["date"], attrs["start_time"])
+        item_data = []
+        for service in attrs["services"]:
+            end = start + timedelta(minutes=service.duration)
+            serializer = AppointmentItemSerializer(
+                data={"service": service.pk, "employee": employee.pk, "date": attrs["date"], "start_time": start.time(), "end_time": end.time()},
+                context=self.context,
+            )
+            serializer.is_valid(raise_exception=True)
+            item_data.append(serializer.validated_data)
+            start = end
+        attrs["items"] = item_data
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        request = self.context["request"]
+        customer = validated_data.pop("customer", None)
+        name = validated_data.pop("customer_name", "")
+        phone = validated_data.pop("customer_phone", "")
+        services = validated_data.pop("services")
+        validated_data.pop("date")
+        validated_data.pop("start_time")
+        item_data = validated_data.pop("items")
+        if customer is None:
+            phone = validate_phone(phone)
+            user = User.objects.filter(phone=phone, role="customer").first()
+            if user is None:
+                user = User.objects.create_user(username=f"employee_guest_{phone}_{uuid4().hex[:8]}", first_name=name, phone=phone, role="customer")
+            elif name and user.get_full_name() != name:
+                user.first_name = name
+                user.save(update_fields=("first_name",))
+            customer, _ = CustomerProfile.objects.get_or_create(user=user)
+        appointment = Appointment.objects.create(customer=customer, created_by=request.user, updated_by=request.user, **validated_data)
+        AppointmentItem.objects.bulk_create([
+            AppointmentItem(appointment=appointment, created_by=request.user, updated_by=request.user, price_snapshot=item["service"].price, duration_snapshot=item["service"].duration, **item)
+            for item in item_data
+        ])
+        return appointment
+
+
 class AdminAppointmentCreateSerializer(serializers.ModelSerializer):
     items = AppointmentItemSerializer(many=True)
     customer = serializers.PrimaryKeyRelatedField(queryset=CustomerProfile.objects.all(), required=False)
     customer_name = serializers.CharField(required=False, write_only=True, allow_blank=False)
     customer_phone = serializers.CharField(required=False, write_only=True, allow_blank=False)
-    payment_status = serializers.ChoiceField(choices=Payment.STATUS_CHOICES, write_only=True, required=False)
 
     class Meta:
         model = Appointment
-        fields = ("id", "customer", "customer_name", "customer_phone", "items", "notes", "status", "payment_status")
+        fields = ("id", "customer", "customer_name", "customer_phone", "items", "notes", "status")
         read_only_fields = ("id",)
 
     def validate(self, attrs):
@@ -354,7 +531,6 @@ class AdminAppointmentCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items = validated_data.pop("items")
-        payment_status = validated_data.pop("payment_status", None)
         customer = validated_data.pop("customer", None)
         customer_name = validated_data.pop("customer_name", None)
         customer_phone = validated_data.pop("customer_phone", None)
@@ -369,8 +545,6 @@ class AdminAppointmentCreateSerializer(serializers.ModelSerializer):
             customer, _ = CustomerProfile.objects.get_or_create(user=user)
         appointment = Appointment.objects.create(customer=customer, created_by=actor, updated_by=actor, **validated_data)
         AppointmentItem.objects.bulk_create([AppointmentItem(appointment=appointment, created_by=actor, updated_by=actor, price_snapshot=item["service"].price, duration_snapshot=item["service"].duration, **item) for item in items])
-        if payment_status:
-            Payment.objects.create(appointment=appointment, amount=sum(item["service"].price for item in items), status=payment_status, created_by=actor, updated_by=actor)
         return appointment
 
     def to_representation(self, instance):
@@ -409,12 +583,97 @@ class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transaction
         fields = "__all__"
+        read_only_fields = tuple(field.name for field in Transaction._meta.fields)
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    refunded_total = serializers.SerializerMethodField()
+    refundable_total = serializers.SerializerMethodField()
+    reporter_name = serializers.CharField(source="created_by.get_full_name", read_only=True)
+    customer_name = serializers.CharField(source="appointment.customer.user.get_full_name", read_only=True)
+    reviewed_by_name = serializers.CharField(source="reviewed_by.get_full_name", read_only=True)
+
     class Meta:
         model = Payment
         fields = "__all__"
+        read_only_fields = ("status", "paid_at", "created_by", "updated_by", "reviewed_by", "reviewed_at", "created_at", "updated_at")
+
+    def get_refunded_total(self, obj):
+        return sum(refund.amount for refund in obj.refunds.all() if refund.status == "completed")
+
+    def get_refundable_total(self, obj):
+        return max(obj.amount - self.get_refunded_total(obj), 0)
+
+    def validate(self, attrs):
+        appointment = attrs.get("appointment")
+        amount = attrs.get("amount", 0)
+        if amount <= 0:
+            raise serializers.ValidationError({"amount": "مبلغ پرداخت باید بیشتر از صفر باشد."})
+        if appointment and amount > appointment.remaining_total:
+            raise serializers.ValidationError({"amount": "مبلغ پرداخت از مانده نوبت بیشتر است."})
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        actor = self.context["request"].user
+        appointment = Appointment.objects.select_for_update().get(pk=validated_data["appointment"].pk)
+        if validated_data["amount"] > appointment.remaining_total:
+            raise serializers.ValidationError({"amount": "مبلغ پرداخت از مانده نوبت بیشتر است."})
+        validated_data["appointment"] = appointment
+        payment = Payment.objects.create(status="paid", paid_at=timezone.now(), created_by=actor, updated_by=actor, **validated_data)
+        Transaction.objects.create(type="payment", amount=payment.amount, appointment=payment.appointment, payment=payment, description=payment.notes, created_by=actor, updated_by=actor)
+        return payment
+
+
+class EmployeePaymentReportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ("amount", "payment_method", "notes")
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("مبلغ پرداخت باید بیشتر از صفر باشد.")
+        return value
+
+
+class RefundSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Refund
+        fields = "__all__"
+        read_only_fields = ("status", "created_by", "updated_by", "created_at", "updated_at")
+
+    def validate(self, attrs):
+        payment = attrs.get("payment")
+        amount = attrs.get("amount", 0)
+        refunded = sum(refund.amount for refund in payment.refunds.filter(status="completed")) if payment else 0
+        if amount <= 0:
+            raise serializers.ValidationError({"amount": "مبلغ بازپرداخت باید بیشتر از صفر باشد."})
+        if not payment or payment.status not in {"paid", "refunded"} or amount > payment.amount - refunded:
+            raise serializers.ValidationError({"amount": "مبلغ بازپرداخت از مانده قابل استرداد بیشتر است."})
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        actor = self.context["request"].user
+        payment = Payment.objects.select_for_update().get(pk=validated_data["payment"].pk)
+        refunded = payment.refunds.filter(status="completed").aggregate(total=Sum("amount"))["total"] or 0
+        if validated_data["amount"] > payment.amount - refunded:
+            raise serializers.ValidationError({"amount": "مبلغ بازپرداخت از مانده قابل استرداد بیشتر است."})
+        validated_data["payment"] = payment
+        refund = Refund.objects.create(created_by=actor, updated_by=actor, **validated_data)
+        refund.complete(changed_by=actor)
+        return refund
+
+
+class EmployeeCommissionSerializer(serializers.ModelSerializer):
+    employee = serializers.IntegerField(source="appointment_item.employee_id", read_only=True)
+    employee_name = serializers.CharField(source="appointment_item.employee.user.get_full_name", read_only=True)
+    service_name = serializers.CharField(source="appointment_item.service.persian_name", read_only=True)
+
+    class Meta:
+        model = EmployeeCommission
+        fields = ("id", "appointment_item", "employee", "employee_name", "service_name", "base_amount", "commission_rate_snapshot", "commission_amount", "status", "created_at")
+        read_only_fields = fields
 
 
 class EmployeeServiceSerializer(serializers.ModelSerializer):

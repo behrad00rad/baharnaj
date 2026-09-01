@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link, Route, Routes, useNavigate } from "react-router-dom";
-import { toJalaali } from "jalaali-js";
+import { toGregorian, toJalaali } from "jalaali-js";
 import { JalaliDatePicker } from "../components/DatePicker";
 import { api, toman } from "../shared/api";
 
-const today = new Date().toISOString().slice(0, 10);
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(new Date());
 const unwrap = (data) => data?.results || data || [];
+const firstError = (error, fallback) => {
+  const value = Object.values(error.response?.data || {})[0];
+  return (Array.isArray(value) ? value[0] : value) || fallback;
+};
 const labels = {
   pending: "در انتظار",
   confirmed: "تأیید شده",
@@ -83,11 +87,8 @@ function Stat({ label, value, note, accent = false }) {
 
 function DashboardHome() {
   const navigate = useNavigate();
-  const appointments = useResource("admin/appointments/");
-  const dailyRevenue = useResource("admin/revenue/?period=day");
-  const weeklyRevenue = useResource("admin/revenue/?period=week");
-  const monthlyRevenue = useResource("admin/revenue/?period=month");
-  const services = useResource("services/");
+  const appointments = useResource(`admin/appointments/?start_date=${today}&end_date=${today}`);
+  const stats = useResource("admin/statistics/");
   const [activity, setActivity] = useState([]);
   useEffect(() => {
     api
@@ -95,10 +96,9 @@ function DashboardHome() {
       .then(({ data }) => setActivity(unwrap(data)))
       .catch(() => setActivity([]));
   }, []);
-  const todays = appointments.data.filter(
-    (item) =>
-      item.items?.some((line) => line.date === today) || item.date === today,
-  );
+  const todays = appointments.data;
+  const todayStats = stats.data.today || {};
+  const statValue = (value) => stats.loading ? "…" : stats.error ? "—" : value || 0;
   return (
     <div className="admin-page">
       <Header
@@ -109,22 +109,25 @@ function DashboardHome() {
       />
       <div className="admin-stat-grid">
         <Stat
-          label="درآمد امروز"
-          value={toman(dailyRevenue.data.total)}
+          label="نوبت‌های امروز"
+          value={statValue(todayStats.appointments)}
           accent
         />
         <Stat
-          label="درآمد این هفته"
-          value={toman(weeklyRevenue.data.total)}
-          note="داده‌های ثبت‌شده"
+          label="نوبت‌های این هفته"
+          value={statValue(stats.data.week?.appointments)}
         />
-        <Stat label="درآمد این ماه" value={toman(monthlyRevenue.data.total)} />
+        <Stat label="نوبت‌های این ماه" value={statValue(stats.data.month?.appointments)} />
         <Stat
           label="درخواست‌های در انتظار"
-          value={
-            appointments.data.filter((item) => item.status === "pending").length
-          }
+          value={statValue(todayStats.pending)}
         />
+      </div>
+      <div className="admin-stat-grid">
+        <Stat label="درآمد خالص امروز" value={stats.loading ? "…" : toman(stats.data.revenue?.today)} accent />
+        <Stat label="درآمد خالص این هفته" value={stats.loading ? "…" : toman(stats.data.revenue?.week)} />
+        <Stat label="درآمد خالص این ماه" value={stats.loading ? "…" : toman(stats.data.revenue?.month)} />
+        <Stat label="تأییدشده امروز" value={statValue(todayStats.confirmed)} />
       </div>
       <div className="admin-grid-two">
         <section className="admin-panel">
@@ -137,6 +140,8 @@ function DashboardHome() {
           </div>
           {appointments.loading ? (
             <Skeleton />
+          ) : appointments.error ? (
+            <Empty title="دریافت نوبت‌های امروز انجام نشد" text="لطفاً دوباره تلاش کنید." />
           ) : todays.length ? (
             <div className="appointment-list">
               {todays.slice(0, 6).map((item) => (
@@ -151,49 +156,27 @@ function DashboardHome() {
           <div className="panel-title">
             <div>
               <span>گزارش مالی</span>
-              <h2>وضعیت پرداخت‌ها</h2>
-            </div>
-          </div>
-          <div className="ring-stat">
-            <div className="fake-ring">
-              <b>{dailyRevenue.data.total ? "✓" : "۰"}</b>
-              <small>پرداخت موفق</small>
-            </div>
-            <div className="legend">
-              <span>
-                <i className="dot green" />
-                پرداخت‌شده
-              </span>
-              <span>
-                <i className="dot yellow" />
-                در انتظار
-              </span>
-              <span>
-                <i className="dot red" />
-                مانده
-              </span>
+              <h2>درآمد</h2>
             </div>
           </div>
           <div className="mini-summary">
             <span>
+              دریافتی امروز
+              <b>{toman(stats.data.revenue?.today)}</b>
+            </span>
+            <span>
+              مبنای محاسبه
+              <b>پرداخت منهای بازپرداخت</b>
+            </span>
+          </div>
+          <div className="mini-summary">
+            <span>
               نوبت‌های انجام‌شده{" "}
-              <b>
-                {
-                  appointments.data.filter(
-                    (item) => item.status === "completed",
-                  ).length
-                }
-              </b>
+              <b>{todayStats.completed || 0}</b>
             </span>
             <span>
               لغوشده{" "}
-              <b>
-                {
-                  appointments.data.filter(
-                    (item) => item.status === "cancelled",
-                  ).length
-                }
-              </b>
+              <b>{todayStats.cancelled || 0}</b>
             </span>
           </div>
         </section>
@@ -206,22 +189,17 @@ function DashboardHome() {
               <h2>محبوب‌ترین خدمات</h2>
             </div>
           </div>
-          {services.loading ? (
+          {stats.loading ? (
             <Skeleton count={5} />
-          ) : services.data.length ? (
+          ) : stats.error ? (
+            <Empty title="دریافت آمار خدمات انجام نشد" />
+          ) : stats.data.top_services?.length ? (
             <div className="rank-list">
-              {services.data.slice(0, 5).map((service, index) => (
+              {stats.data.top_services.map((service, index) => (
                 <div key={service.id}>
                   <b>۰{index + 1}</b>
-                  <span>{service.persian_name || service.name}</span>
-                  <em>
-                    {
-                      appointments.data.filter((item) =>
-                        item.items?.some((line) => line.service === service.id),
-                      ).length
-                    }{" "}
-                    رزرو
-                  </em>
+                  <span>{service.name}</span>
+                  <em>{service.appointments} رزرو</em>
                 </div>
               ))}
             </div>
@@ -268,13 +246,14 @@ function DashboardHome() {
 }
 function AppointmentRow({ item, onClick }) {
   const line = item.items?.[0] || item;
+  const details = item.items?.map((entry) => `${entry.service_name} · ${entry.employee_name}`).join("، ") || line.service_name;
   return (
     <button className="appointment-row" onClick={onClick}>
       <span className="time">{line.start_time || "--:--"}</span>
       <span>
         <b>{item.customer_name || item.customer?.name || `رزرو #${item.id}`}</b>
         <small>
-          {line.service_name || `نوبت ${item.items?.length || 1} خدمت`}
+          {details || `نوبت ${item.items?.length || 1} خدمت`}
         </small>
       </span>
       <em className={`status ${item.status}`}>
@@ -288,260 +267,86 @@ function Appointments() {
   const employees = useResource("admin/employees/");
   const services = useResource("services/");
   const [selected, setSelected] = useState(null);
-  const [view, setView] = useState("day");
-  const [anchor, setAnchor] = useState(today);
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [visibleMonth, setVisibleMonth] = useState(`${today.slice(0, 7)}-01`);
   const [status, setStatus] = useState("all");
   const [employee, setEmployee] = useState("");
   const [service, setService] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [toast, setToast] = useState("");
-  const range = dateRange(anchor, view);
-  const query = new URLSearchParams({
-    start_date: range.start,
-    end_date: range.end,
-    ...(status !== "all" && { status }),
-    ...(employee && { employee }),
-    ...(service && { service }),
-  });
+  const range = calendarRange(visibleMonth);
+  const query = new URLSearchParams({ start_date: range.start, end_date: range.end, ...(status !== "all" && { status }), ...(employee && { employee }), ...(service && { service }) });
   const resource = useResource(`admin/appointments/?${query}`);
-  const moveRange = (direction) =>
-    setAnchor(
-      shiftDate(
-        anchor,
-        view === "month"
-          ? direction * 30
-          : view === "week"
-            ? direction * 7
-            : direction,
-      ),
-    );
+  const selectedAppointments = resource.data.filter((item) => item.items?.some((line) => line.date === selectedDate));
+  const moveMonth = (direction) => {
+    const value = new Date(`${visibleMonth}T12:00:00`);
+    const current = toJalaali(value.getFullYear(), value.getMonth() + 1, value.getDate());
+    const monthIndex = current.jm - 1 + direction;
+    const jy = current.jy + Math.floor(monthIndex / 12);
+    const jm = ((monthIndex % 12) + 12) % 12 + 1;
+    const nextMonth = toGregorian(jy, jm, 1);
+    const next = `${nextMonth.gy}-${String(nextMonth.gm).padStart(2, "0")}-${String(nextMonth.gd).padStart(2, "0")}`;
+    setVisibleMonth(next);
+    setSelectedDate(next);
+  };
+  const selectToday = () => { setSelectedDate(today); setVisibleMonth(`${today.slice(0, 7)}-01`); };
   return (
     <div className="admin-page">
-      <Header
-        eyebrow="مدیریت نوبت‌ها"
-        title="نوبت‌ها"
-        action="افزودن نوبت"
-        onAction={() => setCreateOpen(true)}
-      />
+      <Header eyebrow="مدیریت نوبت‌ها" title="نوبت‌ها" action="افزودن نوبت" onAction={() => setCreateOpen(true)} />
       <div className="toolbar">
-        <div className="segmented">
-          {[
-            ["day", "روز"],
-            ["week", "هفته"],
-            ["month", "ماه"],
-          ].map(([value, label]) => (
-            <button
-              className={view === value ? "selected" : ""}
-              key={value}
-              onClick={() => setView(value)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value)}
-        >
+        <select value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="all">همه وضعیت‌ها</option>
-          {Object.entries(labels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
+          {Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
-        <button
-          className="filter-button"
-          onClick={() => setFiltersOpen(!filtersOpen)}
-        >
-          فیلترها
-        </button>
+        <button className="filter-button" onClick={() => setFiltersOpen(!filtersOpen)}>فیلترها</button>
       </div>
-      {filtersOpen && (
-        <div className="toolbar">
-          <select
-            aria-label="فیلتر متخصص"
-            value={employee}
-            onChange={(event) => setEmployee(event.target.value)}
-          >
-            <option value="">همه متخصصان</option>
-            {employees.data.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="فیلتر خدمت"
-            value={service}
-            onChange={(event) => setService(event.target.value)}
-          >
-            <option value="">همه خدمات</option>
-            {services.data.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.persian_name || item.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-      <AppointmentCalendar
-        anchor={anchor}
-        onSelect={(date) => {
-          setAnchor(date);
-          setView("day");
-        }}
-      />
+      {filtersOpen && <div className="toolbar">
+        <select aria-label="فیلتر متخصص" value={employee} onChange={(event) => setEmployee(event.target.value)}><option value="">همه متخصصان</option>{employees.data.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+        <select aria-label="فیلتر خدمت" value={service} onChange={(event) => setService(event.target.value)}><option value="">همه خدمات</option>{services.data.map((item) => <option key={item.id} value={item.id}>{item.persian_name || item.name}</option>)}</select>
+      </div>}
+      <AppointmentCalendar visibleMonth={visibleMonth} selectedDate={selectedDate} appointments={resource.data} loading={resource.loading} error={resource.error} onPrevious={() => moveMonth(-1)} onNext={() => moveMonth(1)} onToday={selectToday} onSelect={(date) => { setSelectedDate(date); const chosen = new Date(`${date}T12:00:00`); const shown = new Date(`${visibleMonth}T12:00:00`); const chosenJalali = toJalaali(chosen.getFullYear(), chosen.getMonth() + 1, chosen.getDate()); const shownJalali = toJalaali(shown.getFullYear(), shown.getMonth() + 1, shown.getDate()); if (chosenJalali.jy !== shownJalali.jy || chosenJalali.jm !== shownJalali.jm) setVisibleMonth(date); }} />
       <section className="admin-panel calendar-panel">
-        <div className="calendar-strip">
-          <button aria-label="بازه قبل" onClick={() => moveRange(-1)}>
-            ‹
-          </button>
-          <strong>
-            {new Intl.DateTimeFormat("fa-IR", {
-              weekday: view === "day" ? "long" : undefined,
-              month: "long",
-              year: "numeric",
-              day: view === "day" ? "numeric" : undefined,
-            }).format(new Date(`${anchor}T00:00:00`))}
-          </strong>
-          <button aria-label="بازه بعد" onClick={() => moveRange(1)}>
-            ›
-          </button>
-          <span>
-            {employees.data.length} متخصص فعال · {services.data.length} خدمت
-          </span>
-        </div>
-        {resource.loading ? (
-          <Skeleton count={7} />
-        ) : resource.data.length ? (
-          <div className="appointment-table">
-            {resource.data.map((item) => (
-              <AppointmentRow
-                item={item}
-                key={item.id}
-                onClick={() => setSelected(item)}
-              />
-            ))}
-          </div>
-        ) : (
-          <Empty
-            title="نوبتی با این فیلتر پیدا نشد"
-            text="فیلترها را تغییر دهید یا یک رزرو تازه بسازید."
-          />
-        )}
+        <div className="calendar-strip"><strong>{new Intl.DateTimeFormat("fa-IR", { weekday: "long", month: "long", year: "numeric", day: "numeric" }).format(new Date(`${selectedDate}T12:00:00`))}</strong><span>{employees.data.length} متخصص فعال · {services.data.length} خدمت</span></div>
+        {resource.loading ? <Skeleton count={7} /> : resource.error ? <Empty title="دریافت نوبت‌های تقویم انجام نشد" text="لطفاً دوباره تلاش کنید." /> : selectedAppointments.length ? <div className="appointment-table">{selectedAppointments.map((item) => <AppointmentRow item={item} key={item.id} onClick={() => setSelected(item)} />)}</div> : <Empty title="برای این روز نوبتی ثبت نشده است" text="روز دیگری را انتخاب کنید یا یک رزرو تازه بسازید." />}
       </section>
       <Toast message={toast} />
-      {createOpen && (
-        <AdminAppointmentForm
-          close={() => setCreateOpen(false)}
-          onCreated={() => {
-            setCreateOpen(false);
-            resource.reload();
-            setToast("نوبت ثبت شد");
-          }}
-        />
-      )}
-      {selected && (
-        <AppointmentDrawer
-          item={selected}
-          close={() => setSelected(null)}
-          onSaved={() => {
-            setSelected(null);
-            resource.reload();
-            setToast("نوبت به‌روزرسانی شد");
-          }}
-        />
-      )}
+      {createOpen && <AdminAppointmentForm close={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); resource.reload(); setToast("نوبت ثبت شد"); }} />}
+      {selected && <AppointmentDrawer item={selected} close={() => setSelected(null)} onSaved={() => { setSelected(null); resource.reload(); setToast("نوبت به‌روزرسانی شد"); }} />}
     </div>
   );
 }
-function AppointmentCalendar({ anchor, onSelect }) {
-  const value = new Date(`${anchor}T00:00:00`);
-  const monthStart = new Date(value.getFullYear(), value.getMonth(), 1);
-  const start = new Date(monthStart);
+function AppointmentCalendar({ visibleMonth, selectedDate, appointments, loading, error, onSelect, onPrevious, onNext, onToday }) {
+  const value = new Date(`${visibleMonth}T12:00:00`);
+  const jalali = toJalaali(value.getFullYear(), value.getMonth() + 1, value.getDate());
+  const first = toGregorian(jalali.jy, jalali.jm, 1);
+  const start = new Date(first.gy, first.gm - 1, first.gd);
   start.setDate(start.getDate() - start.getDay());
-  const jalali = toJalaali(
-    value.getFullYear(),
-    value.getMonth() + 1,
-    value.getDate(),
-  );
   return (
     <section className="admin-panel appointment-calendar">
-      <div className="panel-title">
-        <div>
-          <span>تقویم شمسی</span>
-          <h2>
-            {new Intl.NumberFormat("fa-IR").format(jalali.jy)} /{" "}
-            {new Intl.NumberFormat("fa-IR").format(jalali.jm)}
-          </h2>
-        </div>
-      </div>
-      <div className="appointment-calendar-weekdays">
-        {["ی", "د", "س", "چ", "پ", "ج", "ش"].map((day) => (
-          <b key={day}>{day}</b>
-        ))}
-      </div>
-      <div className="appointment-calendar-days">
-        {Array.from({ length: 42 }, (_, index) => {
-          const day = new Date(start);
-          day.setDate(start.getDate() + index);
-          const iso = day.toISOString().slice(0, 10);
-          const local = toJalaali(
-            day.getFullYear(),
-            day.getMonth() + 1,
-            day.getDate(),
-          );
-          return (
-            <button
-              type="button"
-              key={iso}
-              className={
-                iso === anchor
-                  ? "selected"
-                  : day.getMonth() !== value.getMonth()
-                    ? "muted"
-                    : ""
-              }
-              onClick={() => onSelect(iso)}
-            >
-              {new Intl.NumberFormat("fa-IR").format(local.jd)}
-            </button>
-          );
-        })}
-      </div>
+      <div className="panel-title"><div><span>تقویم شمسی</span><h2>{new Intl.NumberFormat("fa-IR").format(jalali.jy)} / {new Intl.NumberFormat("fa-IR").format(jalali.jm)}</h2></div><div className="calendar-month-actions"><button type="button" aria-label="ماه قبل" onClick={onPrevious}>‹</button><button type="button" onClick={onToday}>امروز</button><button type="button" aria-label="ماه بعد" onClick={onNext}>›</button></div></div>
+      <div className="appointment-calendar-weekdays">{["ی", "د", "س", "چ", "پ", "ج", "ش"].map((day) => <b key={day}>{day}</b>)}</div>
+      {loading ? <Skeleton count={6} /> : error ? <Empty title="دریافت تقویم انجام نشد" /> : <div className="appointment-calendar-days">{Array.from({ length: 42 }, (_, index) => {
+        const day = new Date(start); day.setDate(start.getDate() + index);
+        const iso = localIsoDate(day);
+        const local = toJalaali(day.getFullYear(), day.getMonth() + 1, day.getDate());
+        const dayAppointments = appointments.filter((item) => item.items?.some((line) => line.date === iso));
+        const serviceCounts = {};
+        dayAppointments.forEach((item) => item.items?.filter((line) => line.date === iso).forEach((line) => { serviceCounts[line.service_name] = (serviceCounts[line.service_name] || 0) + 1; }));
+        const services = Object.entries(serviceCounts);
+        return <button type="button" aria-label={iso} key={iso} className={[iso === selectedDate && "selected", iso === today && "today", (local.jy !== jalali.jy || local.jm !== jalali.jm) && "muted"].filter(Boolean).join(" ")} onClick={() => onSelect(iso)}><span className="calendar-day-number">{new Intl.NumberFormat("fa-IR").format(local.jd)}</span><span className="calendar-day-badges">{services.slice(0, 2).map(([name, count]) => <small key={name}>{name} {new Intl.NumberFormat("fa-IR").format(count)}</small>)}{services.length > 2 && <small>+{new Intl.NumberFormat("fa-IR").format(services.length - 2)}</small>}</span>{dayAppointments.length > 0 && <b>{new Intl.NumberFormat("fa-IR").format(dayAppointments.length)} نوبت</b>}</button>;
+      })}</div>}
     </section>
   );
 }
-function shiftDate(value, days) {
-  const next = new Date(`${value}T00:00:00`);
-  next.setDate(next.getDate() + days);
-  return next.toISOString().slice(0, 10);
-}
-function dateRange(anchor, view) {
-  const value = new Date(`${anchor}T00:00:00`);
-  if (view === "day") return { start: anchor, end: anchor };
-  if (view === "week") {
-    const start = shiftDate(anchor, -value.getDay());
-    return { start, end: shiftDate(start, 6) };
-  }
-  const start = `${anchor.slice(0, 7)}-01`;
-  return {
-    start,
-    end: shiftDate(
-      `${Number(anchor.slice(0, 4))}-${String(Number(anchor.slice(5, 7)) + 1).padStart(2, "0")}-01`,
-      -1,
-    ),
-  };
-}
+function localIsoDate(value) { return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`; }
+function calendarRange(month) { const value = new Date(`${month}T12:00:00`); const jalali = toJalaali(value.getFullYear(), value.getMonth() + 1, value.getDate()); const first = toGregorian(jalali.jy, jalali.jm, 1); const start = new Date(first.gy, first.gm - 1, first.gd); start.setDate(start.getDate() - start.getDay()); const end = new Date(start); end.setDate(end.getDate() + 41); return { start: localIsoDate(start), end: localIsoDate(end) }; }
 function AdminAppointmentForm({ close, onCreated }) {
   const customers = useResource("admin/customer-options/");
   const services = useResource("services/");
   const [form, setForm] = useState({
     date: today,
     status: "pending",
-    payment_status: "",
   });
   const [selections, setSelections] = useState([]);
   const [employees, setEmployees] = useState({});
@@ -611,7 +416,6 @@ function AdminAppointmentForm({ close, onCreated }) {
           : { customer: form.customer }),
         notes: form.notes || "",
         status: form.status,
-        ...(form.payment_status && { payment_status: form.payment_status }),
         items,
       });
       onCreated();
@@ -798,18 +602,6 @@ function AdminAppointmentForm({ close, onCreated }) {
             ))}
           </select>
         </label>
-        <label>
-          وضعیت پرداخت
-          <select
-            value={form.payment_status}
-            onChange={(event) => update("payment_status", event.target.value)}
-          >
-            <option value="">بدون ثبت پرداخت</option>
-            <option value="pending">در انتظار</option>
-            <option value="paid">پرداخت شده</option>
-            <option value="failed">ناموفق</option>
-          </select>
-        </label>
         {error && <small className="admin-field-error">{error}</small>}
         <button className="admin-primary" type="submit">
           ثبت نوبت
@@ -820,12 +612,39 @@ function AdminAppointmentForm({ close, onCreated }) {
 }
 function AppointmentDrawer({ item, close, onSaved }) {
   const [saving, setSaving] = useState(false);
+  const [payment, setPayment] = useState({ amount: item.remaining_total || "", payment_method: "cash", notes: "" });
+  const [refund, setRefund] = useState({ payment: "", amount: "", reason: "" });
+  const [financeError, setFinanceError] = useState("");
   const changeStatus = async (status) => {
     setSaving(true);
     try {
       await api.patch(`admin/appointments/${item.id}/`, { status });
       onSaved();
     } finally {
+      setSaving(false);
+    }
+  };
+  const recordPayment = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setFinanceError("");
+    try {
+      await api.post("admin/payments/", { appointment: item.id, ...payment });
+      onSaved();
+    } catch (error) {
+      setFinanceError(firstError(error, "ثبت پرداخت انجام نشد"));
+      setSaving(false);
+    }
+  };
+  const recordRefund = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setFinanceError("");
+    try {
+      await api.post("admin/refunds/", refund);
+      onSaved();
+    } catch (error) {
+      setFinanceError(firstError(error, "ثبت بازپرداخت انجام نشد"));
       setSaving(false);
     }
   };
@@ -875,6 +694,78 @@ function AppointmentDrawer({ item, close, onSaved }) {
           </button>
         </div>
         <div className="drawer-section">
+          <h3>وضعیت مالی</h3>
+          <div className="mini-summary">
+            <span>مبلغ نوبت<b>{toman(item.appointment_total)}</b></span>
+            <span>پرداخت‌شده<b>{toman(item.net_paid)}</b></span>
+            <span>مانده<b>{toman(item.remaining_total)}</b></span>
+          </div>
+          <p className="drawer-meta">وضعیت: {item.payment_status || "unpaid"}</p>
+          <form className="employee-form" onSubmit={recordPayment}>
+            <label>
+              مبلغ پرداخت
+              <input
+                type="number"
+                min="1"
+                max={item.remaining_total}
+                value={payment.amount}
+                onChange={(event) => setPayment({ ...payment, amount: event.target.value })}
+                required
+              />
+            </label>
+            <label>
+              روش پرداخت
+              <select
+                value={payment.payment_method}
+                onChange={(event) => setPayment({ ...payment, payment_method: event.target.value })}
+              >
+                <option value="cash">نقدی</option>
+                <option value="card">کارت</option>
+                <option value="bank_transfer">انتقال بانکی</option>
+                <option value="online">آنلاین</option>
+                <option value="other">سایر</option>
+              </select>
+            </label>
+            <label>
+              توضیحات
+              <input value={payment.notes} onChange={(event) => setPayment({ ...payment, notes: event.target.value })} />
+            </label>
+            <button className="admin-primary" disabled={saving || !item.remaining_total}>ثبت پرداخت</button>
+          </form>
+          {item.payments?.map((entry) => (
+            <div className="drawer-item" key={entry.id}>
+              <b>{toman(entry.amount)} · {entry.payment_method}</b>
+              <span>{entry.status} · بازپرداخت {toman(entry.refunded_total)}</span>
+              <button
+                type="button"
+                onClick={() => setRefund({ ...refund, payment: entry.id, amount: entry.amount - entry.refunded_total })}
+              >
+                بازپرداخت
+              </button>
+            </div>
+          ))}
+          {refund.payment && (
+            <form className="employee-form" onSubmit={recordRefund}>
+              <label>
+                مبلغ بازپرداخت
+                <input
+                  type="number"
+                  min="1"
+                  value={refund.amount}
+                  onChange={(event) => setRefund({ ...refund, amount: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                دلیل
+                <input value={refund.reason} onChange={(event) => setRefund({ ...refund, reason: event.target.value })} />
+              </label>
+              <button className="admin-primary" disabled={saving}>ثبت بازپرداخت</button>
+            </form>
+          )}
+          {financeError && <small className="admin-field-error">{financeError}</small>}
+        </div>
+        <div className="drawer-section">
           <h3>تاریخچه وضعیت</h3>
           {item.status_history?.length ? (
             item.status_history.map((history) => (
@@ -905,6 +796,10 @@ function CrudPage({
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({});
   const [toast, setToast] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [optionDrafts, setOptionDrafts] = useState({});
+  const [optionErrors, setOptionErrors] = useState({});
+  const [optionSaving, setOptionSaving] = useState({});
   useEffect(() => {
     const selectFields = fields.filter((field) => field.optionsEndpoint);
     if (!selectFields.length) return;
@@ -917,23 +812,49 @@ function CrudPage({
       ),
     ).then((results) => setOptions(Object.fromEntries(results)));
   }, [endpoint]);
+  const createOption = async (field) => {
+    const name = (optionDrafts[field.name] || "").trim();
+    if (!name) {
+      setOptionErrors({ ...optionErrors, [field.name]: "نام دسته‌بندی را وارد کنید" });
+      return;
+    }
+    setOptionSaving({ ...optionSaving, [field.name]: true });
+    setOptionErrors({ ...optionErrors, [field.name]: "" });
+    try {
+      const { data } = await api.post(field.createEndpoint, { name });
+      setOptions({ ...options, [field.name]: [...(options[field.name] || []), data] });
+      setForm({ ...form, [field.name]: data.id });
+      setOptionDrafts({ ...optionDrafts, [field.name]: "" });
+    } catch (error) {
+      const detail = error.response?.data?.name || error.response?.data?.detail;
+      setOptionErrors({ ...optionErrors, [field.name]: Array.isArray(detail) ? detail.join(" ") : detail || "ثبت دسته‌بندی انجام نشد" });
+    } finally {
+      setOptionSaving({ ...optionSaving, [field.name]: false });
+    }
+  };
   const submit = async (event) => {
     event.preventDefault();
+    if (saving) return;
+    setSaving(true);
     let body = form;
     if (uploads) {
       body = new FormData();
       Object.entries(form)
-        .filter(([, value]) => value !== "" && value !== undefined)
+        .filter(([name, value]) => !["id", "image_url", "category_name", "created_at"].includes(name) && value !== "" && value !== undefined)
         .forEach(([name, value]) => body.append(name, value));
     }
     try {
-      await api.post(endpoint, body);
+      if (form.id) await api.patch(`${endpoint}${form.id}/`, body);
+      else await api.post(endpoint, body);
       setOpen(false);
       setForm({});
       resource.reload();
       setToast("با موفقیت ذخیره شد");
-    } catch {
-      setToast("ذخیره اطلاعات انجام نشد");
+    } catch (error) {
+      const detail = error.response?.data?.detail || Object.values(error.response?.data || {})[0];
+      setToast(Array.isArray(detail) ? detail.join(" ") : detail || "ذخیره اطلاعات انجام نشد");
+    } finally {
+      setSaving(false);
     }
   };
   return (
@@ -1027,29 +948,45 @@ function CrudPage({
                 <label key={field.name}>
                   {field.label}
                   {field.type === "select" ? (
-                    <select
-                      value={form[field.name] || ""}
-                      onChange={(event) =>
-                        setForm({ ...form, [field.name]: event.target.value })
-                      }
-                    >
-                      <option value="">انتخاب کنید</option>
-                      {(options[field.name] || field.options || []).map(
-                        (option) => (
-                          <option
-                            key={option.id || option.value}
-                            value={option.id || option.value}
-                          >
-                            {field.optionLabel
-                              ? field.optionLabel(option)
-                              : option.name ||
-                                option.persian_name ||
-                                option.label ||
-                                `#${option.id}`}
-                          </option>
-                        ),
+                    <>
+                      <select
+                        value={form[field.name] || ""}
+                        onChange={(event) =>
+                          setForm({ ...form, [field.name]: event.target.value })
+                        }
+                      >
+                        <option value="">انتخاب کنید</option>
+                        {(options[field.name] || field.options || []).map(
+                          (option) => (
+                            <option
+                              key={option.id || option.value}
+                              value={option.id || option.value}
+                            >
+                              {field.optionLabel
+                                ? field.optionLabel(option)
+                                : option.name ||
+                                  option.persian_name ||
+                                  option.label ||
+                                  `#${option.id}`}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                      {field.createEndpoint && (
+                        <span className="admin-inline-option">
+                          <input
+                            aria-label="نام دسته‌بندی جدید"
+                            placeholder="نام دسته‌بندی جدید"
+                            value={optionDrafts[field.name] || ""}
+                            onChange={(event) => setOptionDrafts({ ...optionDrafts, [field.name]: event.target.value })}
+                          />
+                          <button type="button" disabled={optionSaving[field.name]} onClick={() => createOption(field)}>
+                            {optionSaving[field.name] ? "در حال ذخیره..." : "+ افزودن دسته‌بندی جدید"}
+                          </button>
+                          {optionErrors[field.name] && <small className="admin-field-error">{optionErrors[field.name]}</small>}
+                        </span>
                       )}
-                    </select>
+                    </>
                   ) : (
                     <input
                       type={field.type || "text"}
@@ -1072,8 +1009,8 @@ function CrudPage({
                 </label>
               );
             })}
-            <button className="admin-primary" type="submit">
-              ذخیره تغییرات
+            <button className="admin-primary" type="submit" disabled={saving}>
+              {saving ? "در حال ذخیره..." : "ذخیره تغییرات"}
             </button>
           </form>
         </div>
@@ -1125,24 +1062,28 @@ function EmployeeManagement() {
   const [form, setForm] = useState({ is_active: true });
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState("");
+  const [saving, setSaving] = useState(false);
   const update = (name, value) => setForm({ ...form, [name]: value });
   const submit = async (event) => {
     event.preventDefault();
-    const body = new FormData();
-    Object.entries(form).forEach(([name, value]) => {
-      if (name === "services") {
-        value.forEach((serviceId) => body.append("services", serviceId));
-        return;
-      }
-      if (
-        value !== "" &&
-        value !== undefined &&
-        (mode === "new" || !["username", "password"].includes(name))
-      )
-        body.append(name, value);
-    });
-    if (mode === "existing") body.delete("username");
+    if (saving) return;
+    setSaving(true);
+    setErrors({});
     try {
+      const body = new FormData();
+      Object.entries(form).forEach(([name, value]) => {
+        if (name === "services") {
+          (Array.isArray(value) ? value : []).forEach((serviceId) => body.append("services", serviceId));
+          return;
+        }
+        if (
+          value !== "" &&
+          value !== undefined &&
+          (mode === "new" || !["username", "password"].includes(name))
+        )
+          body.append(name, value);
+      });
+      if (mode === "existing") body.delete("username");
       if (editing) await api.patch(`admin/employees/${editing}/`, body);
       else await api.post("admin/employees/", body);
       setOpen(false);
@@ -1153,6 +1094,8 @@ function EmployeeManagement() {
       setToast("کارمند اضافه شد");
     } catch (error) {
       setErrors(error.response?.data || { detail: "ذخیره اطلاعات انجام نشد" });
+    } finally {
+      setSaving(false);
     }
   };
   return (
@@ -1161,7 +1104,7 @@ function EmployeeManagement() {
         eyebrow="تیم سالن"
         title="مدیریت کارمندان"
         action="افزودن کارمند"
-        onAction={() => setOpen(true)}
+        onAction={() => { setMode("new"); setEditing(null); setForm({ is_active: true }); setErrors({}); setOpen(true); }}
       />
       <section className="admin-panel">
         <div className="list-toolbar">
@@ -1374,8 +1317,9 @@ function EmployeeManagement() {
                 {errors.non_field_errors}
               </small>
             )}
-            <button className="admin-primary" type="submit">
-              {editing ? "ذخیره تغییرات" : "ایجاد کارمند"}
+            {errors.detail && <small className="admin-field-error">{errors.detail}</small>}
+            <button className="admin-primary" type="submit" disabled={saving}>
+              {saving ? "در حال ذخیره..." : editing ? "ذخیره تغییرات" : "ایجاد کارمند"}
             </button>
           </form>
         </div>
@@ -1386,49 +1330,100 @@ function EmployeeManagement() {
   );
 }
 function Finance() {
+  const payments = useResource("admin/payments/");
+  const refunds = useResource("admin/refunds/");
+  const transactions = useResource("admin/transactions/");
+  const commissions = useResource("admin/commissions/");
+  const [reviewingPayment, setReviewingPayment] = useState(null);
+  const [reviewError, setReviewError] = useState("");
+  const reviewPayment = async (payment, action) => {
+    setReviewingPayment(payment.id);
+    setReviewError("");
+    try {
+      await api.post(`admin/payments/${payment.id}/${action}/`);
+      payments.reload();
+      transactions.reload();
+    } catch (error) {
+      setReviewError(firstError(error, "بررسی پرداخت انجام نشد"));
+    } finally {
+      setReviewingPayment(null);
+    }
+  };
+  const section = (title, resource, render) => (
+    <section className="admin-panel">
+      <div className="panel-title">
+        <div>
+          <span>حسابداری</span>
+          <h2>{title}</h2>
+        </div>
+      </div>
+      {resource.loading ? (
+        <Skeleton />
+      ) : resource.error ? (
+        <Empty title="دریافت اطلاعات انجام نشد" />
+      ) : resource.data.length ? (
+        <div className="entity-list">{resource.data.map(render)}</div>
+      ) : (
+        <Empty />
+      )}
+    </section>
+  );
   return (
-    <>
-      <CrudPage
-        type="تراکنش"
-        endpoint="admin/transactions/"
-        title="مالی و پرداخت‌ها"
-        eyebrow="حسابداری"
-        fields={[
-          {
-            name: "type",
-            label: "نوع تراکنش",
-            type: "select",
-            optionsEndpoint: "admin/transaction-types/",
-          },
-          { name: "amount", label: "مبلغ", type: "number" },
-          {
-            name: "appointment",
-            label: "نوبت",
-            type: "select",
-            optionsEndpoint: "admin/appointments/",
-            optionLabel: appointmentOptionLabel,
-          },
-          { name: "description", label: "شرح" },
-        ]}
-      />
-      <CrudPage
-        type="پرداخت"
-        endpoint="admin/payments/"
-        title="پرداخت‌ها"
-        eyebrow="حسابداری"
-        fields={[
-          {
-            name: "appointment",
-            label: "نوبت",
-            type: "select",
-            optionsEndpoint: "admin/appointments/",
-            optionLabel: appointmentOptionLabel,
-          },
-          { name: "amount", label: "مبلغ", type: "number" },
-          { name: "provider_reference", label: "شناسه پرداخت" },
-        ]}
-      />
-    </>
+    <div className="admin-page">
+      <Header eyebrow="حسابداری" title="مالی و پرداخت‌ها" />
+      <div className="admin-grid-two">
+        {section("پرداخت‌ها", payments, (item) => (
+          <article key={item.id}>
+            <div className="entity-avatar">پ</div>
+            <div>
+              <b>{toman(item.amount)}</b>
+              <small>نوبت #{item.appointment} · {item.customer_name || "مشتری"} · {item.payment_method}</small>
+              {item.created_by && <small>گزارش‌دهنده: {item.reporter_name || "کارمند"}</small>}
+            </div>
+            <span>{item.status === "pending" ? "در انتظار تأیید" : item.status === "paid" ? "تأیید شده" : item.status === "failed" ? "رد شده" : item.status}</span>
+            {item.status === "pending" && (
+              <div className="finance-review-actions">
+                <button className="admin-primary" disabled={reviewingPayment === item.id} onClick={() => reviewPayment(item, "confirm")}>تأیید</button>
+                <button className="admin-secondary" disabled={reviewingPayment === item.id} onClick={() => reviewPayment(item, "reject")}>رد</button>
+              </div>
+            )}
+          </article>
+        ))}
+        {reviewError && <small className="admin-field-error">{reviewError}</small>}
+        {section("بازپرداخت‌ها", refunds, (item) => (
+          <article key={item.id}>
+            <div className="entity-avatar">ب</div>
+            <div>
+              <b>{toman(item.amount)}</b>
+              <small>{item.reason || `پرداخت #${item.payment}`}</small>
+            </div>
+            <span>{item.status}</span>
+          </article>
+        ))}
+      </div>
+      <div className="admin-grid-two">
+        {section("تراکنش‌های تغییرناپذیر", transactions, (item) => (
+          <article key={item.id}>
+            <div className="entity-avatar">ت</div>
+            <div>
+              <b>{toman(item.amount)}</b>
+              <small>{item.description || `نوبت #${item.appointment}`}</small>
+            </div>
+            <span>{item.type}</span>
+          </article>
+        ))}
+        {section("کمیسیون متخصصان", commissions, (item) => (
+          <article key={item.id}>
+            <div className="entity-avatar">ک</div>
+            <div>
+              <b>{item.employee_name || `متخصص #${item.employee}`}</b>
+              <small>{item.service_name} · پایه {toman(item.base_amount)}</small>
+            </div>
+            <span>{toman(item.commission_amount)} · {item.status}</span>
+          </article>
+        ))}
+      </div>
+    </div>
   );
 }
 function Content() {
@@ -1441,9 +1436,16 @@ function Content() {
       uploads
       fields={[
         ["title", "عنوان"],
-        ["category", "دسته‌بندی"],
+        {
+          name: "category",
+          label: "دسته‌بندی",
+          type: "select",
+          optionsEndpoint: "admin/gallery-categories/",
+          createEndpoint: "admin/gallery-categories/",
+        },
         ["image", "تصویر", "file"],
         ["description", "توضیحات"],
+        ["display_order", "ترتیب نمایش", "number"],
       ]}
     />
   );

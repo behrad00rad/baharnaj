@@ -13,6 +13,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@majidh1/jalalidatepicker": "^1.0.0",
     "axios": "^1.19.0",
     "jalaali-js": "^2.0.1",
     "react": "^19.2.8",

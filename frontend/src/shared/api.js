@@ -13,11 +13,6 @@ export const applyRefreshSession = (payload = {}) => {
 
 // One client owns API authentication and refresh behavior for every page.
 export const api = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || '/api/v1/', withCredentials: true })
-export const galleryImageUrl = (value) => {
-  if (!value || /^https?:\/\//i.test(value)) return value
-  const mediaBase = import.meta.env.VITE_MEDIA_URL || new URL(api.defaults.baseURL, window.location.origin).origin
-  return new URL(value, mediaBase).href
-}
 api.interceptors.request.use((config) => {
   const token = getAccessToken()
   if (token) config.headers.Authorization = `Bearer ${token}`

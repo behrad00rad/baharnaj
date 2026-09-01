@@ -1,13 +1,18 @@
 import json
-from datetime import date, timedelta
+import base64
+import tempfile
+from datetime import date, time, timedelta
+from unittest.mock import patch
+from urllib.parse import urlsplit
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from .models import Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, Payment, Refund, Service, ServiceCategory, TimeOff, User, WorkingSchedule
+from .models import Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, TimeOff, Transaction, User, WorkingSchedule
 
 
 class AppointmentItemSchemaTests(TestCase):
@@ -129,6 +134,63 @@ class AppointmentItemSchemaTests(TestCase):
 
         self.assertEqual([item["id"] for item in first_day.data], [self.appointment.pk])
         self.assertEqual([item["id"] for item in second_day.data], [other_appointment.pk])
+        range_response = client.get("/api/v1/employee/appointments/?start=2026-08-30&end=2026-08-31")
+        self.assertEqual({item["id"] for item in range_response.data}, {self.appointment.pk, other_appointment.pk})
+
+    def test_employee_statistics_returns_the_selected_next_appointment_item(self):
+        earlier_item = AppointmentItem.objects.create(
+            appointment=self.appointment, service=self.service, employee=self.employee,
+            date=date(2026, 8, 29), start_time="09:00", end_time="10:00",
+        )
+        next_item = AppointmentItem.objects.create(
+            appointment=self.appointment, service=self.service, employee=self.employee,
+            date=date(2026, 8, 29), start_time="14:00", end_time="15:00",
+        )
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        with patch("salon.views.timezone.localdate", return_value=date(2026, 8, 29)), patch("salon.views.timezone.localtime", return_value=timezone.make_aware(timezone.datetime(2026, 8, 29, 12, 0))):
+            response = client.get("/api/v1/employee/statistics/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["next_appointment"]["id"], self.appointment.pk)
+        self.assertEqual(response.data["next_appointment_item"]["id"], next_item.pk)
+        self.assertNotEqual(response.data["next_appointment_item"]["id"], earlier_item.pk)
+
+    def test_employee_statistics_returns_next_appointment_on_a_future_date(self):
+        next_item = AppointmentItem.objects.create(
+            appointment=self.appointment, service=self.service, employee=self.employee,
+            date=date(2026, 8, 30), start_time="09:00", end_time="10:00",
+        )
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        with patch("salon.views.timezone.localdate", return_value=date(2026, 8, 29)), patch("salon.views.timezone.localtime", return_value=timezone.make_aware(timezone.datetime(2026, 8, 29, 18, 0))):
+            response = client.get("/api/v1/employee/statistics/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["next_appointment"]["id"], self.appointment.pk)
+        self.assertEqual(response.data["next_appointment_item"]["id"], next_item.pk)
+
+    def test_employee_cannot_complete_another_employees_item(self):
+        other_user = User.objects.create_user(username="other-completion", role="employee")
+        other_employee = EmployeeProfile.objects.create(user=other_user)
+        other_item = AppointmentItem.objects.create(
+            appointment=self.appointment,
+            service=self.service,
+            employee=other_employee,
+            date=date(2026, 8, 29),
+            start_time="09:00",
+            end_time="10:00",
+        )
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        response = client.post(f"/api/v1/employee/appointment-items/{other_item.pk}/action/", {"status": "complete"}, format="json")
+
+        self.assertEqual(response.status_code, 404)
+        other_item.refresh_from_db()
+        self.assertEqual(other_item.completion_status, "pending")
 
     def test_employee_schedule_is_scoped_and_validated(self):
         other_user = User.objects.create_user(username="schedule-other", role="employee")
@@ -182,6 +244,99 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(self.employee.specialty, "Hair color")
         self.assertEqual(self.employee.bio, "Updated profile")
 
+    def test_employee_profile_accepts_multipart_photo(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import RequestFactory
+        from django.views.static import serve
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+        png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            response = client.patch(
+                "/api/v1/employee/profile/",
+                {"profile_photo": SimpleUploadedFile("profile.png", png, content_type="image/png")},
+                format="multipart",
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.data["profile_photo_url"].startswith("http://testserver/media/profiles/"))
+            image_path = urlsplit(response.data["profile_photo_url"]).path.removeprefix(settings.MEDIA_URL)
+            image_response = serve(RequestFactory().get(response.data["profile_photo_url"]), image_path, document_root=media_root)
+            self.assertEqual(image_response.status_code, 200)
+            self.assertEqual(image_response["Content-Type"], "image/png")
+
+        self.employee.refresh_from_db()
+        self.assertTrue(self.employee.profile_photo.name.startswith("profiles/"))
+
+    def test_gallery_upload_returns_public_backend_and_retrievable_media(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import RequestFactory
+        from django.views.static import serve
+        admin = User.objects.create_user(username="media-admin", role="admin")
+        category = GalleryCategory.objects.create(name="مو")
+        other_category = GalleryCategory.objects.create(name="ناخن")
+        client = APIClient()
+        client.force_authenticate(admin)
+        png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(
+            MEDIA_ROOT=media_root,
+            PUBLIC_BACKEND_URL="https://your-backend-domain.example.com",
+        ):
+            created = client.post(
+                "/api/v1/admin/gallery/",
+                {"title": "New upload", "category": category.pk, "image": SimpleUploadedFile("gallery.png", png, content_type="image/png")},
+                format="multipart",
+            )
+            self.assertEqual(created.status_code, 201)
+            self.assertTrue(created.data["image_url"].startswith("https://your-backend-domain.example.com/media/gallery/"))
+            updated = client.patch(f"/api/v1/admin/gallery/{created.data['id']}/", {"category": other_category.pk}, format="json")
+            self.assertEqual(updated.status_code, 200)
+            self.assertEqual(updated.data["category_name"], "ناخن")
+
+            public_item = client.get("/api/v1/gallery/").data[0]
+            self.assertEqual(public_item["category"], "ناخن")
+            image_path = urlsplit(public_item["image_url"]).path.removeprefix(settings.MEDIA_URL)
+            image_response = serve(RequestFactory().get(public_item["image_url"]), image_path, document_root=media_root)
+            self.assertEqual(image_response.status_code, 200)
+            self.assertEqual(image_response["Content-Type"], "image/png")
+
+    def test_gallery_preserves_existing_absolute_image_url(self):
+        category = GalleryCategory.objects.create(name="میکاپ")
+        GalleryAsset.objects.create(title="External", category=category, image_url="https://cdn.example.com/gallery.jpg")
+        response = APIClient().get("/api/v1/gallery/")
+        self.assertEqual(response.data[0]["image_url"], "https://cdn.example.com/gallery.jpg")
+
+    def test_gallery_categories_are_unique_and_admin_managed(self):
+        admin = User.objects.create_user(username="gallery-admin", role="admin")
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        created = client.post("/api/v1/admin/gallery-categories/", {"name": "  ناخن  ", "display_order": 2})
+        duplicate = client.post("/api/v1/admin/gallery-categories/", {"name": "ناخن"})
+        public = APIClient().get("/api/v1/gallery/categories/")
+
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.data["name"], "ناخن")
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertEqual(public.data[0]["name"], "ناخن")
+
+    def test_employee_can_change_only_own_password(self):
+        self.employee.user.set_password("old-password-8472")
+        self.employee.user.save()
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        wrong = client.post("/api/v1/employee/password/", {"current_password": "wrong", "new_password": "new-password-8472", "new_password_confirm": "new-password-8472"})
+        self.assertEqual(wrong.status_code, 400)
+        changed = client.post("/api/v1/employee/password/", {"current_password": "old-password-8472", "new_password": "new-password-8472", "new_password_confirm": "new-password-8472"})
+
+        self.assertEqual(changed.status_code, 200)
+        self.employee.user.refresh_from_db()
+        self.assertFalse(self.employee.user.check_password("old-password-8472"))
+        self.assertTrue(self.employee.user.check_password("new-password-8472"))
+
     def test_admin_employee_creation_contract(self):
         admin = User.objects.create_user(username="admin", role="admin")
         client = APIClient()
@@ -191,6 +346,9 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(new_employee.data["commission_rate"], "15.50")
         self.assertEqual(new_employee.data["service_ids"], [self.service.pk])
         self.assertEqual(User.objects.get(username="new-stylist").role, "employee")
+        login = self.client.post("/api/v1/auth/token/", {"username": "new-stylist", "password": "safe-password"})
+        self.assertEqual(login.status_code, 200)
+        self.assertEqual(login.data["role"], "employee")
 
         existing_user = User.objects.create_user(username="eligible", role="employee")
         existing_employee = client.post("/api/v1/admin/employees/", {"user": existing_user.pk, "name": "Existing Stylist", "commission_rate": "20.00"}, format="json")
@@ -210,22 +368,45 @@ class AppointmentItemSchemaTests(TestCase):
 
     def test_admin_appointments_filter_create_and_revenue(self):
         admin = User.objects.create_user(username="calendar-admin", role="admin")
-        booking_date = date(2026, 8, 31)
+        booking_date = timezone.localdate() + timedelta(days=7)
         WorkingSchedule.objects.create(employee=self.employee, weekday=booking_date.weekday(), start_time="09:00", end_time="20:00")
         client = APIClient()
         client.force_authenticate(admin)
-        response = client.post("/api/v1/admin/appointments/", {"customer": self.customer_profile.pk, "status": "confirmed", "payment_status": "paid", "notes": "admin booking", "items": [{"service": self.service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "10:00", "end_time": "11:00"}]}, format="json")
+        response = client.post("/api/v1/admin/appointments/", {"customer": self.customer_profile.pk, "status": "confirmed", "notes": "admin booking", "items": [{"service": self.service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "10:00", "end_time": "11:00"}]}, format="json")
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["items"][0]["service"], self.service.pk)
         self.assertEqual(response.data["status"], "confirmed")
         appointments = client.get(f"/api/v1/admin/appointments/?start_date={booking_date}&end_date={booking_date}&status=confirmed&employee={self.employee.pk}&service={self.service.pk}")
         self.assertEqual([item["id"] for item in appointments.data], [response.data["id"]])
+        payment = client.post("/api/v1/admin/payments/", {"appointment": response.data["id"], "amount": self.service.price, "payment_method": "card"}, format="json")
+        self.assertEqual(payment.status_code, 201)
         revenue = client.get(f"/api/v1/admin/revenue/?period=day&date={timezone.localdate()}")
         self.assertEqual(revenue.status_code, 200)
         self.assertEqual(revenue.data["total"], self.service.price)
         update = client.patch(f"/api/v1/admin/appointments/{response.data['id']}/", {"status": "completed"}, format="json")
         self.assertEqual(update.status_code, 200)
         self.assertEqual(update.data["status"], "completed")
+
+    def test_admin_statistics_use_real_tehran_date_ranges(self):
+        current = timezone.localdate()
+        self.appointment.status = "pending"
+        self.appointment.save(update_fields=("status",))
+        AppointmentItem.objects.create(appointment=self.appointment, service=self.service, employee=self.employee, date=current, start_time="09:00", end_time="10:00")
+        completed = Appointment.objects.create(customer=self.customer_profile, status="completed")
+        AppointmentItem.objects.create(appointment=completed, service=self.service, employee=self.employee, date=current, start_time="10:00", end_time="11:00")
+        admin = User.objects.create_user(username="stats-admin", role="admin")
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.get("/api/v1/admin/statistics/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["today"], {"appointments": 2, "pending": 1, "confirmed": 0, "completed": 1, "cancelled": 0})
+        self.assertEqual(response.data["week"]["appointments"], 2)
+        self.assertEqual(response.data["month"]["appointments"], 2)
+        self.assertEqual(response.data["top_services"][0]["appointments"], 2)
+        self.assertTrue(response.data["revenue_available"])
+        self.assertEqual(response.data["revenue"], {"today": 0, "week": 0, "month": 0})
 
     def test_admin_can_create_sequential_services_for_assigned_employee(self):
         admin = User.objects.create_user(username="multi-admin", role="admin")
@@ -240,46 +421,197 @@ class AppointmentItemSchemaTests(TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(len(response.data["items"]), 2)
+        self.assertEqual(response.data["appointment_total"], 2000)
         self.assertEqual([(item["start_time"], item["end_time"]) for item in response.data["items"]], [("10:00:00", "11:00:00"), ("11:00:00", "12:00:00")])
 
-    def test_commission_calculation_and_payment_refund_transitions(self):
+    def test_completed_item_creates_one_snapshotted_commission(self):
         item = self.make_item()
-        commission = EmployeeCommission.objects.create(appointment_item=item, commission_rate_snapshot=10, commission_amount=80)
+        self.employee.commission_rate = 10
+        self.employee.save(update_fields=("commission_rate",))
+        other_user = User.objects.create_user(username="commission-specialist", role="employee")
+        other_employee = EmployeeProfile.objects.create(user=other_user, commission_rate=20)
+        EmployeeService.objects.create(employee=other_employee, service=self.service)
+        other_item = AppointmentItem.objects.create(
+            appointment=self.appointment,
+            service=self.service,
+            employee=other_employee,
+            date=item.date,
+            start_time="10:00",
+            end_time="11:00",
+        )
+
+        item.set_completion_status("completed", changed_by=self.employee.user)
+        self.appointment.refresh_from_db()
+        self.assertEqual(self.appointment.status, "confirmed")
+        other_item.set_completion_status("completed", changed_by=other_user)
+        item.set_completion_status("completed", changed_by=self.employee.user)
+
+        self.assertEqual(EmployeeCommission.objects.filter(appointment_item=item).count(), 1)
+        self.assertEqual(EmployeeCommission.objects.filter(appointment_item__appointment=self.appointment).count(), 2)
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+        employee_appointment = client.get("/api/v1/employee/appointments/").data[0]
+        self.assertEqual([row["employee"] for row in employee_appointment["items"]], [self.employee.pk])
+        completed_again = client.post(f"/api/v1/employee/appointment-items/{item.pk}/action/", {"status": "complete", "notes": "کار انجام شد"}, format="json")
+        self.assertEqual(completed_again.status_code, 400)
+        item.refresh_from_db()
+        self.assertEqual(EmployeeCommission.objects.filter(appointment_item=item).count(), 1)
+        self.assertEqual(client.get("/api/v1/admin/commissions/").status_code, 403)
+        commission = EmployeeCommission.objects.get(appointment_item=item)
+        other_commission = EmployeeCommission.objects.get(appointment_item=other_item)
+        self.assertEqual(commission.base_amount, 800)
+        self.assertEqual(commission.commission_rate_snapshot, 10)
         self.assertEqual(commission.commission_amount, 80)
-        payment = Payment.objects.create(appointment=self.appointment, amount=800)
-        payment.mark_paid(self.customer); self.assertEqual(payment.status, "paid")
-        refund = Refund.objects.create(payment=payment, amount=800)
-        refund.complete(self.customer)
-        self.assertEqual(payment.status, "refunded")
+        self.assertEqual((other_commission.base_amount, other_commission.commission_rate_snapshot, other_commission.commission_amount), (800, 20, 160))
+
+        self.service.price = 1200
+        self.service.save(update_fields=("price",))
+        self.employee.commission_rate = 25
+        self.employee.save(update_fields=("commission_rate",))
+        commission.refresh_from_db()
+        self.assertEqual((commission.base_amount, commission.commission_rate_snapshot, commission.commission_amount), (800, 10, 80))
+
+    def test_partial_payments_refunds_and_transactions_are_derived(self):
+        self.make_item()
+        admin = User.objects.create_user(username="finance-admin", role="admin")
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        first = client.post("/api/v1/admin/payments/", {"appointment": self.appointment.pk, "amount": 300, "payment_method": "cash"}, format="json")
+        second = client.post("/api/v1/admin/payments/", {"appointment": self.appointment.pk, "amount": 500, "payment_method": "card"}, format="json")
+        excessive = client.post("/api/v1/admin/payments/", {"appointment": self.appointment.pk, "amount": 1}, format="json")
+
+        self.assertEqual((first.status_code, second.status_code, excessive.status_code), (201, 201, 400))
+        appointment = client.get(f"/api/v1/admin/appointments/{self.appointment.pk}/")
+        self.assertEqual((appointment.data["appointment_total"], appointment.data["paid_total"], appointment.data["remaining_total"], appointment.data["payment_status"]), (800, 800, 0, "paid"))
+
+        refund = client.post("/api/v1/admin/refunds/", {"payment": first.data["id"], "amount": 200, "reason": "اصلاح مبلغ"}, format="json")
+        excessive_refund = client.post("/api/v1/admin/refunds/", {"payment": first.data["id"], "amount": 101}, format="json")
+        self.assertEqual((refund.status_code, excessive_refund.status_code), (201, 400))
+        appointment = client.get(f"/api/v1/admin/appointments/{self.appointment.pk}/")
+        self.assertEqual((appointment.data["refunded_total"], appointment.data["net_paid"], appointment.data["remaining_total"], appointment.data["payment_status"]), (200, 600, 200, "partially_refunded"))
+        dashboard = client.get("/api/v1/admin/statistics/")
+        self.assertEqual(dashboard.data["revenue"]["today"], 600)
+        self.assertEqual(Transaction.objects.filter(appointment=self.appointment, type="payment").count(), 2)
+        self.assertEqual(Transaction.objects.filter(appointment=self.appointment, type="refund").count(), 1)
+
+        transaction = Transaction.objects.filter(appointment=self.appointment).first()
+        transaction.description = "tampered"
+        with self.assertRaises(ValidationError):
+            transaction.save()
+
+    def test_employee_payment_report_requires_assignment_and_admin_review(self):
+        item = self.make_item()
+        admin = User.objects.create_user(username="review-admin", role="admin")
+        employee_client = APIClient()
+        employee_client.force_authenticate(self.employee.user)
+
+        report = employee_client.post(
+            f"/api/v1/employee/appointments/{self.appointment.pk}/payments/",
+            {"amount": 500, "payment_method": "cash", "notes": "دریافت نقدی"},
+            format="json",
+        )
+
+        self.assertEqual(report.status_code, 201)
+        payment = Payment.objects.get(pk=report.data["id"])
+        self.assertEqual((payment.status, payment.created_by, payment.amount), ("pending", self.employee.user, 500))
+        self.assertEqual(Transaction.objects.filter(payment=payment).count(), 0)
+        history = employee_client.get(f"/api/v1/employee/appointments/{self.appointment.pk}/payments/")
+        self.assertEqual(history.data["remaining_total"], 800)
+
+        admin_client = APIClient()
+        admin_client.force_authenticate(admin)
+        confirmed = admin_client.post(f"/api/v1/admin/payments/{payment.pk}/confirm/", format="json")
+        self.assertEqual(confirmed.status_code, 200)
+        payment.refresh_from_db()
+        self.assertEqual((payment.status, payment.reviewed_by), ("paid", admin))
+        self.assertEqual(self.appointment.remaining_total, 300)
+        self.assertEqual(Transaction.objects.filter(payment=payment, type="payment").count(), 1)
+        self.assertEqual(EmployeeCommission.objects.count(), 0)
+
+        rejected = employee_client.post(
+            f"/api/v1/employee/appointments/{self.appointment.pk}/payments/",
+            {"amount": 300, "payment_method": "card"},
+            format="json",
+        )
+        self.assertEqual(rejected.status_code, 201)
+        rejected_payment = Payment.objects.get(pk=rejected.data["id"])
+        self.assertEqual(admin_client.post(f"/api/v1/admin/payments/{rejected_payment.pk}/reject/", format="json").status_code, 200)
+        rejected_payment.refresh_from_db()
+        self.assertEqual(rejected_payment.status, "failed")
+        self.assertEqual(self.appointment.remaining_total, 300)
+        self.assertEqual(Transaction.objects.filter(payment=rejected_payment).count(), 0)
+
+        other_user = User.objects.create_user(username="unrelated-reporter", role="employee")
+        other_employee = EmployeeProfile.objects.create(user=other_user)
+        other_appointment = Appointment.objects.create(customer=self.customer_profile)
+        AppointmentItem.objects.create(appointment=other_appointment, service=self.service, employee=other_employee, date=item.date, start_time="10:00", end_time="11:00")
+        denied = employee_client.post(f"/api/v1/employee/appointments/{other_appointment.pk}/payments/", {"amount": 100, "payment_method": "cash"}, format="json")
+        self.assertEqual(denied.status_code, 404)
+
+    def test_employee_self_booking_forces_own_assignment_and_validates_schedule(self):
+        booking_date = timezone.localdate() + timedelta(days=1)
+        WorkingSchedule.objects.create(employee=self.employee, weekday=booking_date.weekday(), start_time="09:00", end_time="20:00")
+        second_service = Service.objects.create(category=self.service.category, name="Color", persian_name="Color", price=1200, duration=30)
+        EmployeeService.objects.create(employee=self.employee, service=second_service)
+        other_user = User.objects.create_user(username="other-booker", role="employee")
+        other_employee = EmployeeProfile.objects.create(user=other_user)
+        restricted_service = Service.objects.create(category=self.service.category, name="Nails", persian_name="Nails", price=600, duration=30)
+        EmployeeService.objects.create(employee=other_employee, service=restricted_service)
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+        payload = {"customer_name": "مشتری تلفنی", "customer_phone": "09121234567", "services": [self.service.pk, second_service.pk], "date": str(booking_date), "start_time": "10:00", "notes": "رزرو تلفنی", "employee": other_employee.pk}
+
+        response = client.post("/api/v1/employee/appointments/create/", payload, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        appointment = Appointment.objects.get(pk=response.data["id"])
+        self.assertEqual(appointment.created_by, self.employee.user)
+        self.assertEqual(list(appointment.items.values_list("employee_id", flat=True)), [self.employee.pk, self.employee.pk])
+        self.assertEqual(list(appointment.items.values_list("start_time", "end_time")), [(time(10), time(11)), (time(11), time(11, 30))])
+        self.assertEqual(list(appointment.items.values_list("price_snapshot", "duration_snapshot")), [(800, 60), (1200, 30)])
+        self.assertEqual(Payment.objects.count(), 0)
+        self.assertEqual(EmployeeCommission.objects.count(), 0)
+        self.assertEqual(client.post("/api/v1/employee/appointments/create/", {**payload, "services": [restricted_service.pk], "start_time": "12:00"}, format="json").status_code, 400)
+        self.assertEqual(client.post("/api/v1/employee/appointments/create/", {**payload, "services": [self.service.pk], "start_time": "10:30"}, format="json").status_code, 400)
+        TimeOff.objects.create(employee=self.employee, start_date=booking_date, end_date=booking_date)
+        self.assertEqual(client.post("/api/v1/employee/appointments/create/", {**payload, "services": [self.service.pk], "start_time": "13:00"}, format="json").status_code, 400)
 
     def test_employee_earnings_periods_use_snapshots_commissions_and_payment_status(self):
         today = timezone.localdate()
         WorkingSchedule.objects.create(employee=self.employee, weekday=today.weekday(), start_time="09:00", end_time="20:00")
         current_item = AppointmentItem.objects.create(appointment=self.appointment, service=self.service, employee=self.employee, date=today, start_time="10:00", end_time="11:00", price_snapshot=800, duration_snapshot=60, completion_status="completed")
-        EmployeeCommission.objects.create(appointment_item=current_item, commission_rate_snapshot=10, commission_amount=80)
+        EmployeeCommission.objects.create(appointment_item=current_item, base_amount=800, commission_rate_snapshot=10, commission_amount=80)
         Payment.objects.create(appointment=self.appointment, amount=800, status="paid")
         month_appointment = Appointment.objects.create(customer=self.customer_profile)
         month_date = today.replace(day=1 if today.day > 1 else 2)
         month_item = AppointmentItem.objects.create(appointment=month_appointment, service=self.service, employee=self.employee, date=month_date, start_time="12:00", end_time="13:00", price_snapshot=500, duration_snapshot=60, completion_status="completed")
-        EmployeeCommission.objects.create(appointment_item=month_item, commission_rate_snapshot=10, commission_amount=50)
+        EmployeeCommission.objects.create(appointment_item=month_item, base_amount=500, commission_rate_snapshot=10, commission_amount=50)
         Payment.objects.create(appointment=month_appointment, amount=500, status="pending")
         other_appointment = Appointment.objects.create(customer=self.customer_profile)
         older_item = AppointmentItem.objects.create(appointment=other_appointment, service=self.service, employee=self.employee, date=today - timedelta(days=40), start_time="10:00", end_time="11:00", price_snapshot=1200, duration_snapshot=60, completion_status="completed")
-        EmployeeCommission.objects.create(appointment_item=older_item, commission_rate_snapshot=20, commission_amount=240)
+        EmployeeCommission.objects.create(appointment_item=older_item, base_amount=1200, commission_rate_snapshot=20, commission_amount=240)
         Payment.objects.create(appointment=other_appointment, amount=1200, status="pending")
+        isolated_user = User.objects.create_user(username="isolated-earner", role="employee")
+        isolated_employee = EmployeeProfile.objects.create(user=isolated_user)
+        EmployeeService.objects.create(employee=isolated_employee, service=self.service)
+        isolated_appointment = Appointment.objects.create(customer=self.customer_profile)
+        isolated_item = AppointmentItem.objects.create(appointment=isolated_appointment, service=self.service, employee=isolated_employee, date=today, start_time="14:00", end_time="15:00", completion_status="completed")
+        EmployeeCommission.objects.create(appointment_item=isolated_item, base_amount=800, commission_rate_snapshot=50, commission_amount=400)
         client = APIClient()
         client.force_authenticate(self.employee.user)
 
         day = client.get("/api/v1/employee/earnings/?period=day")
         month = client.get("/api/v1/employee/earnings/?period=month")
 
-        self.assertEqual(day.data["gross_service_revenue"], 800)
+        self.assertEqual(day.data["completed_services"], 1)
         self.assertEqual(day.data["employee_commission"], 80)
+        self.assertEqual(day.data["items"][0]["base_amount"], 800)
         self.assertEqual(day.data["items"][0]["payment_status"], "paid")
-        self.assertEqual(month.data["gross_service_revenue"], 1600)
+        self.assertEqual(month.data["completed_services"], 2)
         self.assertEqual(month.data["employee_commission"], 130)
-        self.assertEqual(month.data["payment_statuses"]["pending"], 1)
-        self.assertNotEqual(day.data["gross_service_revenue"], month.data["gross_service_revenue"])
+        self.assertEqual(month.data["statuses"]["pending"], 2)
+        self.assertNotEqual(day.data["employee_commission"], month.data["employee_commission"])
 
     def test_reschedule_revalidates_and_cancellation_history(self):
         WorkingSchedule.objects.create(employee=self.employee, weekday=5, start_time="09:00", end_time="20:00")

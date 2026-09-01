@@ -1,13 +1,13 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminServiceViewSet,
+from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminGalleryCategoryView, AdminServiceViewSet,
 					AdminUserViewSet, AdminCustomerOptionsView, AdminEmployeeEligibleUsersView, AdminRevenueView, AdminServiceCategoryViewSet, AdminTransactionTypesView, BookingHoldDeleteView,
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView, BookingHoldView,
-					EmployeeAppointmentsView, EmployeeListView, EmployeeStatisticsView,
+										EmployeeAppointmentsView, EmployeeCustomerOptionsView, EmployeeListView, EmployeeSelfBookingView, EmployeeSelfServiceListView, EmployeeStatisticsView, GalleryCategoryListView,
 					ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
-					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
-					PaymentViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
-					EmployeeEarningsView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView)
+					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
+					PaymentViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
+										EmployeeEarningsView, EmployeeAppointmentPaymentReportView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView)
 
 router = DefaultRouter()
 router.register("admin/services", AdminServiceViewSet, basename="admin-service")
@@ -20,6 +20,8 @@ router.register("admin/working-schedules", WorkingScheduleViewSet, basename="wor
 router.register("admin/appointment-items", AppointmentItemViewSet, basename="appointment-item")
 router.register("admin/transactions", TransactionViewSet, basename="transaction")
 router.register("admin/payments", PaymentViewSet, basename="payment")
+router.register("admin/refunds", RefundViewSet, basename="refund")
+router.register("admin/commissions", EmployeeCommissionViewSet, basename="commission")
 router.register("admin/service-images", ServiceImageViewSet, basename="service-image")
 router.register("admin/activity", AdminActionLogViewSet, basename="admin-activity")
 router.register("employee/appointment-items", EmployeeAppointmentItemViewSet, basename="employee-appointment-item")
@@ -29,6 +31,7 @@ router.register("employee/schedule", EmployeeWorkingScheduleViewSet, basename="e
 urlpatterns = [
 	path("services/", ServiceListView.as_view(), name="service-list"),
 	path("gallery/", GalleryListView.as_view(), name="gallery-list"),
+	path("gallery/categories/", GalleryCategoryListView.as_view(), name="gallery-category-list"),
 	path("employees/", EmployeeListView.as_view(), name="employee-list"),
 	path("availability/", AvailabilityView.as_view(), name="availability-list"),
 	path("appointments/", AppointmentCreateView.as_view(), name="appointment-create"),
@@ -38,10 +41,16 @@ urlpatterns = [
 	path("customer/booking/", CustomerBookingView.as_view(), name="customer-booking-lookup"),
 	path("customer/history/", CustomerHistoryView.as_view(), name="customer-history"),
 	path("employee/appointments/", EmployeeAppointmentsView.as_view(), name="employee-appointments"),
+	path("employee/appointments/create/", EmployeeSelfBookingView.as_view(), name="employee-appointment-create"),
+	path("employee/services/", EmployeeSelfServiceListView.as_view(), name="employee-service-list"),
+	path("employee/customers/", EmployeeCustomerOptionsView.as_view(), name="employee-customer-options"),
+	path("employee/appointments/<int:appointment_id>/payments/", EmployeeAppointmentPaymentReportView.as_view(), name="employee-appointment-payments"),
 	path("employee/statistics/", EmployeeStatisticsView.as_view(), name="employee-statistics"),
 	path("employee/profile/", EmployeeProfileView.as_view(), name="employee-profile"),
+	path("employee/password/", EmployeePasswordChangeView.as_view(), name="employee-password-change"),
 	path("employee/earnings/", EmployeeEarningsView.as_view(), name="employee-earnings"),
 	path("admin/statistics/", AdminStatisticsView.as_view(), name="admin-statistics"),
+	path("admin/gallery-categories/", AdminGalleryCategoryView.as_view(), name="admin-gallery-category-list"),
 	path("admin/employee-eligible-users/", AdminEmployeeEligibleUsersView.as_view(), name="admin-employee-eligible-users"),
 	path("admin/customer-options/", AdminCustomerOptionsView.as_view(), name="admin-customer-options"),
 	path("admin/transaction-types/", AdminTransactionTypesView.as_view(), name="admin-transaction-types"),
