@@ -52,37 +52,58 @@ class GalleryAssetSerializer(serializers.ModelSerializer):
 
 class EmployeeSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source="user.get_full_name", read_only=True)
+    profile_photo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeProfile
-        fields = ("id", "name", "specialty", "is_active", "profile_photo")
+        fields = ("id", "name", "specialty", "is_active", "profile_photo", "profile_photo_url")
+        extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
+
+    def get_profile_photo_url(self, obj):
+        return absolute_gallery_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
 
     def validate_profile_photo(self, value):
+        if isinstance(value, str):
+            raise serializers.ValidationError("لطفاً یک فایل تصویر جدید انتخاب کنید.")
         return validate_image_upload(value)
 
 
 class EmployeeSelfProfileSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source="user.get_full_name", read_only=True)
+    profile_photo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeProfile
-        fields = ("id", "name", "bio", "profile_photo")
+        fields = ("id", "name", "bio", "profile_photo", "profile_photo_url")
         read_only_fields = ("id", "name")
+        extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
+
+    def get_profile_photo_url(self, obj):
+        return absolute_gallery_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
 
     def validate_profile_photo(self, value):
+        if isinstance(value, str):
+            raise serializers.ValidationError("لطفاً یک فایل تصویر جدید انتخاب کنید.")
         return validate_image_upload(value)
 
 
 class AdminEmployeeSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source="user.get_full_name", read_only=True)
+    profile_photo_url = serializers.SerializerMethodField()
     services = serializers.PrimaryKeyRelatedField(queryset=Service.objects.filter(is_active=True, is_bookable=True), many=True, required=False, write_only=True)
     service_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeProfile
-        fields = ("id", "user", "name", "specialty", "bio", "commission_rate", "is_active", "profile_photo", "services", "service_ids")
+        fields = ("id", "user", "name", "specialty", "bio", "commission_rate", "is_active", "profile_photo", "profile_photo_url", "services", "service_ids")
+        extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
+
+    def get_profile_photo_url(self, obj):
+        return absolute_gallery_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
 
     def validate_profile_photo(self, value):
+        if isinstance(value, str):
+            raise serializers.ValidationError("لطفاً یک فایل تصویر جدید انتخاب کنید.")
         return validate_image_upload(value)
 
     def get_service_ids(self, obj):

@@ -1089,6 +1089,30 @@ function CrudPage({
 const employeeOptionLabel = (user) => user.first_name || user.username;
 const appointmentOptionLabel = (appointment) =>
   `${appointment.customer_name || `رزرو #${appointment.id}`} (${appointment.confirmation_code})`;
+const scheduleWeekdays = ["دوشنبه", "سه‌شنبه", "چهارشنبه", "پنج‌شنبه", "جمعه", "شنبه", "یکشنبه"];
+
+function EmployeeScheduleModal({ employee, close }) {
+  const schedule = useResource(`admin/working-schedules/?employee=${employee.id}`);
+  const [entries, setEntries] = useState([]);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    if (!schedule.loading) setEntries(scheduleWeekdays.map((label, weekday) => {
+      const entry = schedule.data.find((item) => item.weekday === weekday);
+      return { id: entry?.id, weekday, label, start_time: entry?.start_time?.slice(0, 5) || "09:00", end_time: entry?.end_time?.slice(0, 5) || "17:00", is_active: entry?.is_active ?? false };
+    }));
+  }, [schedule.data, schedule.loading]);
+  const update = (weekday, field, value) => setEntries(entries.map((entry) => entry.weekday === weekday ? { ...entry, [field]: value } : entry));
+  const save = async (entry) => {
+    const payload = { employee: employee.id, weekday: entry.weekday, start_time: entry.start_time, end_time: entry.end_time, is_active: entry.is_active };
+    try {
+      if (entry.id) await api.patch(`admin/working-schedules/${entry.id}/`, payload);
+      else await api.post("admin/working-schedules/", payload);
+      setMessage("ساعات کاری ذخیره شد");
+      schedule.reload();
+    } catch { setMessage("ذخیره ساعات کاری انجام نشد"); }
+  };
+  return <div className="modal-backdrop" onMouseDown={close}><section className="admin-modal admin-schedule-modal" onMouseDown={(event) => event.stopPropagation()}><button type="button" className="drawer-close" onClick={close}>×</button><span className="admin-kicker">برنامه کاری {employee.name}</span><h2>ویرایش ساعات کاری</h2>{schedule.loading ? <Skeleton /> : <div className="admin-weekly-schedule">{entries.map((entry) => <div className="admin-weekly-schedule-row" key={entry.weekday}><strong>{entry.label}</strong><label>شروع<input aria-label={`شروع ${entry.label}`} type="time" value={entry.start_time} onChange={(event) => update(entry.weekday, "start_time", event.target.value)} /></label><label>پایان<input aria-label={`پایان ${entry.label}`} type="time" value={entry.end_time} onChange={(event) => update(entry.weekday, "end_time", event.target.value)} /></label><label className="check-label"><input aria-label={`فعال ${entry.label}`} type="checkbox" checked={entry.is_active} onChange={(event) => update(entry.weekday, "is_active", event.target.checked)} /> فعال</label><button className="admin-primary" type="button" onClick={() => save(entry)}>ذخیره</button></div>)}</div>}{message && <small className="admin-schedule-message">{message}</small>}</section></div>;
+}
 
 function EmployeeManagement() {
   const resource = useResource("admin/employees/");
@@ -1097,6 +1121,7 @@ function EmployeeManagement() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState("new");
   const [editing, setEditing] = useState(null);
+  const [scheduleEmployee, setScheduleEmployee] = useState(null);
   const [form, setForm] = useState({ is_active: true });
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState("");
@@ -1168,6 +1193,7 @@ function EmployeeManagement() {
                 >
                   ویرایش
                 </button>
+                <button onClick={() => setScheduleEmployee(employee)}>ویرایش ساعات کاری</button>
               </article>
             ))}
           </div>
@@ -1354,6 +1380,7 @@ function EmployeeManagement() {
           </form>
         </div>
       )}
+      {scheduleEmployee && <EmployeeScheduleModal employee={scheduleEmployee} close={() => setScheduleEmployee(null)} />}
       <Toast message={toast} type="success" />
     </div>
   );
@@ -1467,41 +1494,6 @@ function AdminRouter() {
         }
       />
       <Route path="finance" element={<Finance />} />
-      <Route
-        path="schedules"
-        element={
-          <CrudPage
-            type="ساعات کاری"
-            endpoint="admin/working-schedules/"
-            title="ساعات کاری"
-            eyebrow="تیم سالن"
-            fields={[
-              {
-                name: "employee",
-                label: "متخصص",
-                type: "select",
-                optionsEndpoint: "admin/employees/",
-              },
-              {
-                name: "weekday",
-                label: "روز هفته",
-                type: "select",
-                options: [
-                  { value: 0, label: "دوشنبه" },
-                  { value: 1, label: "سه‌شنبه" },
-                  { value: 2, label: "چهارشنبه" },
-                  { value: 3, label: "پنج‌شنبه" },
-                  { value: 4, label: "جمعه" },
-                  { value: 5, label: "شنبه" },
-                  { value: 6, label: "یکشنبه" },
-                ],
-              },
-              { name: "start_time", label: "شروع", type: "time" },
-              { name: "end_time", label: "پایان", type: "time" },
-            ]}
-          />
-        }
-      />
       <Route path="content" element={<Content />} />
       <Route path="*" element={<DashboardHome />} />
     </Routes>

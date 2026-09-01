@@ -1,6 +1,7 @@
 import json
 from datetime import date, timedelta
 
+from django.conf import settings
 from django.db import IntegrityError
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -67,6 +68,17 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(response.data["role"], "admin")
         self.assertNotIn("refresh", response.data)
         self.assertTrue(response.cookies["baharnaj_refresh"]["httponly"])
+
+    def test_refresh_with_deleted_user_clears_stale_cookie(self):
+        user = User.objects.create_user(username="deleted-user", password="correct-password")
+        login = self.client.post("/api/v1/auth/token/", {"username": user.username, "password": "correct-password"})
+        self.assertEqual(login.status_code, 200)
+        user.delete()
+
+        response = self.client.post("/api/v1/auth/token/refresh/")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.cookies[settings.REFRESH_COOKIE_NAME]["max-age"], 0)
 
     @override_settings(TIME_ZONE="Asia/Tehran")
     def test_availability_does_not_depend_on_client_timezone(self):
@@ -140,6 +152,21 @@ class AppointmentItemSchemaTests(TestCase):
         invalid_range = client.post("/api/v1/employee/schedule/", {"weekday": 2, "start_time": "18:00", "end_time": "09:00", "is_active": True})
         self.assertEqual(invalid_range.status_code, 400)
         self.assertEqual(client.delete(f"/api/v1/employee/schedule/{own_schedule}/").status_code, 204)
+
+    def test_admin_can_filter_working_schedules_by_employee(self):
+        admin = User.objects.create_user(username="schedule-admin", role="admin")
+        other_user = User.objects.create_user(username="other-schedule", role="employee")
+        other_employee = EmployeeProfile.objects.create(user=other_user)
+        own_schedule = WorkingSchedule.objects.create(employee=self.employee, weekday=0, start_time="09:00", end_time="17:00")
+        WorkingSchedule.objects.create(employee=other_employee, weekday=0, start_time="10:00", end_time="18:00")
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.get(f"/api/v1/admin/working-schedules/?employee={self.employee.pk}")
+        schedules = response.data["results"] if "results" in response.data else response.data
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([schedule["id"] for schedule in schedules], [own_schedule.pk])
 
     def test_employee_profile_does_not_expose_or_update_admin_specialty(self):
         self.employee.specialty = "Hair color"
