@@ -133,6 +133,28 @@ class AppointmentItemSchemaTests(TestCase):
 
         self.assertEqual([item["id"] for item in first_day.data], [self.appointment.pk])
         self.assertEqual([item["id"] for item in second_day.data], [other_appointment.pk])
+        range_response = client.get("/api/v1/employee/appointments/?start=2026-08-30&end=2026-08-31")
+        self.assertEqual({item["id"] for item in range_response.data}, {self.appointment.pk, other_appointment.pk})
+
+    def test_employee_cannot_complete_another_employees_item(self):
+        other_user = User.objects.create_user(username="other-completion", role="employee")
+        other_employee = EmployeeProfile.objects.create(user=other_user)
+        other_item = AppointmentItem.objects.create(
+            appointment=self.appointment,
+            service=self.service,
+            employee=other_employee,
+            date=date(2026, 8, 29),
+            start_time="09:00",
+            end_time="10:00",
+        )
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        response = client.post(f"/api/v1/employee/appointment-items/{other_item.pk}/action/", {"status": "complete"}, format="json")
+
+        self.assertEqual(response.status_code, 404)
+        other_item.refresh_from_db()
+        self.assertEqual(other_item.completion_status, "pending")
 
     def test_employee_schedule_is_scoped_and_validated(self):
         other_user = User.objects.create_user(username="schedule-other", role="employee")
@@ -395,9 +417,8 @@ class AppointmentItemSchemaTests(TestCase):
         employee_appointment = client.get("/api/v1/employee/appointments/").data[0]
         self.assertEqual([row["employee"] for row in employee_appointment["items"]], [self.employee.pk])
         completed_again = client.post(f"/api/v1/employee/appointment-items/{item.pk}/action/", {"status": "complete", "notes": "کار انجام شد"}, format="json")
-        self.assertEqual(completed_again.status_code, 200)
+        self.assertEqual(completed_again.status_code, 400)
         item.refresh_from_db()
-        self.assertEqual(item.notes, "کار انجام شد")
         self.assertEqual(EmployeeCommission.objects.filter(appointment_item=item).count(), 1)
         self.assertEqual(client.get("/api/v1/admin/commissions/").status_code, 403)
         commission = EmployeeCommission.objects.get(appointment_item=item)

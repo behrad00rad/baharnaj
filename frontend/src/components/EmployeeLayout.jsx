@@ -3,7 +3,7 @@ import { clearSession } from '../shared/api'
 import { useAuth } from '../shared/auth'
 import './Employee.css'
 
-const links = [['/', 'امروز', '⌂'], ['/calendar', 'تقویم', '◷'], ['/earnings', 'درآمد', '↗'], ['/profile', 'پروفایل', '♙']]
+const links = [['/', 'امروز', '⌂'], ['/calendar', 'تقویم', '◷'], ['/earnings', 'درآمد', '↗'], ['/availability', 'برنامه کاری', '◫'], ['/profile', 'پروفایل', '♙']]
 export default function EmployeeLayout() {
   const navigate = useNavigate(); const { role } = useAuth()
   if (role !== 'employee') return <div className="employee-denied" dir="rtl"><strong>دسترسی متخصص لازم است.</strong><button onClick={() => navigate('/login')}>بازگشت به ورود</button></div>

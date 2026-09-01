@@ -15,13 +15,14 @@ describe('employee app', () => {
   it('renders explicit empty state on today view', async () => {
     render(<MemoryRouter><EmployeeApp /></MemoryRouter>)
     await waitFor(() => expect(screen.getByText('نوبت بعدی ندارید')).toBeInTheDocument())
-    expect(screen.getByText('برای امروز نوبتی ثبت نشده')).toBeInTheDocument()
+    expect(screen.getByText('امروز نوبتی برای شما ثبت نشده است.')).toBeInTheDocument()
+    expect(get).toHaveBeenCalledWith('employee/statistics/')
   })
 
   it('renders calendar loading/empty state and employee action payload shape', async () => {
     render(<MemoryRouter initialEntries={['/calendar']}><EmployeeApp /></MemoryRouter>)
     expect(screen.getByText('تقویم')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByText('تقویم خالی است')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('برای این روز نوبتی ندارید')).toBeInTheDocument())
     expect(post).not.toHaveBeenCalled()
   })
 
@@ -78,7 +79,8 @@ describe('employee app', () => {
     const current = new Date().toISOString().slice(0, 10)
     get.mockImplementation((endpoint) => {
       if (endpoint === 'employee/earnings/?period=day') return Promise.resolve({ data: { completed_services: 0, employee_commission: 0, items: [] } })
-      if (endpoint === 'employee/appointments/') return Promise.resolve({ data: [{ id: 1, customer_name: 'مشتری', items: [{ id: 12, date: current, start_time: '23:59', end_time: '23:59', service_name: 'کوتاهی', notes: '' }] }] })
+      if (endpoint === `employee/appointments/?date=${current}`) return Promise.resolve({ data: [{ id: 1, customer_name: 'مشتری', items: [{ id: 12, date: current, start_time: '23:59', end_time: '23:59', service_name: 'کوتاهی', notes: '' }] }] })
+      if (endpoint === 'employee/statistics/') return Promise.resolve({ data: { today_total: 1, completed_services: 0, remaining_services: 1, employee_commission: 0, next_appointment: null } })
       return Promise.resolve({ data: [] })
     })
     post.mockRejectedValueOnce({ response: { data: { detail: 'ثبت وضعیت ممکن نیست' } } })
@@ -92,25 +94,24 @@ describe('employee app', () => {
     expect(await screen.findByText('ثبت وضعیت ممکن نیست')).toBeInTheDocument()
   })
 
-  it('changes appointments and working hours when selecting another calendar day', async () => {
+  it('loads only the selected employee week range for the calendar', async () => {
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date())
     const nextDate = new Date(`${today}T12:00:00`); nextDate.setDate(nextDate.getDate() + 1)
     const tomorrow = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(nextDate)
     const weekday = (date) => (new Date(`${date}T12:00:00`).getDay() + 6) % 7
     get.mockImplementation((endpoint) => {
-      if (endpoint === 'employee/schedule/') return Promise.resolve({ data: [{ id: 1, weekday: weekday(today), start_time: '09:00:00', end_time: '17:00:00', is_active: true }, { id: 2, weekday: weekday(tomorrow), start_time: '11:00:00', end_time: '19:00:00', is_active: true }] })
       if (endpoint === `employee/appointments/?date=${today}`) return Promise.resolve({ data: [{ id: 1, customer_name: 'مشتری امروز', status: 'confirmed', items: [{ date: today, start_time: '09:00', end_time: '10:00', service_name: 'کوتاهی' }] }] })
-      if (endpoint === `employee/appointments/?date=${tomorrow}`) return Promise.resolve({ data: [{ id: 2, customer_name: 'مشتری فردا', status: 'confirmed', items: [{ date: tomorrow, start_time: '11:00', end_time: '12:00', service_name: 'رنگ' }] }] })
       return Promise.resolve({ data: [] })
     })
     render(<MemoryRouter initialEntries={['/calendar']}><EmployeeApp /></MemoryRouter>)
 
     expect(await screen.findByText('مشتری امروز')).toBeInTheDocument()
-    expect(screen.getByText('بازه کاری 09:00 تا 17:00')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'هفته' }))
-    fireEvent.click(await screen.findByRole('button', { name: `انتخاب ${tomorrow}` }))
-    expect(await screen.findByText('مشتری فردا')).toBeInTheDocument()
-    expect(screen.getByText('بازه کاری 11:00 تا 19:00')).toBeInTheDocument()
-    expect(get).toHaveBeenCalledWith(`employee/appointments/?date=${tomorrow}`)
+    const weekStart = new Date(`${today}T12:00:00`)
+    weekStart.setDate(weekStart.getDate() - weekday(today))
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekEnd.getDate() + 6)
+    const format = (value) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(value)
+    await waitFor(() => expect(get).toHaveBeenCalledWith(`employee/appointments/?start=${format(weekStart)}&end=${format(weekEnd)}`))
   })
 })

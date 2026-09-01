@@ -12,6 +12,7 @@ from django.middleware.csrf import get_token
 from django.utils import timezone
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -110,11 +111,18 @@ class EmployeeAppointmentsView(generics.ListAPIView):
 
     def get_queryset(self):
         selected_date = self.request.query_params.get("date")
+        start_date = self.request.query_params.get("start")
+        end_date = self.request.query_params.get("end")
         item_filters = {"employee__user": self.request.user}
         appointment_filters = {"items__employee__user": self.request.user}
         if selected_date:
             item_filters["date"] = selected_date
             appointment_filters["items__date"] = selected_date
+        elif start_date or end_date:
+            if not (start_date and end_date):
+                raise ValidationError({"detail": "هر دو تاریخ شروع و پایان الزامی هستند."})
+            item_filters["date__range"] = (start_date, end_date)
+            appointment_filters["items__date__range"] = (start_date, end_date)
         own_items = AppointmentItem.objects.filter(**item_filters).select_related("service", "employee__user")
         queryset = (
             Appointment.objects.filter(**appointment_filters)
@@ -128,13 +136,23 @@ class EmployeeStatisticsView(generics.GenericAPIView):
     permission_classes = (IsEmployee,)
 
     def get(self, request):
-        items = AppointmentItem.objects.filter(employee__user=request.user, completion_status="completed")
-        commissions = EmployeeCommission.objects.filter(appointment_item__employee__user=request.user)
+        today = timezone.localdate()
+        today_items = AppointmentItem.objects.filter(employee__user=request.user, date=today)
+        completed_items = today_items.filter(completion_status="completed")
+        commissions = EmployeeCommission.objects.filter(appointment_item__employee__user=request.user, appointment_item__date=today)
+        next_item = (
+            today_items.exclude(completion_status__in=("completed", "cancelled"))
+            .filter(start_time__gte=timezone.localtime().time())
+            .select_related("appointment__customer__user", "service")
+            .order_by("start_time")
+            .first()
+        )
         return Response({
-            "completed_services": items.count(),
-            "income": commissions.aggregate(total=Sum("base_amount"))["total"] or 0,
-            "commission": commissions.aggregate(total=Sum("commission_amount"))["total"] or 0,
-            "customers": items.values("appointment__customer").distinct().count(),
+            "today_total": today_items.values("appointment_id").distinct().count(),
+            "completed_services": completed_items.count(),
+            "remaining_services": today_items.exclude(completion_status__in=("completed", "cancelled")).count(),
+            "employee_commission": commissions.aggregate(total=Sum("commission_amount"))["total"] or 0,
+            "next_appointment": EmployeeAppointmentSerializer(next_item.appointment, context={"request": request}).data if next_item else None,
         })
 
 
@@ -586,6 +604,8 @@ class EmployeeAppointmentItemViewSet(viewsets.ModelViewSet):
         status_map = {"arrival": "pending", "start": "in_progress", "complete": "completed", "cancel": "cancelled"}
         if next_status not in status_map:
             return Response({"detail": "عملیات نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+        if item.completion_status in {"completed", "cancelled"}:
+            return Response({"detail": "وضعیت این خدمت نهایی شده است."}, status=status.HTTP_400_BAD_REQUEST)
         if next_status == "cancel" and not reason.strip():
             return Response({"detail": "دلیل لغو الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
         if "notes" in request.data:
