@@ -74,6 +74,24 @@ describe('employee app', () => {
     await waitFor(() => expect(get).toHaveBeenCalledWith('employee/earnings/?period=month'))
   })
 
+  it('submits notes with completed work and shows backend failures', async () => {
+    const current = new Date().toISOString().slice(0, 10)
+    get.mockImplementation((endpoint) => {
+      if (endpoint === 'employee/earnings/?period=day') return Promise.resolve({ data: { completed_services: 0, employee_commission: 0, items: [] } })
+      if (endpoint === 'employee/appointments/') return Promise.resolve({ data: [{ id: 1, customer_name: 'مشتری', items: [{ id: 12, date: current, start_time: '23:59', end_time: '23:59', service_name: 'کوتاهی', notes: '' }] }] })
+      return Promise.resolve({ data: [] })
+    })
+    post.mockRejectedValueOnce({ response: { data: { detail: 'ثبت وضعیت ممکن نیست' } } })
+    render(<MemoryRouter><EmployeeApp /></MemoryRouter>)
+
+    fireEvent.click(await screen.findByRole('button', { name: /مشتری.*کوتاهی/ }))
+    fireEvent.change(screen.getByPlaceholderText('یادداشت‌ها و محصولات مصرف‌شده را ثبت کنید...'), { target: { value: 'کار تکمیل شد' } })
+    fireEvent.click(screen.getByRole('button', { name: 'تکمیل نوبت' }))
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('employee/appointment-items/12/action/', expect.objectContaining({ status: 'complete', notes: 'کار تکمیل شد' })))
+    expect(await screen.findByText('ثبت وضعیت ممکن نیست')).toBeInTheDocument()
+  })
+
   it('changes appointments and working hours when selecting another calendar day', async () => {
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date())
     const nextDate = new Date(`${today}T12:00:00`); nextDate.setDate(nextDate.getDate() + 1)

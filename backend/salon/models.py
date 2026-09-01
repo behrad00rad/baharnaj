@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+from decimal import Decimal
 import uuid
 
 
@@ -198,6 +199,36 @@ class Appointment(SoftDeleteModel):
             self.save(update_fields=("status", "updated_by", "updated_at"))
             AppointmentStatusHistory.objects.create(appointment=self, status=status, changed_by=changed_by, reason=reason, created_by=changed_by, updated_by=changed_by)
 
+    @property
+    def appointment_total(self):
+        return sum(item.price_snapshot for item in self.items.all())
+
+    @property
+    def paid_total(self):
+        return sum(payment.amount for payment in self.payments.all() if payment.status in {"paid", "refunded"})
+
+    @property
+    def refunded_total(self):
+        return sum(refund.amount for payment in self.payments.all() for refund in payment.refunds.all() if refund.status == "completed")
+
+    @property
+    def net_paid(self):
+        return max(self.paid_total - self.refunded_total, 0)
+
+    @property
+    def remaining_total(self):
+        return max(self.appointment_total - self.net_paid, 0)
+
+    @property
+    def payment_status(self):
+        if self.refunded_total and self.net_paid == 0:
+            return "refunded"
+        if self.refunded_total:
+            return "partially_refunded"
+        if self.net_paid == 0:
+            return "unpaid"
+        return "paid" if self.remaining_total == 0 else "partially_paid"
+
 
 class AppointmentItem(models.Model):
     COMPLETION_CHOICES = [("pending", "Pending"), ("in_progress", "In progress"), ("completed", "Completed"), ("cancelled", "Cancelled")]
@@ -228,14 +259,31 @@ class AppointmentItem(models.Model):
     def set_completion_status(self, status, changed_by=None, reason=""):
         if status not in dict(self.COMPLETION_CHOICES):
             raise ValidationError("Invalid appointment item status.")
-        self.completion_status = status
-        self.updated_by = changed_by
-        self.save(update_fields=("completion_status", "updated_by", "updated_at"))
-        self.appointment.set_status(
-            "cancelled" if status == "cancelled" else "completed" if status == "completed" else "confirmed",
-            changed_by=changed_by,
-            reason=reason,
-        )
+        from django.db import transaction
+        with transaction.atomic():
+            appointment = Appointment.objects.select_for_update().get(pk=self.appointment_id)
+            self.completion_status = status
+            self.updated_by = changed_by
+            self.save(update_fields=("completion_status", "updated_by", "updated_at"))
+            if status == "completed":
+                EmployeeCommission.objects.get_or_create(
+                    appointment_item=self,
+                    defaults={
+                        "base_amount": self.price_snapshot,
+                        "commission_rate_snapshot": self.employee.commission_rate,
+                        "commission_amount": int(Decimal(self.price_snapshot) * self.employee.commission_rate / Decimal("100")),
+                        "created_by": changed_by,
+                        "updated_by": changed_by,
+                    },
+                )
+            sibling_statuses = appointment.items.exclude(pk=self.pk).values_list("completion_status", flat=True)
+            if status == "completed":
+                appointment_status = "completed" if all(value == "completed" for value in sibling_statuses) else "confirmed"
+            elif status == "cancelled":
+                appointment_status = "cancelled" if all(value == "cancelled" for value in sibling_statuses) else "confirmed"
+            else:
+                appointment_status = "confirmed"
+            appointment.set_status(appointment_status, changed_by=changed_by, reason=reason)
 
 
 class BookingHold(models.Model):
@@ -302,17 +350,26 @@ class AuditedModel(models.Model):
 
 class Payment(AuditedModel):
     STATUS_CHOICES = [("pending", "Pending"), ("paid", "Paid"), ("failed", "Failed"), ("refunded", "Refunded")]
+    METHOD_CHOICES = [("cash", "Cash"), ("card", "Card"), ("bank_transfer", "Bank transfer"), ("online", "Online"), ("other", "Other")]
     appointment = models.ForeignKey(Appointment, on_delete=models.PROTECT, related_name="payments")
     amount = models.PositiveIntegerField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    payment_method = models.CharField(max_length=20, choices=METHOD_CHOICES, default="cash")
+    paid_at = models.DateTimeField(null=True, blank=True)
     provider_reference = models.CharField(max_length=255, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=("status", "paid_at"), name="payment_status_paid_idx")]
+        constraints = [models.CheckConstraint(condition=models.Q(amount__gt=0), name="payment_amount_positive")]
 
     def mark_paid(self, changed_by=None):
         if self.status not in {"pending", "failed"}:
             raise ValidationError("Payment cannot transition to paid from this state.")
         self.status = "paid"
+        self.paid_at = timezone.now()
         self.updated_by = changed_by
-        self.save(update_fields=("status", "updated_by", "updated_at"))
+        self.save(update_fields=("status", "paid_at", "updated_by", "updated_at"))
 
     def refund(self, changed_by=None):
         if self.status != "paid":
@@ -327,13 +384,25 @@ class Transaction(AuditedModel):
     type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     amount = models.PositiveIntegerField()
     appointment = models.ForeignKey(Appointment, on_delete=models.PROTECT, null=True, blank=True, related_name="transactions")
+    payment = models.ForeignKey(Payment, on_delete=models.PROTECT, null=True, blank=True, related_name="transactions")
     description = models.CharField(max_length=255, blank=True)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError("Financial transactions are append-only.")
+        return super().save(*args, **kwargs)
 
 
 class EmployeeCommission(AuditedModel):
     appointment_item = models.ForeignKey(AppointmentItem, on_delete=models.PROTECT, related_name="commissions")
     commission_rate_snapshot = models.DecimalField(max_digits=5, decimal_places=2)
+    base_amount = models.PositiveIntegerField(default=0)
     commission_amount = models.PositiveIntegerField()
+    status = models.CharField(max_length=20, choices=[("pending", "Pending"), ("approved", "Approved"), ("paid", "Paid")], default="pending")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("appointment_item",), name="unique_item_commission")]
+        indexes = [models.Index(fields=("status", "created_at"), name="commission_status_date_idx")]
 
 
 class Refund(AuditedModel):
@@ -342,13 +411,25 @@ class Refund(AuditedModel):
     reason = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=[("pending", "Pending"), ("completed", "Completed")], default="pending")
 
+    class Meta:
+        constraints = [models.CheckConstraint(condition=models.Q(amount__gt=0), name="refund_amount_positive")]
+
     def complete(self, changed_by=None):
         if self.status != "pending":
             raise ValidationError("Refund is already completed.")
-        self.status = "completed"
-        self.updated_by = changed_by
-        self.save(update_fields=("status", "updated_by", "updated_at"))
-        self.payment.refund(changed_by=changed_by)
+        completed = self.payment.refunds.filter(status="completed").exclude(pk=self.pk).aggregate(total=models.Sum("amount"))["total"] or 0
+        if self.payment.status not in {"paid", "refunded"} or completed + self.amount > self.payment.amount:
+            raise ValidationError("Refund exceeds the refundable payment amount.")
+        from django.db import transaction
+        with transaction.atomic():
+            self.status = "completed"
+            self.updated_by = changed_by
+            self.save(update_fields=("status", "updated_by", "updated_at"))
+            Transaction.objects.create(type="refund", amount=self.amount, appointment=self.payment.appointment, payment=self.payment, description=self.reason, created_by=changed_by, updated_by=changed_by)
+            if completed + self.amount == self.payment.amount:
+                self.payment.status = "refunded"
+                self.payment.updated_by = changed_by
+                self.payment.save(update_fields=("status", "updated_by", "updated_at"))
 
 
 class GalleryAsset(models.Model):

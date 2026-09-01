@@ -6,6 +6,10 @@ import { api, toman } from "../shared/api";
 
 const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(new Date());
 const unwrap = (data) => data?.results || data || [];
+const firstError = (error, fallback) => {
+  const value = Object.values(error.response?.data || {})[0];
+  return (Array.isArray(value) ? value[0] : value) || fallback;
+};
 const labels = {
   pending: "در انتظار",
   confirmed: "تأیید شده",
@@ -119,6 +123,12 @@ function DashboardHome() {
           value={statValue(todayStats.pending)}
         />
       </div>
+      <div className="admin-stat-grid">
+        <Stat label="درآمد خالص امروز" value={stats.loading ? "…" : toman(stats.data.revenue?.today)} accent />
+        <Stat label="درآمد خالص این هفته" value={stats.loading ? "…" : toman(stats.data.revenue?.week)} />
+        <Stat label="درآمد خالص این ماه" value={stats.loading ? "…" : toman(stats.data.revenue?.month)} />
+        <Stat label="تأییدشده امروز" value={statValue(todayStats.confirmed)} />
+      </div>
       <div className="admin-grid-two">
         <section className="admin-panel">
           <div className="panel-title">
@@ -149,7 +159,16 @@ function DashboardHome() {
               <h2>درآمد</h2>
             </div>
           </div>
-          <Empty title="آمار درآمد هنوز در دسترس نیست" text="پس از تکمیل سیستم پرداخت، درآمد واقعی اینجا نمایش داده می‌شود." />
+          <div className="mini-summary">
+            <span>
+              دریافتی امروز
+              <b>{toman(stats.data.revenue?.today)}</b>
+            </span>
+            <span>
+              مبنای محاسبه
+              <b>پرداخت منهای بازپرداخت</b>
+            </span>
+          </div>
           <div className="mini-summary">
             <span>
               نوبت‌های انجام‌شده{" "}
@@ -328,7 +347,6 @@ function AdminAppointmentForm({ close, onCreated }) {
   const [form, setForm] = useState({
     date: today,
     status: "pending",
-    payment_status: "",
   });
   const [selections, setSelections] = useState([]);
   const [employees, setEmployees] = useState({});
@@ -398,7 +416,6 @@ function AdminAppointmentForm({ close, onCreated }) {
           : { customer: form.customer }),
         notes: form.notes || "",
         status: form.status,
-        ...(form.payment_status && { payment_status: form.payment_status }),
         items,
       });
       onCreated();
@@ -585,18 +602,6 @@ function AdminAppointmentForm({ close, onCreated }) {
             ))}
           </select>
         </label>
-        <label>
-          وضعیت پرداخت
-          <select
-            value={form.payment_status}
-            onChange={(event) => update("payment_status", event.target.value)}
-          >
-            <option value="">بدون ثبت پرداخت</option>
-            <option value="pending">در انتظار</option>
-            <option value="paid">پرداخت شده</option>
-            <option value="failed">ناموفق</option>
-          </select>
-        </label>
         {error && <small className="admin-field-error">{error}</small>}
         <button className="admin-primary" type="submit">
           ثبت نوبت
@@ -607,12 +612,39 @@ function AdminAppointmentForm({ close, onCreated }) {
 }
 function AppointmentDrawer({ item, close, onSaved }) {
   const [saving, setSaving] = useState(false);
+  const [payment, setPayment] = useState({ amount: item.remaining_total || "", payment_method: "cash", notes: "" });
+  const [refund, setRefund] = useState({ payment: "", amount: "", reason: "" });
+  const [financeError, setFinanceError] = useState("");
   const changeStatus = async (status) => {
     setSaving(true);
     try {
       await api.patch(`admin/appointments/${item.id}/`, { status });
       onSaved();
     } finally {
+      setSaving(false);
+    }
+  };
+  const recordPayment = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setFinanceError("");
+    try {
+      await api.post("admin/payments/", { appointment: item.id, ...payment });
+      onSaved();
+    } catch (error) {
+      setFinanceError(firstError(error, "ثبت پرداخت انجام نشد"));
+      setSaving(false);
+    }
+  };
+  const recordRefund = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setFinanceError("");
+    try {
+      await api.post("admin/refunds/", refund);
+      onSaved();
+    } catch (error) {
+      setFinanceError(firstError(error, "ثبت بازپرداخت انجام نشد"));
       setSaving(false);
     }
   };
@@ -660,6 +692,78 @@ function AppointmentDrawer({ item, close, onSaved }) {
           >
             لغو رزرو
           </button>
+        </div>
+        <div className="drawer-section">
+          <h3>وضعیت مالی</h3>
+          <div className="mini-summary">
+            <span>مبلغ نوبت<b>{toman(item.appointment_total)}</b></span>
+            <span>پرداخت‌شده<b>{toman(item.net_paid)}</b></span>
+            <span>مانده<b>{toman(item.remaining_total)}</b></span>
+          </div>
+          <p className="drawer-meta">وضعیت: {item.payment_status || "unpaid"}</p>
+          <form className="employee-form" onSubmit={recordPayment}>
+            <label>
+              مبلغ پرداخت
+              <input
+                type="number"
+                min="1"
+                max={item.remaining_total}
+                value={payment.amount}
+                onChange={(event) => setPayment({ ...payment, amount: event.target.value })}
+                required
+              />
+            </label>
+            <label>
+              روش پرداخت
+              <select
+                value={payment.payment_method}
+                onChange={(event) => setPayment({ ...payment, payment_method: event.target.value })}
+              >
+                <option value="cash">نقدی</option>
+                <option value="card">کارت</option>
+                <option value="bank_transfer">انتقال بانکی</option>
+                <option value="online">آنلاین</option>
+                <option value="other">سایر</option>
+              </select>
+            </label>
+            <label>
+              توضیحات
+              <input value={payment.notes} onChange={(event) => setPayment({ ...payment, notes: event.target.value })} />
+            </label>
+            <button className="admin-primary" disabled={saving || !item.remaining_total}>ثبت پرداخت</button>
+          </form>
+          {item.payments?.map((entry) => (
+            <div className="drawer-item" key={entry.id}>
+              <b>{toman(entry.amount)} · {entry.payment_method}</b>
+              <span>{entry.status} · بازپرداخت {toman(entry.refunded_total)}</span>
+              <button
+                type="button"
+                onClick={() => setRefund({ ...refund, payment: entry.id, amount: entry.amount - entry.refunded_total })}
+              >
+                بازپرداخت
+              </button>
+            </div>
+          ))}
+          {refund.payment && (
+            <form className="employee-form" onSubmit={recordRefund}>
+              <label>
+                مبلغ بازپرداخت
+                <input
+                  type="number"
+                  min="1"
+                  value={refund.amount}
+                  onChange={(event) => setRefund({ ...refund, amount: event.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                دلیل
+                <input value={refund.reason} onChange={(event) => setRefund({ ...refund, reason: event.target.value })} />
+              </label>
+              <button className="admin-primary" disabled={saving}>ثبت بازپرداخت</button>
+            </form>
+          )}
+          {financeError && <small className="admin-field-error">{financeError}</small>}
         </div>
         <div className="drawer-section">
           <h3>تاریخچه وضعیت</h3>
@@ -1226,49 +1330,77 @@ function EmployeeManagement() {
   );
 }
 function Finance() {
+  const payments = useResource("admin/payments/");
+  const refunds = useResource("admin/refunds/");
+  const transactions = useResource("admin/transactions/");
+  const commissions = useResource("admin/commissions/");
+  const section = (title, resource, render) => (
+    <section className="admin-panel">
+      <div className="panel-title">
+        <div>
+          <span>حسابداری</span>
+          <h2>{title}</h2>
+        </div>
+      </div>
+      {resource.loading ? (
+        <Skeleton />
+      ) : resource.error ? (
+        <Empty title="دریافت اطلاعات انجام نشد" />
+      ) : resource.data.length ? (
+        <div className="entity-list">{resource.data.map(render)}</div>
+      ) : (
+        <Empty />
+      )}
+    </section>
+  );
   return (
-    <>
-      <CrudPage
-        type="تراکنش"
-        endpoint="admin/transactions/"
-        title="مالی و پرداخت‌ها"
-        eyebrow="حسابداری"
-        fields={[
-          {
-            name: "type",
-            label: "نوع تراکنش",
-            type: "select",
-            optionsEndpoint: "admin/transaction-types/",
-          },
-          { name: "amount", label: "مبلغ", type: "number" },
-          {
-            name: "appointment",
-            label: "نوبت",
-            type: "select",
-            optionsEndpoint: "admin/appointments/",
-            optionLabel: appointmentOptionLabel,
-          },
-          { name: "description", label: "شرح" },
-        ]}
-      />
-      <CrudPage
-        type="پرداخت"
-        endpoint="admin/payments/"
-        title="پرداخت‌ها"
-        eyebrow="حسابداری"
-        fields={[
-          {
-            name: "appointment",
-            label: "نوبت",
-            type: "select",
-            optionsEndpoint: "admin/appointments/",
-            optionLabel: appointmentOptionLabel,
-          },
-          { name: "amount", label: "مبلغ", type: "number" },
-          { name: "provider_reference", label: "شناسه پرداخت" },
-        ]}
-      />
-    </>
+    <div className="admin-page">
+      <Header eyebrow="حسابداری" title="مالی و پرداخت‌ها" />
+      <div className="admin-grid-two">
+        {section("پرداخت‌ها", payments, (item) => (
+          <article key={item.id}>
+            <div className="entity-avatar">پ</div>
+            <div>
+              <b>{toman(item.amount)}</b>
+              <small>نوبت #{item.appointment} · {item.payment_method}</small>
+            </div>
+            <span>{item.status}</span>
+          </article>
+        ))}
+        {section("بازپرداخت‌ها", refunds, (item) => (
+          <article key={item.id}>
+            <div className="entity-avatar">ب</div>
+            <div>
+              <b>{toman(item.amount)}</b>
+              <small>{item.reason || `پرداخت #${item.payment}`}</small>
+            </div>
+            <span>{item.status}</span>
+          </article>
+        ))}
+      </div>
+      <div className="admin-grid-two">
+        {section("تراکنش‌های تغییرناپذیر", transactions, (item) => (
+          <article key={item.id}>
+            <div className="entity-avatar">ت</div>
+            <div>
+              <b>{toman(item.amount)}</b>
+              <small>{item.description || `نوبت #${item.appointment}`}</small>
+            </div>
+            <span>{item.type}</span>
+          </article>
+        ))}
+        {section("کمیسیون متخصصان", commissions, (item) => (
+          <article key={item.id}>
+            <div className="entity-avatar">ک</div>
+            <div>
+              <b>{item.employee_name || `متخصص #${item.employee}`}</b>
+              <small>{item.service_name} · پایه {toman(item.base_amount)}</small>
+            </div>
+            <span>{toman(item.commission_amount)} · {item.status}</span>
+          </article>
+        ))}
+      </div>
+    </div>
   );
 }
 function Content() {

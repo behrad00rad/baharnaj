@@ -15,7 +15,11 @@ const { get, post } = vi.hoisted(() => ({
       'admin/customer-options/': [{ id: 2, name: 'Customer' }],
       'admin/gallery/': [],
       'admin/gallery-categories/': [{ id: 5, name: 'مو' }],
-      'admin/statistics/': { today: { appointments: 1, pending: 1, confirmed: 0, completed: 0, cancelled: 0 }, week: { appointments: 4 }, month: { appointments: 9 }, top_services: [{ id: 3, name: 'Cut', appointments: 3 }], revenue_available: false },
+      'admin/statistics/': { today: { appointments: 1, pending: 1, confirmed: 0, completed: 0, cancelled: 0 }, week: { appointments: 4 }, month: { appointments: 9 }, top_services: [{ id: 3, name: 'Cut', appointments: 3 }], revenue: { today: 700, week: 2400, month: 9100 }, revenue_available: true },
+      'admin/payments/': [{ id: 31, appointment: 20, amount: 800, payment_method: 'card', status: 'paid' }],
+      'admin/refunds/': [{ id: 32, payment: 31, amount: 100, reason: 'اصلاح مبلغ', status: 'completed' }],
+      'admin/transactions/': [{ id: 33, appointment: 20, amount: 800, type: 'payment', description: '' }],
+      'admin/commissions/': [{ id: 34, employee: 2, employee_name: 'Stylist', service_name: 'Cut', base_amount: 800, commission_amount: 80, status: 'pending' }],
       'admin/activity/': [],
     }[endpoint] || []
     return Promise.resolve({ data })
@@ -106,10 +110,20 @@ describe('admin CRUD forms', () => {
     expect(await screen.findByRole('button', { name: current })).toHaveClass('selected')
   })
 
-  it('uses real dashboard statistics and marks revenue unavailable', async () => {
+  it('uses real dashboard statistics and net payment revenue', async () => {
     render(<MemoryRouter initialEntries={['/']}><AdminRouter /></MemoryRouter>)
     await waitFor(() => expect(get).toHaveBeenCalledWith('admin/statistics/'))
-    expect(await screen.findByText('آمار درآمد هنوز در دسترس نیست')).toBeInTheDocument()
-    expect(screen.queryByText(/تومان/)).not.toBeInTheDocument()
+    expect(await screen.findAllByText('700 تومان')).not.toHaveLength(0)
+    expect(screen.getByText('پرداخت منهای بازپرداخت')).toBeInTheDocument()
+  })
+
+  it('shows immutable payment, refund, transaction, and commission history', async () => {
+    render(<MemoryRouter initialEntries={['/finance']}><AdminRouter /></MemoryRouter>)
+
+    expect(await screen.findByText('پرداخت‌ها')).toBeInTheDocument()
+    expect(screen.getByText('بازپرداخت‌ها')).toBeInTheDocument()
+    expect(screen.getByText('تراکنش‌های تغییرناپذیر')).toBeInTheDocument()
+    expect(screen.getByText('کمیسیون متخصصان')).toBeInTheDocument()
+    expect(await screen.findAllByText('800 تومان')).not.toHaveLength(0)
   })
 })

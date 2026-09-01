@@ -6,7 +6,7 @@ from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminGalleryC
 					EmployeeAppointmentsView, EmployeeListView, EmployeeStatisticsView, GalleryCategoryListView,
 					ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
 					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
-					PaymentViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
+					PaymentViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
 					EmployeeEarningsView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView)
 
 router = DefaultRouter()
@@ -20,6 +20,8 @@ router.register("admin/working-schedules", WorkingScheduleViewSet, basename="wor
 router.register("admin/appointment-items", AppointmentItemViewSet, basename="appointment-item")
 router.register("admin/transactions", TransactionViewSet, basename="transaction")
 router.register("admin/payments", PaymentViewSet, basename="payment")
+router.register("admin/refunds", RefundViewSet, basename="refund")
+router.register("admin/commissions", EmployeeCommissionViewSet, basename="commission")
 router.register("admin/service-images", ServiceImageViewSet, basename="service-image")
 router.register("admin/activity", AdminActionLogViewSet, basename="admin-activity")
 router.register("employee/appointment-items", EmployeeAppointmentItemViewSet, basename="employee-appointment-item")
