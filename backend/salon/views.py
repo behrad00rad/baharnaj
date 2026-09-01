@@ -316,6 +316,11 @@ class WorkingScheduleViewSet(AdminModelViewSet):
     queryset = WorkingSchedule.objects.select_related("employee__user")
     serializer_class = WorkingScheduleSerializer
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        employee_id = self.request.query_params.get("employee")
+        return queryset.filter(employee_id=employee_id) if employee_id else queryset
+
 
 class TransactionViewSet(AdminModelViewSet):
     queryset = Transaction.objects.select_related("appointment")

@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import React from 'react'
+import { render, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import App from '../App'
 import { api, applyRefreshSession } from './api'
 import { clearSessionState, getAccessToken, getRole, setSession } from './auth'
 
@@ -20,6 +23,18 @@ describe('in-memory auth state', () => {
 
     expect(getAccessToken()).toBe('new-access')
     expect(getRole()).toBe('admin')
+  })
+
+  it('preserves the active role when the refresh payload omits it', async () => {
+    setSession('old-access', 'employee')
+    const postSpy = vi.spyOn(api, 'post').mockResolvedValue({ data: { access: 'new-access' } })
+
+    render(React.createElement(App))
+
+    await waitFor(() => expect(getAccessToken()).toBe('new-access'))
+    expect(getRole()).toBe('employee')
+
+    postSpy.mockRestore()
   })
 
   it('sends the session token with an optional-public appointment request', async () => {

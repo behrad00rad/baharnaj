@@ -141,6 +141,21 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(invalid_range.status_code, 400)
         self.assertEqual(client.delete(f"/api/v1/employee/schedule/{own_schedule}/").status_code, 204)
 
+    def test_admin_can_filter_working_schedules_by_employee(self):
+        admin = User.objects.create_user(username="schedule-admin", role="admin")
+        other_user = User.objects.create_user(username="other-schedule", role="employee")
+        other_employee = EmployeeProfile.objects.create(user=other_user)
+        own_schedule = WorkingSchedule.objects.create(employee=self.employee, weekday=0, start_time="09:00", end_time="17:00")
+        WorkingSchedule.objects.create(employee=other_employee, weekday=0, start_time="10:00", end_time="18:00")
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.get(f"/api/v1/admin/working-schedules/?employee={self.employee.pk}")
+        schedules = response.data["results"] if "results" in response.data else response.data
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([schedule["id"] for schedule in schedules], [own_schedule.pk])
+
     def test_employee_profile_does_not_expose_or_update_admin_specialty(self):
         self.employee.specialty = "Hair color"
         self.employee.save()

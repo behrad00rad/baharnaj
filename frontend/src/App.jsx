@@ -17,8 +17,8 @@ import Contact from './pages/Contact'
 import Privacy from './pages/Privacy'
 import Terms from './pages/Terms'
 import './App.css'
-import { api } from './shared/api'
-import { clearSessionState, markAuthReady, setSession, useAuth } from './shared/auth'
+import { api, applyRefreshSession } from './shared/api'
+import { clearSessionState, markAuthReady, useAuth } from './shared/auth'
 
 let authBootstrapPromise
 
@@ -26,7 +26,7 @@ let authBootstrapPromise
 export default function App() {
   const { ready } = useAuth()
   useEffect(() => {
-    authBootstrapPromise ??= api.post('auth/token/refresh/').then(({ data }) => setSession(data.access, data.role)).catch(() => clearSessionState()).finally(markAuthReady)
+    authBootstrapPromise ??= api.post('auth/token/refresh/').then(({ data }) => applyRefreshSession(data)).catch(() => clearSessionState()).finally(markAuthReady)
   }, [])
   if (!ready) return null
   return <BrowserRouter><Routes>
