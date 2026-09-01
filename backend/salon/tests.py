@@ -326,6 +326,26 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(update.status_code, 200)
         self.assertEqual(update.data["status"], "completed")
 
+    def test_admin_statistics_use_real_tehran_date_ranges(self):
+        current = timezone.localdate()
+        self.appointment.status = "pending"
+        self.appointment.save(update_fields=("status",))
+        AppointmentItem.objects.create(appointment=self.appointment, service=self.service, employee=self.employee, date=current, start_time="09:00", end_time="10:00")
+        completed = Appointment.objects.create(customer=self.customer_profile, status="completed")
+        AppointmentItem.objects.create(appointment=completed, service=self.service, employee=self.employee, date=current, start_time="10:00", end_time="11:00")
+        admin = User.objects.create_user(username="stats-admin", role="admin")
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.get("/api/v1/admin/statistics/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["today"], {"appointments": 2, "pending": 1, "confirmed": 0, "completed": 1, "cancelled": 0})
+        self.assertEqual(response.data["week"]["appointments"], 2)
+        self.assertEqual(response.data["month"]["appointments"], 2)
+        self.assertEqual(response.data["top_services"][0]["appointments"], 2)
+        self.assertFalse(response.data["revenue_available"])
+
     def test_admin_can_create_sequential_services_for_assigned_employee(self):
         admin = User.objects.create_user(username="multi-admin", role="admin")
         second_service = Service.objects.create(category=self.service.category, name="Color", persian_name="Color", price=1200, duration=60)

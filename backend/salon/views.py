@@ -127,8 +127,28 @@ class EmployeeStatisticsView(generics.GenericAPIView):
 class AdminStatisticsView(generics.GenericAPIView):
     permission_classes = (IsAdmin,)
     def get(self, request):
-        appointments = Appointment.objects.all()
-        return Response({"appointments": appointments.count(), "completed": appointments.filter(status="completed").count(), "cancelled": appointments.filter(status="cancelled").count()})
+        current = timezone.localdate()
+        week_start = current - timedelta(days=current.weekday())
+        week_end = week_start + timedelta(days=6)
+        month_start = current.replace(day=1)
+        month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        today = Appointment.objects.filter(items__date=current).distinct()
+        week = Appointment.objects.filter(items__date__range=(week_start, week_end)).distinct()
+        month = Appointment.objects.filter(items__date__range=(month_start, month_end)).distinct()
+        status_counts = {key: today.filter(status=key).count() for key in ("pending", "confirmed", "completed", "cancelled")}
+        top_services = (
+            AppointmentItem.objects.filter(date__range=(month_start, month_end))
+            .values("service_id", "service__persian_name")
+            .annotate(count=Count("appointment_id", distinct=True))
+            .order_by("-count", "service__persian_name")[:5]
+        )
+        return Response({
+            "today": {"appointments": today.count(), **status_counts},
+            "week": {"appointments": week.count()},
+            "month": {"appointments": month.count()},
+            "top_services": [{"id": row["service_id"], "name": row["service__persian_name"], "appointments": row["count"]} for row in top_services],
+            "revenue_available": False,
+        })
 
 
 class AppointmentCreateView(generics.CreateAPIView):

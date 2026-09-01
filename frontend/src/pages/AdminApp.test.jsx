@@ -5,6 +5,8 @@ import AdminRouter from './AdminApp'
 
 const { get, post } = vi.hoisted(() => ({
   get: vi.fn((endpoint) => {
+    const current = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date())
+    if (endpoint.startsWith('admin/appointments/?')) return Promise.resolve({ data: [{ id: 20, customer_name: 'Today Customer', status: 'pending', items: [{ id: 21, date: current, start_time: '10:00', end_time: '11:00', service: 3, service_name: 'Cut', employee_name: 'Stylist' }] }] })
     const data = {
       'admin/employees/': [],
       'admin/employee-eligible-users/': [{ id: 9, username: 'eligible-user', first_name: 'Eligible User' }],
@@ -13,6 +15,8 @@ const { get, post } = vi.hoisted(() => ({
       'admin/customer-options/': [{ id: 2, name: 'Customer' }],
       'admin/gallery/': [],
       'admin/gallery-categories/': [{ id: 5, name: 'مو' }],
+      'admin/statistics/': { today: { appointments: 1, pending: 1, confirmed: 0, completed: 0, cancelled: 0 }, week: { appointments: 4 }, month: { appointments: 9 }, top_services: [{ id: 3, name: 'Cut', appointments: 3 }], revenue_available: false },
+      'admin/activity/': [],
     }[endpoint] || []
     return Promise.resolve({ data })
   }),
@@ -80,11 +84,32 @@ describe('admin CRUD forms', () => {
     expect(await screen.findByRole('option', { name: 'Customer' })).toHaveValue('2')
   })
 
-  it('selects a calendar day and requests that day from the backend', async () => {
+  it('keeps today selected, shows real day badges, and syncs another selected day', async () => {
     render(<MemoryRouter initialEntries={['/appointments']}><AdminRouter /></MemoryRouter>)
+    const current = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date())
+    const todayCell = await screen.findByRole('button', { name: current })
+    expect(todayCell).toHaveClass('today', 'selected')
+    expect(screen.getByText('۱ نوبت')).toBeInTheDocument()
+    const otherCell = screen.getAllByRole('button', { name: /^\d{4}-\d{2}-\d{2}$/ }).find((cell) => cell.getAttribute('aria-label') !== current)
+    fireEvent.click(otherCell)
+    expect(await screen.findByText('برای این روز نوبتی ثبت نشده است')).toBeInTheDocument()
+  })
 
-    const days = await screen.findAllByRole('button', { name: /[۰-۹]/ })
-    fireEvent.click(days[0])
-    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/start_date=.*&end_date=/)))
+  it('loads another month with one range request and returns to today', async () => {
+    render(<MemoryRouter initialEntries={['/appointments']}><AdminRouter /></MemoryRouter>)
+    await screen.findByRole('button', { name: 'ماه بعد' })
+    const callsBefore = get.mock.calls.filter(([endpoint]) => endpoint.startsWith('admin/appointments/?')).length
+    fireEvent.click(screen.getByRole('button', { name: 'ماه بعد' }))
+    await waitFor(() => expect(get.mock.calls.filter(([endpoint]) => endpoint.startsWith('admin/appointments/?')).length).toBeGreaterThan(callsBefore))
+    fireEvent.click(screen.getByRole('button', { name: 'امروز' }))
+    const current = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(new Date())
+    expect(await screen.findByRole('button', { name: current })).toHaveClass('selected')
+  })
+
+  it('uses real dashboard statistics and marks revenue unavailable', async () => {
+    render(<MemoryRouter initialEntries={['/']}><AdminRouter /></MemoryRouter>)
+    await waitFor(() => expect(get).toHaveBeenCalledWith('admin/statistics/'))
+    expect(await screen.findByText('آمار درآمد هنوز در دسترس نیست')).toBeInTheDocument()
+    expect(screen.queryByText(/تومان/)).not.toBeInTheDocument()
   })
 })

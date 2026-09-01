@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, Route, Routes, useNavigate } from "react-router-dom";
-import { toJalaali } from "jalaali-js";
+import { toGregorian, toJalaali } from "jalaali-js";
 import { JalaliDatePicker } from "../components/DatePicker";
 import { api, toman } from "../shared/api";
 
-const today = new Date().toISOString().slice(0, 10);
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(new Date());
 const unwrap = (data) => data?.results || data || [];
 const labels = {
   pending: "در انتظار",
@@ -83,11 +83,8 @@ function Stat({ label, value, note, accent = false }) {
 
 function DashboardHome() {
   const navigate = useNavigate();
-  const appointments = useResource("admin/appointments/");
-  const dailyRevenue = useResource("admin/revenue/?period=day");
-  const weeklyRevenue = useResource("admin/revenue/?period=week");
-  const monthlyRevenue = useResource("admin/revenue/?period=month");
-  const services = useResource("services/");
+  const appointments = useResource(`admin/appointments/?start_date=${today}&end_date=${today}`);
+  const stats = useResource("admin/statistics/");
   const [activity, setActivity] = useState([]);
   useEffect(() => {
     api
@@ -95,10 +92,9 @@ function DashboardHome() {
       .then(({ data }) => setActivity(unwrap(data)))
       .catch(() => setActivity([]));
   }, []);
-  const todays = appointments.data.filter(
-    (item) =>
-      item.items?.some((line) => line.date === today) || item.date === today,
-  );
+  const todays = appointments.data;
+  const todayStats = stats.data.today || {};
+  const statValue = (value) => stats.loading ? "…" : stats.error ? "—" : value || 0;
   return (
     <div className="admin-page">
       <Header
@@ -109,21 +105,18 @@ function DashboardHome() {
       />
       <div className="admin-stat-grid">
         <Stat
-          label="درآمد امروز"
-          value={toman(dailyRevenue.data.total)}
+          label="نوبت‌های امروز"
+          value={statValue(todayStats.appointments)}
           accent
         />
         <Stat
-          label="درآمد این هفته"
-          value={toman(weeklyRevenue.data.total)}
-          note="داده‌های ثبت‌شده"
+          label="نوبت‌های این هفته"
+          value={statValue(stats.data.week?.appointments)}
         />
-        <Stat label="درآمد این ماه" value={toman(monthlyRevenue.data.total)} />
+        <Stat label="نوبت‌های این ماه" value={statValue(stats.data.month?.appointments)} />
         <Stat
           label="درخواست‌های در انتظار"
-          value={
-            appointments.data.filter((item) => item.status === "pending").length
-          }
+          value={statValue(todayStats.pending)}
         />
       </div>
       <div className="admin-grid-two">
@@ -137,6 +130,8 @@ function DashboardHome() {
           </div>
           {appointments.loading ? (
             <Skeleton />
+          ) : appointments.error ? (
+            <Empty title="دریافت نوبت‌های امروز انجام نشد" text="لطفاً دوباره تلاش کنید." />
           ) : todays.length ? (
             <div className="appointment-list">
               {todays.slice(0, 6).map((item) => (
@@ -151,49 +146,18 @@ function DashboardHome() {
           <div className="panel-title">
             <div>
               <span>گزارش مالی</span>
-              <h2>وضعیت پرداخت‌ها</h2>
+              <h2>درآمد</h2>
             </div>
           </div>
-          <div className="ring-stat">
-            <div className="fake-ring">
-              <b>{dailyRevenue.data.total ? "✓" : "۰"}</b>
-              <small>پرداخت موفق</small>
-            </div>
-            <div className="legend">
-              <span>
-                <i className="dot green" />
-                پرداخت‌شده
-              </span>
-              <span>
-                <i className="dot yellow" />
-                در انتظار
-              </span>
-              <span>
-                <i className="dot red" />
-                مانده
-              </span>
-            </div>
-          </div>
+          <Empty title="آمار درآمد هنوز در دسترس نیست" text="پس از تکمیل سیستم پرداخت، درآمد واقعی اینجا نمایش داده می‌شود." />
           <div className="mini-summary">
             <span>
               نوبت‌های انجام‌شده{" "}
-              <b>
-                {
-                  appointments.data.filter(
-                    (item) => item.status === "completed",
-                  ).length
-                }
-              </b>
+              <b>{todayStats.completed || 0}</b>
             </span>
             <span>
               لغوشده{" "}
-              <b>
-                {
-                  appointments.data.filter(
-                    (item) => item.status === "cancelled",
-                  ).length
-                }
-              </b>
+              <b>{todayStats.cancelled || 0}</b>
             </span>
           </div>
         </section>
@@ -206,22 +170,17 @@ function DashboardHome() {
               <h2>محبوب‌ترین خدمات</h2>
             </div>
           </div>
-          {services.loading ? (
+          {stats.loading ? (
             <Skeleton count={5} />
-          ) : services.data.length ? (
+          ) : stats.error ? (
+            <Empty title="دریافت آمار خدمات انجام نشد" />
+          ) : stats.data.top_services?.length ? (
             <div className="rank-list">
-              {services.data.slice(0, 5).map((service, index) => (
+              {stats.data.top_services.map((service, index) => (
                 <div key={service.id}>
                   <b>۰{index + 1}</b>
-                  <span>{service.persian_name || service.name}</span>
-                  <em>
-                    {
-                      appointments.data.filter((item) =>
-                        item.items?.some((line) => line.service === service.id),
-                      ).length
-                    }{" "}
-                    رزرو
-                  </em>
+                  <span>{service.name}</span>
+                  <em>{service.appointments} رزرو</em>
                 </div>
               ))}
             </div>
@@ -268,13 +227,14 @@ function DashboardHome() {
 }
 function AppointmentRow({ item, onClick }) {
   const line = item.items?.[0] || item;
+  const details = item.items?.map((entry) => `${entry.service_name} · ${entry.employee_name}`).join("، ") || line.service_name;
   return (
     <button className="appointment-row" onClick={onClick}>
       <span className="time">{line.start_time || "--:--"}</span>
       <span>
         <b>{item.customer_name || item.customer?.name || `رزرو #${item.id}`}</b>
         <small>
-          {line.service_name || `نوبت ${item.items?.length || 1} خدمت`}
+          {details || `نوبت ${item.items?.length || 1} خدمت`}
         </small>
       </span>
       <em className={`status ${item.status}`}>
@@ -288,253 +248,80 @@ function Appointments() {
   const employees = useResource("admin/employees/");
   const services = useResource("services/");
   const [selected, setSelected] = useState(null);
-  const [view, setView] = useState("day");
-  const [anchor, setAnchor] = useState(today);
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [visibleMonth, setVisibleMonth] = useState(`${today.slice(0, 7)}-01`);
   const [status, setStatus] = useState("all");
   const [employee, setEmployee] = useState("");
   const [service, setService] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [toast, setToast] = useState("");
-  const range = dateRange(anchor, view);
-  const query = new URLSearchParams({
-    start_date: range.start,
-    end_date: range.end,
-    ...(status !== "all" && { status }),
-    ...(employee && { employee }),
-    ...(service && { service }),
-  });
+  const range = calendarRange(visibleMonth);
+  const query = new URLSearchParams({ start_date: range.start, end_date: range.end, ...(status !== "all" && { status }), ...(employee && { employee }), ...(service && { service }) });
   const resource = useResource(`admin/appointments/?${query}`);
-  const moveRange = (direction) =>
-    setAnchor(
-      shiftDate(
-        anchor,
-        view === "month"
-          ? direction * 30
-          : view === "week"
-            ? direction * 7
-            : direction,
-      ),
-    );
+  const selectedAppointments = resource.data.filter((item) => item.items?.some((line) => line.date === selectedDate));
+  const moveMonth = (direction) => {
+    const value = new Date(`${visibleMonth}T12:00:00`);
+    const current = toJalaali(value.getFullYear(), value.getMonth() + 1, value.getDate());
+    const monthIndex = current.jm - 1 + direction;
+    const jy = current.jy + Math.floor(monthIndex / 12);
+    const jm = ((monthIndex % 12) + 12) % 12 + 1;
+    const nextMonth = toGregorian(jy, jm, 1);
+    const next = `${nextMonth.gy}-${String(nextMonth.gm).padStart(2, "0")}-${String(nextMonth.gd).padStart(2, "0")}`;
+    setVisibleMonth(next);
+    setSelectedDate(next);
+  };
+  const selectToday = () => { setSelectedDate(today); setVisibleMonth(`${today.slice(0, 7)}-01`); };
   return (
     <div className="admin-page">
-      <Header
-        eyebrow="مدیریت نوبت‌ها"
-        title="نوبت‌ها"
-        action="افزودن نوبت"
-        onAction={() => setCreateOpen(true)}
-      />
+      <Header eyebrow="مدیریت نوبت‌ها" title="نوبت‌ها" action="افزودن نوبت" onAction={() => setCreateOpen(true)} />
       <div className="toolbar">
-        <div className="segmented">
-          {[
-            ["day", "روز"],
-            ["week", "هفته"],
-            ["month", "ماه"],
-          ].map(([value, label]) => (
-            <button
-              className={view === value ? "selected" : ""}
-              key={value}
-              onClick={() => setView(value)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value)}
-        >
+        <select value={status} onChange={(event) => setStatus(event.target.value)}>
           <option value="all">همه وضعیت‌ها</option>
-          {Object.entries(labels).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
+          {Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
-        <button
-          className="filter-button"
-          onClick={() => setFiltersOpen(!filtersOpen)}
-        >
-          فیلترها
-        </button>
+        <button className="filter-button" onClick={() => setFiltersOpen(!filtersOpen)}>فیلترها</button>
       </div>
-      {filtersOpen && (
-        <div className="toolbar">
-          <select
-            aria-label="فیلتر متخصص"
-            value={employee}
-            onChange={(event) => setEmployee(event.target.value)}
-          >
-            <option value="">همه متخصصان</option>
-            {employees.data.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="فیلتر خدمت"
-            value={service}
-            onChange={(event) => setService(event.target.value)}
-          >
-            <option value="">همه خدمات</option>
-            {services.data.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.persian_name || item.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-      <AppointmentCalendar
-        anchor={anchor}
-        onSelect={(date) => {
-          setAnchor(date);
-          setView("day");
-        }}
-      />
+      {filtersOpen && <div className="toolbar">
+        <select aria-label="فیلتر متخصص" value={employee} onChange={(event) => setEmployee(event.target.value)}><option value="">همه متخصصان</option>{employees.data.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
+        <select aria-label="فیلتر خدمت" value={service} onChange={(event) => setService(event.target.value)}><option value="">همه خدمات</option>{services.data.map((item) => <option key={item.id} value={item.id}>{item.persian_name || item.name}</option>)}</select>
+      </div>}
+      <AppointmentCalendar visibleMonth={visibleMonth} selectedDate={selectedDate} appointments={resource.data} loading={resource.loading} error={resource.error} onPrevious={() => moveMonth(-1)} onNext={() => moveMonth(1)} onToday={selectToday} onSelect={(date) => { setSelectedDate(date); const chosen = new Date(`${date}T12:00:00`); const shown = new Date(`${visibleMonth}T12:00:00`); const chosenJalali = toJalaali(chosen.getFullYear(), chosen.getMonth() + 1, chosen.getDate()); const shownJalali = toJalaali(shown.getFullYear(), shown.getMonth() + 1, shown.getDate()); if (chosenJalali.jy !== shownJalali.jy || chosenJalali.jm !== shownJalali.jm) setVisibleMonth(date); }} />
       <section className="admin-panel calendar-panel">
-        <div className="calendar-strip">
-          <button aria-label="بازه قبل" onClick={() => moveRange(-1)}>
-            ‹
-          </button>
-          <strong>
-            {new Intl.DateTimeFormat("fa-IR", {
-              weekday: view === "day" ? "long" : undefined,
-              month: "long",
-              year: "numeric",
-              day: view === "day" ? "numeric" : undefined,
-            }).format(new Date(`${anchor}T00:00:00`))}
-          </strong>
-          <button aria-label="بازه بعد" onClick={() => moveRange(1)}>
-            ›
-          </button>
-          <span>
-            {employees.data.length} متخصص فعال · {services.data.length} خدمت
-          </span>
-        </div>
-        {resource.loading ? (
-          <Skeleton count={7} />
-        ) : resource.data.length ? (
-          <div className="appointment-table">
-            {resource.data.map((item) => (
-              <AppointmentRow
-                item={item}
-                key={item.id}
-                onClick={() => setSelected(item)}
-              />
-            ))}
-          </div>
-        ) : (
-          <Empty
-            title="نوبتی با این فیلتر پیدا نشد"
-            text="فیلترها را تغییر دهید یا یک رزرو تازه بسازید."
-          />
-        )}
+        <div className="calendar-strip"><strong>{new Intl.DateTimeFormat("fa-IR", { weekday: "long", month: "long", year: "numeric", day: "numeric" }).format(new Date(`${selectedDate}T12:00:00`))}</strong><span>{employees.data.length} متخصص فعال · {services.data.length} خدمت</span></div>
+        {resource.loading ? <Skeleton count={7} /> : resource.error ? <Empty title="دریافت نوبت‌های تقویم انجام نشد" text="لطفاً دوباره تلاش کنید." /> : selectedAppointments.length ? <div className="appointment-table">{selectedAppointments.map((item) => <AppointmentRow item={item} key={item.id} onClick={() => setSelected(item)} />)}</div> : <Empty title="برای این روز نوبتی ثبت نشده است" text="روز دیگری را انتخاب کنید یا یک رزرو تازه بسازید." />}
       </section>
       <Toast message={toast} />
-      {createOpen && (
-        <AdminAppointmentForm
-          close={() => setCreateOpen(false)}
-          onCreated={() => {
-            setCreateOpen(false);
-            resource.reload();
-            setToast("نوبت ثبت شد");
-          }}
-        />
-      )}
-      {selected && (
-        <AppointmentDrawer
-          item={selected}
-          close={() => setSelected(null)}
-          onSaved={() => {
-            setSelected(null);
-            resource.reload();
-            setToast("نوبت به‌روزرسانی شد");
-          }}
-        />
-      )}
+      {createOpen && <AdminAppointmentForm close={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); resource.reload(); setToast("نوبت ثبت شد"); }} />}
+      {selected && <AppointmentDrawer item={selected} close={() => setSelected(null)} onSaved={() => { setSelected(null); resource.reload(); setToast("نوبت به‌روزرسانی شد"); }} />}
     </div>
   );
 }
-function AppointmentCalendar({ anchor, onSelect }) {
-  const value = new Date(`${anchor}T00:00:00`);
-  const monthStart = new Date(value.getFullYear(), value.getMonth(), 1);
-  const start = new Date(monthStart);
+function AppointmentCalendar({ visibleMonth, selectedDate, appointments, loading, error, onSelect, onPrevious, onNext, onToday }) {
+  const value = new Date(`${visibleMonth}T12:00:00`);
+  const jalali = toJalaali(value.getFullYear(), value.getMonth() + 1, value.getDate());
+  const first = toGregorian(jalali.jy, jalali.jm, 1);
+  const start = new Date(first.gy, first.gm - 1, first.gd);
   start.setDate(start.getDate() - start.getDay());
-  const jalali = toJalaali(
-    value.getFullYear(),
-    value.getMonth() + 1,
-    value.getDate(),
-  );
   return (
     <section className="admin-panel appointment-calendar">
-      <div className="panel-title">
-        <div>
-          <span>تقویم شمسی</span>
-          <h2>
-            {new Intl.NumberFormat("fa-IR").format(jalali.jy)} /{" "}
-            {new Intl.NumberFormat("fa-IR").format(jalali.jm)}
-          </h2>
-        </div>
-      </div>
-      <div className="appointment-calendar-weekdays">
-        {["ی", "د", "س", "چ", "پ", "ج", "ش"].map((day) => (
-          <b key={day}>{day}</b>
-        ))}
-      </div>
-      <div className="appointment-calendar-days">
-        {Array.from({ length: 42 }, (_, index) => {
-          const day = new Date(start);
-          day.setDate(start.getDate() + index);
-          const iso = day.toISOString().slice(0, 10);
-          const local = toJalaali(
-            day.getFullYear(),
-            day.getMonth() + 1,
-            day.getDate(),
-          );
-          return (
-            <button
-              type="button"
-              key={iso}
-              className={
-                iso === anchor
-                  ? "selected"
-                  : day.getMonth() !== value.getMonth()
-                    ? "muted"
-                    : ""
-              }
-              onClick={() => onSelect(iso)}
-            >
-              {new Intl.NumberFormat("fa-IR").format(local.jd)}
-            </button>
-          );
-        })}
-      </div>
+      <div className="panel-title"><div><span>تقویم شمسی</span><h2>{new Intl.NumberFormat("fa-IR").format(jalali.jy)} / {new Intl.NumberFormat("fa-IR").format(jalali.jm)}</h2></div><div className="calendar-month-actions"><button type="button" aria-label="ماه قبل" onClick={onPrevious}>‹</button><button type="button" onClick={onToday}>امروز</button><button type="button" aria-label="ماه بعد" onClick={onNext}>›</button></div></div>
+      <div className="appointment-calendar-weekdays">{["ی", "د", "س", "چ", "پ", "ج", "ش"].map((day) => <b key={day}>{day}</b>)}</div>
+      {loading ? <Skeleton count={6} /> : error ? <Empty title="دریافت تقویم انجام نشد" /> : <div className="appointment-calendar-days">{Array.from({ length: 42 }, (_, index) => {
+        const day = new Date(start); day.setDate(start.getDate() + index);
+        const iso = localIsoDate(day);
+        const local = toJalaali(day.getFullYear(), day.getMonth() + 1, day.getDate());
+        const dayAppointments = appointments.filter((item) => item.items?.some((line) => line.date === iso));
+        const serviceCounts = {};
+        dayAppointments.forEach((item) => item.items?.filter((line) => line.date === iso).forEach((line) => { serviceCounts[line.service_name] = (serviceCounts[line.service_name] || 0) + 1; }));
+        const services = Object.entries(serviceCounts);
+        return <button type="button" aria-label={iso} key={iso} className={[iso === selectedDate && "selected", iso === today && "today", (local.jy !== jalali.jy || local.jm !== jalali.jm) && "muted"].filter(Boolean).join(" ")} onClick={() => onSelect(iso)}><span className="calendar-day-number">{new Intl.NumberFormat("fa-IR").format(local.jd)}</span><span className="calendar-day-badges">{services.slice(0, 2).map(([name, count]) => <small key={name}>{name} {new Intl.NumberFormat("fa-IR").format(count)}</small>)}{services.length > 2 && <small>+{new Intl.NumberFormat("fa-IR").format(services.length - 2)}</small>}</span>{dayAppointments.length > 0 && <b>{new Intl.NumberFormat("fa-IR").format(dayAppointments.length)} نوبت</b>}</button>;
+      })}</div>}
     </section>
   );
 }
-function shiftDate(value, days) {
-  const next = new Date(`${value}T00:00:00`);
-  next.setDate(next.getDate() + days);
-  return next.toISOString().slice(0, 10);
-}
-function dateRange(anchor, view) {
-  const value = new Date(`${anchor}T00:00:00`);
-  if (view === "day") return { start: anchor, end: anchor };
-  if (view === "week") {
-    const start = shiftDate(anchor, -value.getDay());
-    return { start, end: shiftDate(start, 6) };
-  }
-  const start = `${anchor.slice(0, 7)}-01`;
-  return {
-    start,
-    end: shiftDate(
-      `${Number(anchor.slice(0, 4))}-${String(Number(anchor.slice(5, 7)) + 1).padStart(2, "0")}-01`,
-      -1,
-    ),
-  };
-}
+function localIsoDate(value) { return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`; }
+function calendarRange(month) { const value = new Date(`${month}T12:00:00`); const jalali = toJalaali(value.getFullYear(), value.getMonth() + 1, value.getDate()); const first = toGregorian(jalali.jy, jalali.jm, 1); const start = new Date(first.gy, first.gm - 1, first.gd); start.setDate(start.getDate() - start.getDay()); const end = new Date(start); end.setDate(end.getDate() + 41); return { start: localIsoDate(start), end: localIsoDate(end) }; }
 function AdminAppointmentForm({ close, onCreated }) {
   const customers = useResource("admin/customer-options/");
   const services = useResource("services/");
