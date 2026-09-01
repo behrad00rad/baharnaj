@@ -38,9 +38,10 @@ npm run dev
 For local development, set the frontend environment to:
 
 ```dotenv
-VITE_API_BASE_URL=http://localhost:8000/api/v1/
-VITE_MEDIA_URL=http://localhost:8000
+VITE_API_BASE_URL=/api/v1/
 ```
+
+The relative URL sends API and media requests through Vite's development proxy. This also works in Codespaces and remote Docker environments, where a browser-visible `localhost:8000` would point to the wrong machine. Set `VITE_PROXY_TARGET` only when the local backend is not at `http://127.0.0.1:8000`.
 
 The frontend is available at `http://localhost:5173`. The API is versioned under `/api/v1/`.
 

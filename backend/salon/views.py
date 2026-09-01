@@ -15,6 +15,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
@@ -410,16 +411,28 @@ class CookieTokenView(TokenObtainPairView):
 class CookieRefreshView(TokenRefreshView):
     permission_classes = (AllowAny,)
 
+    @staticmethod
+    def invalid_session_response():
+        response = Response({"detail": "نشست معتبر نیست."}, status=status.HTTP_401_UNAUTHORIZED)
+        response.delete_cookie(
+            settings.REFRESH_COOKIE_NAME,
+            samesite=settings.REFRESH_COOKIE_SAMESITE,
+        )
+        return response
+
     def post(self, request, *args, **kwargs):
         refresh = request.COOKIES.get(settings.REFRESH_COOKIE_NAME)
         if not refresh:
-            return Response({"detail": "نشست معتبر نیست."}, status=status.HTTP_401_UNAUTHORIZED)
+            return self.invalid_session_response()
         serializer = self.get_serializer(data={"refresh": refresh})
-        serializer.is_valid(raise_exception=True)
-        response = Response({"access": serializer.validated_data["access"]})
-        token = serializer.validated_data["access"]
-        from rest_framework_simplejwt.tokens import AccessToken
-        response.data["role"] = User.objects.get(pk=AccessToken(token)["user_id"]).role
+        try:
+            serializer.is_valid(raise_exception=True)
+            token = serializer.validated_data["access"]
+            from rest_framework_simplejwt.tokens import AccessToken
+            role = User.objects.get(pk=AccessToken(token)["user_id"]).role
+        except (TokenError, User.DoesNotExist):
+            return self.invalid_session_response()
+        response = Response({"access": token, "role": role})
         if "refresh" in serializer.validated_data:
             response.set_cookie(settings.REFRESH_COOKIE_NAME, serializer.validated_data["refresh"], httponly=True, secure=settings.REFRESH_COOKIE_SECURE, samesite=settings.REFRESH_COOKIE_SAMESITE, max_age=7 * 24 * 3600)
         return response

@@ -1,6 +1,7 @@
 import json
 from datetime import date, timedelta
 
+from django.conf import settings
 from django.db import IntegrityError
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -67,6 +68,17 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(response.data["role"], "admin")
         self.assertNotIn("refresh", response.data)
         self.assertTrue(response.cookies["baharnaj_refresh"]["httponly"])
+
+    def test_refresh_with_deleted_user_clears_stale_cookie(self):
+        user = User.objects.create_user(username="deleted-user", password="correct-password")
+        login = self.client.post("/api/v1/auth/token/", {"username": user.username, "password": "correct-password"})
+        self.assertEqual(login.status_code, 200)
+        user.delete()
+
+        response = self.client.post("/api/v1/auth/token/refresh/")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.cookies[settings.REFRESH_COOKIE_NAME]["max-age"], 0)
 
     @override_settings(TIME_ZONE="Asia/Tehran")
     def test_availability_does_not_depend_on_client_timezone(self):
