@@ -21,7 +21,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeProfile, EmployeeService, GalleryAsset, Payment, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeePasswordChangeSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 class ServiceListView(generics.ListAPIView):
@@ -510,6 +510,17 @@ class EmployeeProfileView(generics.RetrieveUpdateAPIView):
     def perform_update(self, serializer):
         employee = serializer.save()
         AdminActionLog.objects.create(actor=self.request.user, action="update", model_name="EmployeeProfile", object_id=str(employee.pk), details={"fields": list(serializer.validated_data)})
+
+
+class EmployeePasswordChangeView(generics.GenericAPIView):
+    permission_classes = (IsEmployee,)
+    serializer_class = EmployeePasswordChangeSerializer
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"detail": "رمز عبور با موفقیت تغییر کرد."})
 
 
 class EmployeeTimeOffViewSet(viewsets.ModelViewSet):

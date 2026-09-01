@@ -3,6 +3,9 @@ from django.utils import timezone
 from uuid import uuid4
 
 from django.conf import settings
+from django.contrib.auth import password_validation
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from rest_framework import serializers
 
 from .models import (
@@ -87,6 +90,32 @@ class EmployeeSelfProfileSerializer(serializers.ModelSerializer):
         return validate_image_upload(value)
 
 
+class EmployeePasswordChangeSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True)
+    new_password_confirm = serializers.CharField(write_only=True)
+
+    def validate_current_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("رمز عبور فعلی صحیح نیست.")
+        return value
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise serializers.ValidationError({"new_password_confirm": "تکرار رمز عبور جدید مطابقت ندارد."})
+        try:
+            password_validation.validate_password(attrs["new_password"], self.context["request"].user)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError({"new_password": list(error.messages)}) from error
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.context["request"].user
+        user.set_password(self.validated_data["new_password"])
+        user.save(update_fields=("password",))
+        return user
+
+
 class AdminEmployeeSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source="user.get_full_name", read_only=True)
     profile_photo_url = serializers.SerializerMethodField()
@@ -148,6 +177,7 @@ class AdminEmployeeCreateSerializer(AdminEmployeeSerializer):
                 raise serializers.ValidationError({"user": "برای این حساب، پروفایل متخصص وجود دارد."})
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         services = validated_data.pop("services", [])
         user = validated_data.pop("user", None)

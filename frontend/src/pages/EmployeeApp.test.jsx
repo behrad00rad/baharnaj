@@ -41,6 +41,27 @@ describe('employee app', () => {
     expect(screen.queryByText('تخصص')).not.toBeInTheDocument()
     expect(screen.queryByText('درخواست مرخصی')).not.toBeInTheDocument()
     expect(screen.queryByText('ارسال درخواست')).not.toBeInTheDocument()
+    expect(screen.queryByText('خدمات قابل ارائه')).not.toBeInTheDocument()
+  })
+
+  it('uploads the selected profile photo as multipart form data', async () => {
+    render(<MemoryRouter initialEntries={['/profile']}><EmployeeApp /></MemoryRouter>)
+    const photo = new File(['image'], 'profile.png', { type: 'image/png' })
+    fireEvent.change(await screen.findByLabelText('تصویر پروفایل'), { target: { files: [photo] } })
+    fireEvent.click(screen.getByRole('button', { name: 'ذخیره تغییرات' }))
+
+    await waitFor(() => expect(patch).toHaveBeenCalledWith('employee/profile/', expect.any(FormData)))
+    expect(patch.mock.calls.at(-1)[1].get('profile_photo')).toBe(photo)
+  })
+
+  it('submits the employee password change form', async () => {
+    render(<MemoryRouter initialEntries={['/profile']}><EmployeeApp /></MemoryRouter>)
+    fireEvent.change(await screen.findByLabelText('رمز عبور فعلی'), { target: { value: 'old-password' } })
+    fireEvent.change(screen.getByLabelText('رمز عبور جدید'), { target: { value: 'new-password-8472' } })
+    fireEvent.change(screen.getByLabelText('تکرار رمز عبور جدید'), { target: { value: 'new-password-8472' } })
+    fireEvent.click(screen.getByRole('button', { name: 'تغییر رمز عبور' }))
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('employee/password/', expect.objectContaining({ current_password: 'old-password', new_password: 'new-password-8472' })))
   })
 
   it('reloads finance data for the selected period', async () => {

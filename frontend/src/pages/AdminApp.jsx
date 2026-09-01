@@ -1125,24 +1125,28 @@ function EmployeeManagement() {
   const [form, setForm] = useState({ is_active: true });
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState("");
+  const [saving, setSaving] = useState(false);
   const update = (name, value) => setForm({ ...form, [name]: value });
   const submit = async (event) => {
     event.preventDefault();
-    const body = new FormData();
-    Object.entries(form).forEach(([name, value]) => {
-      if (name === "services") {
-        value.forEach((serviceId) => body.append("services", serviceId));
-        return;
-      }
-      if (
-        value !== "" &&
-        value !== undefined &&
-        (mode === "new" || !["username", "password"].includes(name))
-      )
-        body.append(name, value);
-    });
-    if (mode === "existing") body.delete("username");
+    if (saving) return;
+    setSaving(true);
+    setErrors({});
     try {
+      const body = new FormData();
+      Object.entries(form).forEach(([name, value]) => {
+        if (name === "services") {
+          (Array.isArray(value) ? value : []).forEach((serviceId) => body.append("services", serviceId));
+          return;
+        }
+        if (
+          value !== "" &&
+          value !== undefined &&
+          (mode === "new" || !["username", "password"].includes(name))
+        )
+          body.append(name, value);
+      });
+      if (mode === "existing") body.delete("username");
       if (editing) await api.patch(`admin/employees/${editing}/`, body);
       else await api.post("admin/employees/", body);
       setOpen(false);
@@ -1153,6 +1157,8 @@ function EmployeeManagement() {
       setToast("کارمند اضافه شد");
     } catch (error) {
       setErrors(error.response?.data || { detail: "ذخیره اطلاعات انجام نشد" });
+    } finally {
+      setSaving(false);
     }
   };
   return (
@@ -1161,7 +1167,7 @@ function EmployeeManagement() {
         eyebrow="تیم سالن"
         title="مدیریت کارمندان"
         action="افزودن کارمند"
-        onAction={() => setOpen(true)}
+        onAction={() => { setMode("new"); setEditing(null); setForm({ is_active: true }); setErrors({}); setOpen(true); }}
       />
       <section className="admin-panel">
         <div className="list-toolbar">
@@ -1374,8 +1380,9 @@ function EmployeeManagement() {
                 {errors.non_field_errors}
               </small>
             )}
-            <button className="admin-primary" type="submit">
-              {editing ? "ذخیره تغییرات" : "ایجاد کارمند"}
+            {errors.detail && <small className="admin-field-error">{errors.detail}</small>}
+            <button className="admin-primary" type="submit" disabled={saving}>
+              {saving ? "در حال ذخیره..." : editing ? "ذخیره تغییرات" : "ایجاد کارمند"}
             </button>
           </form>
         </div>

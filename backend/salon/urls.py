@@ -5,7 +5,7 @@ from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminServiceV
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView, BookingHoldView,
 					EmployeeAppointmentsView, EmployeeListView, EmployeeStatisticsView,
 					ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
-					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
+					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
 					PaymentViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
 					EmployeeEarningsView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView)
 
@@ -40,6 +40,7 @@ urlpatterns = [
 	path("employee/appointments/", EmployeeAppointmentsView.as_view(), name="employee-appointments"),
 	path("employee/statistics/", EmployeeStatisticsView.as_view(), name="employee-statistics"),
 	path("employee/profile/", EmployeeProfileView.as_view(), name="employee-profile"),
+	path("employee/password/", EmployeePasswordChangeView.as_view(), name="employee-password-change"),
 	path("employee/earnings/", EmployeeEarningsView.as_view(), name="employee-earnings"),
 	path("admin/statistics/", AdminStatisticsView.as_view(), name="admin-statistics"),
 	path("admin/employee-eligible-users/", AdminEmployeeEligibleUsersView.as_view(), name="admin-employee-eligible-users"),

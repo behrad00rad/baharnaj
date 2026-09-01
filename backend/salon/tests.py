@@ -1,4 +1,6 @@
 import json
+import base64
+import tempfile
 from datetime import date, timedelta
 
 from django.conf import settings
@@ -182,6 +184,38 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(self.employee.specialty, "Hair color")
         self.assertEqual(self.employee.bio, "Updated profile")
 
+    def test_employee_profile_accepts_multipart_photo(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+        png = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            response = client.patch(
+                "/api/v1/employee/profile/",
+                {"profile_photo": SimpleUploadedFile("profile.png", png, content_type="image/png")},
+                format="multipart",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.employee.refresh_from_db()
+        self.assertTrue(self.employee.profile_photo.name.startswith("profiles/"))
+
+    def test_employee_can_change_only_own_password(self):
+        self.employee.user.set_password("old-password-8472")
+        self.employee.user.save()
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+
+        wrong = client.post("/api/v1/employee/password/", {"current_password": "wrong", "new_password": "new-password-8472", "new_password_confirm": "new-password-8472"})
+        self.assertEqual(wrong.status_code, 400)
+        changed = client.post("/api/v1/employee/password/", {"current_password": "old-password-8472", "new_password": "new-password-8472", "new_password_confirm": "new-password-8472"})
+
+        self.assertEqual(changed.status_code, 200)
+        self.employee.user.refresh_from_db()
+        self.assertFalse(self.employee.user.check_password("old-password-8472"))
+        self.assertTrue(self.employee.user.check_password("new-password-8472"))
+
     def test_admin_employee_creation_contract(self):
         admin = User.objects.create_user(username="admin", role="admin")
         client = APIClient()
@@ -191,6 +225,9 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(new_employee.data["commission_rate"], "15.50")
         self.assertEqual(new_employee.data["service_ids"], [self.service.pk])
         self.assertEqual(User.objects.get(username="new-stylist").role, "employee")
+        login = self.client.post("/api/v1/auth/token/", {"username": "new-stylist", "password": "safe-password"})
+        self.assertEqual(login.status_code, 200)
+        self.assertEqual(login.data["role"], "employee")
 
         existing_user = User.objects.create_user(username="eligible", role="employee")
         existing_employee = client.post("/api/v1/admin/employees/", {"user": existing_user.pk, "name": "Existing Stylist", "commission_rate": "20.00"}, format="json")
