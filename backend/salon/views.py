@@ -662,75 +662,278 @@ class EmployeeCommissionViewSet(viewsets.ReadOnlyModelViewSet):
         return queryset
 
 
-class AdminRevenueView(generics.GenericAPIView):
-    permission_classes = (IsAdmin,)
+FINANCE_GROUPS = {"daily", "weekly", "monthly"}
 
-    def get(self, request):
-        period = request.query_params.get("period", "day")
-        anchor = request.query_params.get("date")
-        try:
-            current = datetime.strptime(anchor, "%Y-%m-%d").date() if anchor else timezone.localdate()
-        except ValueError:
-            return Response({"detail": "تاریخ نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
-        if period == "custom":
-            try:
-                start = datetime.strptime(request.query_params["start_date"], "%Y-%m-%d").date()
-                end = datetime.strptime(request.query_params["end_date"], "%Y-%m-%d").date()
-            except (KeyError, ValueError):
-                return Response({"detail": "بازه تاریخ نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
-            if start > end:
-                return Response({"detail": "تاریخ شروع باید پیش از تاریخ پایان باشد."}, status=status.HTTP_400_BAD_REQUEST)
+
+def _finance_range(request):
+    period = request.query_params.get("period", "month")
+    anchor = request.query_params.get("date")
+    try:
+        current = datetime.strptime(anchor, "%Y-%m-%d").date() if anchor else timezone.localdate()
+        if period == "custom" or request.query_params.get("start_date") or request.query_params.get("end_date"):
+            start = datetime.strptime(request.query_params["start_date"], "%Y-%m-%d").date()
+            end = datetime.strptime(request.query_params["end_date"], "%Y-%m-%d").date()
+        elif period == "day":
+            start = end = current
         elif period == "week":
             start, end = current - timedelta(days=current.weekday()), current + timedelta(days=6 - current.weekday())
         elif period == "month":
             start = current.replace(day=1)
             end = (start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        elif period == "last-month":
+            end = current.replace(day=1) - timedelta(days=1)
+            start = end.replace(day=1)
         else:
-            start = end = current
-        employee_id = request.query_params.get("employee")
-        payments = Payment.objects.filter(created_at__date__range=(start, end))
-        confirmed = Payment.objects.filter(status__in=("paid", "refunded"), paid_at__date__range=(start, end))
-        refunds = Refund.objects.filter(status="completed", created_at__date__range=(start, end))
-        items = AppointmentItem.objects.filter(date__range=(start, end), completion_status="completed")
-        commissions = EmployeeCommission.objects.filter(appointment_item__date__range=(start, end))
-        appointments = Appointment.objects.filter(items__date__range=(start, end)).distinct().prefetch_related("items", "payments__refunds")
-        if employee_id:
-            employee_filter = Q(appointment__items__employee_id=employee_id) | Q(created_by__employee_profile__id=employee_id)
-            payments = payments.filter(employee_filter).distinct()
-            confirmed = confirmed.filter(employee_filter).distinct()
-            refunds = refunds.filter(Q(payment__appointment__items__employee_id=employee_id) | Q(payment__created_by__employee_profile__id=employee_id)).distinct()
-            items = items.filter(employee_id=employee_id)
-            commissions = commissions.filter(appointment_item__employee_id=employee_id)
-            appointments = appointments.filter(items__employee_id=employee_id).distinct()
-        received = confirmed.aggregate(total=Sum("amount"))["total"] or 0
-        refunded = refunds.aggregate(total=Sum("amount"))["total"] or 0
-        pending = payments.filter(status="pending").aggregate(total=Sum("amount"))["total"] or 0
-        outstanding = sum(appointment.remaining_total for appointment in appointments)
-        service_revenue = items.aggregate(total=Sum("price_snapshot"))["total"] or 0
-        commission_total = commissions.aggregate(total=Sum("commission_amount"))["total"] or 0
+            raise ValueError
+    except (KeyError, ValueError):
+        raise ValidationError({"detail": "بازه تاریخ نامعتبر است."})
+    if start > end:
+        raise ValidationError({"detail": "تاریخ شروع باید پیش از تاریخ پایان باشد."})
+    if (end - start).days > 1826:
+        raise ValidationError({"detail": "بازه گزارش نمی‌تواند بیشتر از پنج سال باشد."})
+    return period, start, end
 
-        series = {}
-        for payment in confirmed:
-            key = payment.paid_at.date().isoformat()
-            series[key] = series.get(key, 0) + payment.amount
-        for refund in refunds:
-            key = refund.created_at.date().isoformat()
-            series[key] = series.get(key, 0) - refund.amount
-        employee_rows = list(items.values("employee_id", "employee__user__first_name", "employee__user__username").annotate(revenue=Sum("price_snapshot"), completed=Count("id")).order_by("-revenue"))
-        commission_by_employee = {row["appointment_item__employee_id"]: row["total"] or 0 for row in commissions.values("appointment_item__employee_id").annotate(total=Sum("commission_amount"))}
-        service_rows = list(items.values("service_id", "service__persian_name").annotate(revenue=Sum("price_snapshot"), completed=Count("id")).order_by("-revenue")[:8])
-        method_rows = list(confirmed.values("payment_method").annotate(value=Sum("amount")).order_by("-value"))
-        status_rows = list(payments.values("status").annotate(value=Count("id")).order_by("status"))
-        return Response({
-            "period": period, "start_date": start, "end_date": end,
-            "received": received, "refunded": refunded, "net_revenue": received - refunded,
-            "pending_reports": pending, "outstanding": outstanding,
-            "service_revenue": service_revenue, "commission_total": commission_total,
-            "series": [{"date": key, "revenue": value} for key, value in sorted(series.items())],
-            "employees": [{"id": row["employee_id"], "name": row["employee__user__first_name"] or row["employee__user__username"], "revenue": row["revenue"], "completed": row["completed"], "commission": commission_by_employee.get(row["employee_id"], 0)} for row in employee_rows],
-            "services": [{"id": row["service_id"], "name": row["service__persian_name"], "revenue": row["revenue"], "completed": row["completed"]} for row in service_rows],
-            "methods": method_rows, "statuses": status_rows,
+
+def _bucket_start(value, grouping):
+    if grouping == "weekly":
+        return value - timedelta(days=value.weekday())
+    if grouping == "monthly":
+        return value.replace(day=1)
+    return value
+
+
+def _empty_series(start, end, grouping):
+    rows = {}
+    cursor = _bucket_start(start, grouping)
+    while cursor <= end:
+        rows[cursor] = {"date": cursor.isoformat(), "revenue": 0, "payment_value": 0, "payments": 0, "appointments": set(), "commission": 0, "services": 0}
+        if grouping == "monthly":
+            cursor = (cursor + timedelta(days=32)).replace(day=1)
+        else:
+            cursor += timedelta(days=7 if grouping == "weekly" else 1)
+    return rows
+
+
+def _allocate_amount(items, amount):
+    items = list(items)
+    if not items:
+        return {}
+    total = sum(item.price_snapshot for item in items)
+    if not total:
+        base, remainder = divmod(amount, len(items))
+        return {item.id: base + int(index < remainder) for index, item in enumerate(items)}
+    allocations, allocated = {}, 0
+    for index, item in enumerate(items):
+        value = amount - allocated if index == len(items) - 1 else amount * item.price_snapshot // total
+        allocations[item.id] = value
+        allocated += value
+    return allocations
+
+
+def _employee_label(employee):
+    return employee.user.get_full_name() or employee.user.username
+
+
+def _profile_url(request, employee):
+    return request.build_absolute_uri(employee.profile_photo.url) if employee.profile_photo else ""
+
+
+def _finance_analytics(request, start, end, grouping="daily", employee=None, include_details=False):
+    if grouping not in FINANCE_GROUPS:
+        raise ValidationError({"group_by": "گروه‌بندی زمانی نامعتبر است."})
+    item_queryset = AppointmentItem.objects.select_related("service__category", "employee__user", "appointment__customer__user").prefetch_related("appointment__payments__refunds")
+    payments = Payment.objects.filter(status__in=("paid", "refunded"), paid_at__date__range=(start, end)).select_related("appointment__customer__user", "created_by", "reviewed_by").prefetch_related(Prefetch("appointment__items", queryset=item_queryset), "refunds")
+    refunds = Refund.objects.filter(status="completed", created_at__date__range=(start, end)).select_related("payment__appointment__customer__user").prefetch_related(Prefetch("payment__appointment__items", queryset=item_queryset))
+    reports = Payment.objects.filter(status__in=("pending", "failed"), created_at__date__range=(start, end)).select_related("appointment__customer__user", "created_by").prefetch_related(Prefetch("appointment__items", queryset=item_queryset))
+    dated_items = item_queryset.filter(date__range=(start, end))
+    commissions = EmployeeCommission.objects.filter(appointment_item__date__range=(start, end)).select_related("appointment_item__employee__user", "appointment_item__service")
+    appointments = Appointment.objects.filter(items__date__range=(start, end)).exclude(status="cancelled").distinct().select_related("customer__user").prefetch_related(Prefetch("items", queryset=item_queryset), "payments__refunds")
+    if employee:
+        payments = payments.filter(appointment__items__employee=employee).distinct()
+        refunds = refunds.filter(payment__appointment__items__employee=employee).distinct()
+        reports = reports.filter(appointment__items__employee=employee).distinct()
+        dated_items = dated_items.filter(employee=employee)
+        commissions = commissions.filter(appointment_item__employee=employee)
+        appointments = appointments.filter(items__employee=employee).distinct()
+
+    employee_profiles = [employee] if employee else list(EmployeeProfile.objects.filter(is_active=True, is_deleted=False).select_related("user"))
+    employee_rows = {
+        item.id: {"id": item.id, "name": _employee_label(item), "specialty": item.specialty, "profile_photo_url": _profile_url(request, item), "confirmed_revenue": 0, "refunds": 0, "commission": 0, "completed_services": 0, "appointments": set(), "payments": 0, "pending_reports": 0, "outstanding": 0}
+        for item in employee_profiles
+    }
+    service_rows = {}
+    series = _empty_series(start, end, grouping)
+    payment_details = []
+    received = 0
+
+    for payment in payments:
+        items = list(payment.appointment.items.all())
+        allocations = _allocate_amount(items, payment.amount)
+        received += payment.amount
+        employee_amount = 0
+        affected_employees = set()
+        for item in items:
+            allocation = allocations.get(item.id, 0)
+            stat = employee_rows.get(item.employee_id)
+            if stat:
+                stat["confirmed_revenue"] += allocation
+                employee_amount += allocation
+                affected_employees.add(item.employee_id)
+            if not employee or item.employee_id == employee.id:
+                service = service_rows.setdefault(item.service_id, {"id": item.service_id, "name": item.service.persian_name, "category": item.service.category.name, "revenue": 0, "paid_services": set()})
+                service["revenue"] += allocation
+                service["paid_services"].add(item.id)
+        for employee_id in affected_employees:
+            employee_rows[employee_id]["payments"] += 1
+        plotted = employee_amount if employee else payment.amount
+        bucket = series[_bucket_start(timezone.localdate(payment.paid_at), grouping)]
+        bucket["revenue"] += plotted
+        bucket["payment_value"] += plotted
+        bucket["payments"] += 1
+        if include_details:
+            payment_details.append({"id": payment.id, "date": payment.paid_at or payment.created_at, "customer": payment.appointment.customer.user.get_full_name() or payment.appointment.customer.user.username, "appointment": payment.appointment_id, "services": [item.service.persian_name for item in items if item.employee_id == employee.id], "amount": payment.amount, "employee_amount": employee_amount, "method": payment.payment_method, "status": payment.status, "reporter": (payment.created_by.get_full_name() or payment.created_by.username) if payment.created_by else "مدیریت", "refunded": sum(item.amount for item in payment.refunds.all() if item.status == "completed")})
+
+    refunded = 0
+    for refund in refunds:
+        items = list(refund.payment.appointment.items.all())
+        allocations = _allocate_amount(items, refund.amount)
+        refunded += refund.amount
+        employee_amount = 0
+        for item in items:
+            stat = employee_rows.get(item.employee_id)
+            if stat:
+                stat["refunds"] += allocations.get(item.id, 0)
+                employee_amount += allocations.get(item.id, 0)
+        series[_bucket_start(timezone.localdate(refund.created_at), grouping)]["revenue"] -= employee_amount if employee else refund.amount
+
+    pending_total = 0
+    pending_details = []
+    for payment in reports:
+        items = list(payment.appointment.items.all())
+        allocations = _allocate_amount(items, payment.amount)
+        employee_amount = sum(allocations.get(item.id, 0) for item in items if not employee or item.employee_id == employee.id)
+        if payment.status == "pending":
+            pending_total += employee_amount if employee else payment.amount
+            for item in items:
+                stat = employee_rows.get(item.employee_id)
+                if stat:
+                    stat["pending_reports"] += allocations.get(item.id, 0)
+        if include_details:
+            pending_details.append({"id": payment.id, "date": payment.created_at, "customer": payment.appointment.customer.user.get_full_name() or payment.appointment.customer.user.username, "appointment": payment.appointment_id, "services": [item.service.persian_name for item in items if item.employee_id == employee.id], "amount": payment.amount, "employee_amount": employee_amount, "method": payment.payment_method, "status": payment.status, "reporter": (payment.created_by.get_full_name() or payment.created_by.username) if payment.created_by else "مدیریت", "refunded": 0})
+
+    completed_items = list(dated_items.filter(completion_status="completed"))
+    for item in completed_items:
+        bucket = series[_bucket_start(item.date, grouping)]
+        bucket["services"] += 1
+        bucket["appointments"].add(item.appointment_id)
+        stat = employee_rows.get(item.employee_id)
+        if stat:
+            stat["completed_services"] += 1
+            stat["appointments"].add(item.appointment_id)
+
+    commission_total = 0
+    commission_by_item = {}
+    for commission in commissions:
+        commission_total += commission.commission_amount
+        commission_by_item[commission.appointment_item_id] = commission
+        series[_bucket_start(commission.appointment_item.date, grouping)]["commission"] += commission.commission_amount
+        stat = employee_rows.get(commission.appointment_item.employee_id)
+        if stat:
+            stat["commission"] += commission.commission_amount
+
+    appointment_details = []
+    outstanding = 0
+    for appointment in appointments:
+        all_items = [item for item in appointment.items.all() if item.completion_status != "cancelled"]
+        allocations = _allocate_amount(all_items, appointment.remaining_total)
+        relevant_items = [item for item in all_items if not employee or item.employee_id == employee.id]
+        employee_outstanding = sum(allocations.get(item.id, 0) for item in relevant_items)
+        outstanding += employee_outstanding if employee else appointment.remaining_total
+        for item in all_items:
+            stat = employee_rows.get(item.employee_id)
+            if stat:
+                stat["outstanding"] += allocations.get(item.id, 0)
+        if include_details:
+            appointment_details.append({"id": appointment.id, "date": min((item.date for item in relevant_items), default=None), "customer": appointment.customer.user.get_full_name() or appointment.customer.user.username, "services": [item.service.persian_name for item in relevant_items], "status": appointment.status, "payment_status": appointment.payment_status, "total": appointment.appointment_total, "paid": appointment.net_paid, "employee_outstanding": employee_outstanding})
+
+    employee_output = []
+    for row in employee_rows.values():
+        row["appointments"] = len(row["appointments"])
+        row["net_revenue"] = row["confirmed_revenue"] - row["refunds"]
+        row["average_payment"] = round(row["confirmed_revenue"] / row["payments"]) if row["payments"] else 0
+        employee_output.append(row)
+    employee_output.sort(key=lambda row: (row["confirmed_revenue"], row["completed_services"]), reverse=True)
+
+    service_total = sum(row["revenue"] for row in service_rows.values())
+    services_output = []
+    for row in service_rows.values():
+        row["paid_services"] = len(row["paid_services"])
+        row["share"] = round(row["revenue"] * 100 / service_total, 1) if service_total else 0
+        services_output.append(row)
+    services_output.sort(key=lambda row: (row["revenue"], row["paid_services"]), reverse=True)
+
+    series_output = []
+    for row in series.values():
+        row["appointments"] = len(row["appointments"])
+        row["average_payment"] = round(row["payment_value"] / row["payments"]) if row["payments"] else 0
+        row.pop("payment_value")
+        series_output.append(row)
+
+    confirmed_count = len(payment_details) if include_details else payments.count()
+    selected_employee = employee_output[0] if employee_output else {}
+    employee_received = selected_employee.get("confirmed_revenue", 0)
+    status_source = Payment.objects.filter(created_at__date__range=(start, end))
+    if employee:
+        status_source = status_source.filter(appointment__items__employee=employee).distinct()
+    payload = {
+        "start_date": start, "end_date": end, "group_by": grouping,
+        "received": employee_received if employee else received,
+        "refunded": selected_employee.get("refunds", 0) if employee else refunded,
+        "net_revenue": selected_employee.get("net_revenue", 0) if employee else received - refunded,
+        "pending_reports": pending_total, "outstanding": outstanding,
+        "service_revenue": sum(item.price_snapshot for item in completed_items),
+        "commission_total": commission_total, "completed_services": len(completed_items),
+        "completed_appointments": len({item.appointment_id for item in completed_items}),
+        "payments_count": confirmed_count,
+        "average_payment": round((employee_received if employee else received) / confirmed_count) if confirmed_count else 0,
+        "series": series_output, "employees": employee_output, "services": services_output[:10],
+        "methods": list(payments.values("payment_method").annotate(value=Sum("amount")).order_by("-value")),
+        "statuses": list(status_source.values("status").annotate(value=Count("id")).order_by("status")),
+    }
+    if include_details:
+        transaction_queryset = Transaction.objects.filter(created_at__date__range=(start, end), appointment__items__employee=employee).distinct().select_related("appointment__customer__user", "payment").prefetch_related(Prefetch("appointment__items", queryset=item_queryset)).order_by("-created_at")[:200]
+        payload.update({
+            "employee": selected_employee,
+            "payments": sorted(payment_details + pending_details, key=lambda row: row["date"], reverse=True)[:200],
+            "transactions": [{"id": entry.id, "date": entry.created_at, "type": entry.type, "amount": entry.amount, "employee_amount": sum(_allocate_amount(entry.appointment.items.all(), entry.amount).get(item.id, 0) for item in entry.appointment.items.all() if item.employee_id == employee.id) if entry.appointment else 0, "customer": (entry.appointment.customer.user.get_full_name() or entry.appointment.customer.user.username) if entry.appointment else "—", "appointment": entry.appointment_id, "services": [item.service.persian_name for item in entry.appointment.items.all() if item.employee_id == employee.id] if entry.appointment else [], "payment_status": entry.payment.status if entry.payment else "—"} for entry in transaction_queryset],
+            "appointments": sorted(appointment_details, key=lambda row: row["date"] or start, reverse=True)[:200],
+            "services_performed": [{"id": item.id, "date": item.date, "customer": item.appointment.customer.user.get_full_name() or item.appointment.customer.user.username, "appointment": item.appointment_id, "service": item.service.persian_name, "amount": item.price_snapshot, "status": item.completion_status, "appointment_status": item.appointment.status, "payment_status": item.appointment.payment_status, "commission": commission_by_item[item.id].commission_amount if item.id in commission_by_item else 0} for item in list(dated_items.order_by("-date", "-start_time")[:200])],
         })
+    return payload
+
+
+class AdminRevenueView(generics.GenericAPIView):
+    permission_classes = (IsAdmin,)
+
+    def get(self, request):
+        period, start, end = _finance_range(request)
+        employee = None
+        if request.query_params.get("employee"):
+            employee = generics.get_object_or_404(EmployeeProfile.objects.select_related("user"), pk=request.query_params["employee"])
+        payload = _finance_analytics(request, start, end, request.query_params.get("group_by", "daily"), employee=employee)
+        payload["period"] = period
+        return Response(payload)
+
+
+class AdminEmployeeFinanceView(generics.GenericAPIView):
+    permission_classes = (IsAdmin,)
+
+    def get(self, request, employee_id):
+        period, start, end = _finance_range(request)
+        employee = generics.get_object_or_404(EmployeeProfile.objects.select_related("user"), pk=employee_id)
+        payload = _finance_analytics(request, start, end, request.query_params.get("group_by", "daily"), employee=employee, include_details=True)
+        payload["period"] = period
+        return Response(payload)
 
 
 class ServiceImageViewSet(AdminModelViewSet):
@@ -994,29 +1197,11 @@ class EmployeeEarningsView(generics.GenericAPIView):
     permission_classes = (IsEmployee,)
 
     def get(self, request):
-        period = request.query_params.get("period", "day")
-        current = timezone.localdate()
-        if period == "week":
-            start_date, end_date = current - timedelta(days=current.weekday()), current + timedelta(days=6 - current.weekday())
-        elif period == "month":
-            start_date = current.replace(day=1)
-            end_date = (start_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-        elif period == "day":
-            start_date = end_date = current
-        else:
-            return Response({"detail": "بازه زمانی نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
-
-        commissions = (
-            EmployeeCommission.objects.filter(
-                appointment_item__employee__user=request.user,
-                appointment_item__date__range=(start_date, end_date),
-            )
-            .select_related("appointment_item__service", "appointment_item__appointment")
-            .prefetch_related("appointment_item__appointment__payments__refunds")
-            .order_by("-appointment_item__date", "-created_at")
-        )
-        rows = []
-        for commission in commissions:
-            item = commission.appointment_item
-            rows.append({"id": commission.id, "date": item.date, "service": item.service.persian_name, "base_amount": commission.base_amount, "commission_rate": commission.commission_rate_snapshot, "employee_commission": commission.commission_amount, "status": commission.status, "payment_status": item.appointment.payment_status})
-        return Response({"period": period, "start_date": start_date, "end_date": end_date, "items": rows, "completed_services": len(rows), "employee_commission": sum(row["employee_commission"] for row in rows), "statuses": {key: sum(row["status"] == key for row in rows) for key in ("pending", "approved", "paid")}})
+        period, start, end = _finance_range(request)
+        employee = generics.get_object_or_404(EmployeeProfile.objects.select_related("user"), user=request.user)
+        payload = _finance_analytics(request, start, end, request.query_params.get("group_by", "daily"), employee=employee, include_details=True)
+        payload["period"] = period
+        # Preserve the response keys used by older employee clients.
+        payload["items"] = [{"id": item["id"], "date": item["date"], "service": item["service"], "base_amount": item["amount"], "employee_commission": item["commission"], "status": item["status"], "payment_status": item["payment_status"]} for item in payload["services_performed"] if item["commission"]]
+        payload["employee_commission"] = payload["commission_total"]
+        return Response(payload)

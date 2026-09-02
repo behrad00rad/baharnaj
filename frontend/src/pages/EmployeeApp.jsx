@@ -3,6 +3,7 @@ import { Link, Route, Routes, useNavigate } from "react-router-dom";
 import { api, clearSession, toman } from "../shared/api";
 import { JalaliDatePicker } from "../components/DatePicker";
 import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 const unwrap = (data) => data?.results || data || [];
 const statusNames = {
@@ -685,6 +686,9 @@ const paymentStatusNames = {
   paid: "تأیید شده",
   failed: "رد شده",
   refunded: "بازپرداخت شده",
+  unpaid: "پرداخت‌نشده",
+  partially_paid: "پرداخت جزئی",
+  partially_refunded: "بازپرداخت جزئی",
 };
 const paymentMethodNames = {
   cash: "نقدی",
@@ -955,18 +959,40 @@ function AppointmentDetail({ item, close, onSaved }) {
     </div>
   );
 }
+const employeeFinanceGroups = { daily: "روزانه", weekly: "هفتگی", monthly: "ماهانه" };
+const employeeFinanceMetrics = { commission: "درآمد من", revenue: "درآمد ایجادشده", services: "سرویس‌های تکمیل‌شده", appointments: "نوبت‌های تکمیل‌شده", payments: "پرداخت‌ها" };
+function employeeFinanceRange(preset, customStart, customEnd) {
+  const current = isoDate(new Date());
+  const anchor = new Date(`${current}T12:00:00`);
+  let start = new Date(anchor);
+  let end = new Date(anchor);
+  if (preset === "week") start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  if (preset === "month") start.setDate(1);
+  if (preset === "last-month") {
+    start = new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1, 12);
+    end = new Date(anchor.getFullYear(), anchor.getMonth(), 0, 12);
+  }
+  if (preset === "custom") return { start: customStart || current, end: customEnd || current };
+  return { start: isoDate(start), end: isoDate(end) };
+}
 function Earnings() {
-  const [period, setPeriod] = useState("day");
-  const resource = useData(`employee/earnings/?period=${period}`);
-  const items = resource.data.items || [];
+  const current = isoDate(new Date());
+  const [preset, setPreset] = useState("month");
+  const [customStart, setCustomStart] = useState(current);
+  const [customEnd, setCustomEnd] = useState(current);
+  const [grouping, setGrouping] = useState("daily");
+  const [metric, setMetric] = useState("commission");
+  const range = employeeFinanceRange(preset, customStart, customEnd);
+  const resource = useData(`employee/earnings/?period=custom&start_date=${range.start}&end_date=${range.end}&group_by=${grouping}`);
+  const items = resource.data.services_performed || resource.data.items || [];
   const exportCsv = () => {
     const rows = [
       ["تاریخ", "سرویس", "مبنای کمیسیون", "کمیسیون", "وضعیت کمیسیون"],
       ...items.map((item) => [
         item.date,
         item.service,
-        item.base_amount,
-        item.employee_commission,
+        item.amount ?? item.base_amount,
+        item.commission ?? item.employee_commission,
         item.status,
       ]),
     ];
@@ -984,35 +1010,36 @@ function Earnings() {
   return (
     <div className="employee-page">
       <Heading kicker="مالی شخصی" title="درآمد" />
-      <div className="calendar-toggle">
-        {[
-          ["day", "روزانه"],
-          ["week", "هفتگی"],
-          ["month", "ماهانه"],
-        ].map(([value, label]) => (
+      <div className="employee-finance-filters">
+        <div className="calendar-toggle">{[["day","امروز"],["week","این هفته"],["month","این ماه"],["last-month","ماه قبل"],["custom","بازه دلخواه"]].map(([value, label]) => (
           <button
             key={value}
-            className={period === value ? "active" : ""}
-            onClick={() => setPeriod(value)}
+            className={preset === value ? "active" : ""}
+            onClick={() => setPreset(value)}
           >
             {label}
           </button>
-        ))}
+        ))}</div>
+        {preset === "custom" && <div className="employee-custom-range"><label>از<input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label>تا<input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></div>}
       </div>
-      <section className="employee-card next-card">
-        <span className="employee-kicker">سرویس‌های تکمیل‌شده</span>
-        <strong className="next-time">
-          {resource.data.completed_services || 0}
-        </strong>
-        <p>فقط سرویس‌هایی که تکمیل و ثبت شده‌اند</p>
-        <span className="employee-kicker">کمیسیون من</span>
-        <strong className="next-time">
-          {toman(resource.data.employee_commission)}
-        </strong>
-        <p>بر اساس نرخ ثبت‌شده در زمان تکمیل</p>
+      {resource.loading && <Skeleton />}
+      {resource.error && <div className="warning">{resource.error}</div>}
+      <div className="employee-finance-stat-grid">
+        <section className="employee-card next-card"><span className="employee-kicker">درآمد تأییدشده ایجادشده</span><strong>{toman(resource.data.received || 0)}</strong><p>از پرداخت واقعی؛ کمیسیون من نیست</p></section>
+        <section className="employee-card"><span>کمیسیون / درآمد من</span><strong>{toman(resource.data.commission_total || resource.data.employee_commission || 0)}</strong><small>بر اساس نرخ ثبت‌شده</small></section>
+        <section className="employee-card"><span>سرویس تکمیل‌شده</span><strong>{new Intl.NumberFormat("fa-IR").format(resource.data.completed_services || 0)}</strong><small>{resource.data.completed_appointments || 0} نوبت تکمیل‌شده</small></section>
+        <section className="employee-card"><span>پرداخت مرتبط</span><strong>{new Intl.NumberFormat("fa-IR").format(resource.data.payments_count || 0)}</strong><small>میانگین سهم: {toman(resource.data.average_payment || 0)}</small></section>
+        <section className="employee-card"><span>گزارش در انتظار</span><strong>{toman(resource.data.pending_reports || 0)}</strong><small>در انتظار بررسی مدیریت</small></section>
+        <section className="employee-card"><span>مانده منتسب به کار من</span><strong>{toman(resource.data.outstanding || 0)}</strong><small>بازپرداخت: {toman(resource.data.refunded || 0)}</small></section>
+      </div>
+      <section className="employee-card employee-finance-chart">
+        <div className="employee-finance-chart-head"><div><span className="employee-kicker">روند مالی</span><h2>{employeeFinanceMetrics[metric]}</h2></div><label>شاخص<select value={metric} onChange={(event) => setMetric(event.target.value)}>{Object.entries(employeeFinanceMetrics).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
+        <div className="calendar-toggle">{Object.entries(employeeFinanceGroups).map(([value,label]) => <button key={value} className={grouping === value ? "active" : ""} onClick={() => setGrouping(value)}>{label}</button>)}</div>
+        {resource.data.series?.length ? <ResponsiveContainer width="100%" height={270}><BarChart data={resource.data.series}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={(value) => ["commission","revenue"].includes(metric) ? toman(value) : new Intl.NumberFormat("fa-IR").format(value)} /><Bar name={employeeFinanceMetrics[metric]} dataKey={metric} fill="#226b61" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer> : <Empty title="در این بازه داده‌ای برای نمودار نیست" />}
       </section>
+      <section className="employee-card employee-service-performance"><div className="day-label"><h2>عملکرد سرویس‌های من</h2><span>بر اساس پرداخت تأییدشده</span></div>{resource.data.services?.length ? resource.data.services.slice(0,8).map((service) => <div key={service.id}><span><b>{service.name}</b><small>{service.paid_services} اجرای پرداخت‌شده</small></span><i><b style={{ width: `${service.share}%` }} /></i><strong>{toman(service.revenue)}</strong></div>) : <Empty title="سرویس پرداخت‌شده‌ای نیست" />}</section>
       <div className="day-label">
-        <h2>تاریخچه کمیسیون</h2>
+        <h2>جزئیات سرویس و کمیسیون</h2>
         <button className="employee-action" onClick={exportCsv}>
           خروجی CSV
         </button>
@@ -1025,17 +1052,17 @@ function Earnings() {
             <span>
               <b>{item.service}</b>
               <small>
-                {item.date} · وضعیت: {item.status} · پرداخت نوبت:{" "}
-                {item.payment_status}
+                {item.date} · {item.customer ? `${item.customer} · ` : ""}وضعیت: {statusNames[item.status] || item.status} · پرداخت: {paymentStatusNames[item.payment_status] || item.payment_status}
               </small>
             </span>
-            <em>{toman(item.base_amount)}</em>
-            <strong>{toman(item.employee_commission)}</strong>
+            <em>{toman(item.amount ?? item.base_amount)}</em>
+            <strong>{toman(item.commission ?? item.employee_commission)}</strong>
           </div>
         ))
       ) : (
         <Empty title="هنوز کمیسیونی ثبت نشده" />
       )}
+      {resource.data.payments?.length > 0 && <section className="employee-card employee-finance-list"><h2>پرداخت‌های مرتبط با کار من</h2>{resource.data.payments.slice(0,20).map((item) => <article key={item.id}><span><b>{item.customer}</b><small>{item.services?.join("، ")} · {item.date ? new Intl.DateTimeFormat("fa-IR", { dateStyle: "medium" }).format(new Date(item.date)) : "—"}</small></span><strong>{toman(item.employee_amount)}</strong><em>{paymentStatusNames[item.status] || item.status}</em></article>)}</section>}
     </div>
   );
 }

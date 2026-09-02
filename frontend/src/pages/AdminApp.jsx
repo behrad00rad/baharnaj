@@ -1951,9 +1951,13 @@ function ServiceManagement() {
 }
 
 const paymentLabels = { pending: "در انتظار تأیید", paid: "تأیید شده", failed: "رد شده", refunded: "بازپرداخت شده" };
+const appointmentPaymentLabels = { unpaid: "پرداخت‌نشده", partially_paid: "پرداخت جزئی", paid: "تسویه‌شده", partially_refunded: "بازپرداخت جزئی", refunded: "بازپرداخت‌شده" };
 const methodLabels = { cash: "نقدی", card: "کارت", bank_transfer: "انتقال بانکی", online: "آنلاین", other: "سایر" };
 const transactionLabels = { payment: "پرداخت", refund: "بازپرداخت", commission: "کمیسیون", expense: "هزینه" };
 const chartColors = ["#2d7d70", "#d5a26d", "#7c9b91", "#b75d55", "#8c72a6"];
+const financeGroups = { daily: "روزانه", weekly: "هفتگی", monthly: "ماهانه" };
+const adminChartMetrics = { revenue: "درآمد خالص", payments: "تعداد پرداخت‌ها", appointments: "نوبت‌های تکمیل‌شده", commission: "کمیسیون", average_payment: "میانگین پرداخت" };
+const employeeChartMetrics = { revenue: "درآمد خالص", payments: "تعداد پرداخت‌ها", appointments: "نوبت‌های تکمیل‌شده", commission: "کمیسیون", services: "سرویس‌های تکمیل‌شده" };
 
 function financeDate(value) {
   if (!value) return "—";
@@ -1977,6 +1981,53 @@ function financeRange(preset, customStart, customEnd) {
   return { start: localIsoDate(start), end: localIsoDate(end) };
 }
 
+function FinanceChartControls({ grouping, onGrouping, metric, onMetric, metrics = adminChartMetrics }) {
+  return <div className="finance-chart-controls">
+    <div className="segmented" aria-label="گروه‌بندی نمودار">{Object.entries(financeGroups).map(([value,label]) => <button type="button" key={value} className={grouping === value ? "selected" : ""} onClick={() => onGrouping(value)}>{label}</button>)}</div>
+    <label>شاخص<select value={metric} onChange={(event) => onMetric(event.target.value)}>{Object.entries(metrics).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+  </div>;
+}
+
+function FinanceSeriesChart({ data, metric, metrics = adminChartMetrics, height = 300 }) {
+  const monetary = ["revenue", "commission", "average_payment"].includes(metric);
+  if (!data?.length) return <Empty title="داده‌ای برای نمودار نیست" />;
+  return <ResponsiveContainer width="100%" height={height}><BarChart data={data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={(value) => monetary ? toman(value) : new Intl.NumberFormat("fa-IR").format(value)} /><Bar name={metrics[metric]} dataKey={metric} fill="#2d7d70" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer>;
+}
+
+function FinancePresetFilter({ preset, setPreset, customStart, setCustomStart, customEnd, setCustomEnd }) {
+  return <div className="finance-modal-range">
+    <div className="segmented">{[["day","امروز"],["week","این هفته"],["month","این ماه"],["last-month","ماه قبل"],["custom","بازه دلخواه"]].map(([value,label]) => <button type="button" key={value} className={preset === value ? "selected" : ""} onClick={() => setPreset(value)}>{label}</button>)}</div>
+    {preset === "custom" && <div className="finance-custom-range"><label>از<input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label>تا<input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></div>}
+  </div>;
+}
+
+function EmployeeFinanceModal({ employee, onClose }) {
+  const [preset, setPreset] = useState("month");
+  const [customStart, setCustomStart] = useState(today);
+  const [customEnd, setCustomEnd] = useState(today);
+  const [grouping, setGrouping] = useState("daily");
+  const [metric, setMetric] = useState("revenue");
+  const range = useMemo(() => financeRange(preset, customStart, customEnd), [preset, customStart, customEnd]);
+  const report = useResource(`admin/employees/${employee.id}/finance/?period=custom&start_date=${range.start}&end_date=${range.end}&group_by=${grouping}`);
+  const data = report.data && !Array.isArray(report.data) ? report.data : {};
+  const profile = data.employee || employee;
+  return <div className="modal-backdrop employee-finance-backdrop" onMouseDown={onClose}><section className="admin-modal employee-finance-modal" role="dialog" aria-modal="true" aria-labelledby="employee-finance-title" onMouseDown={(event) => event.stopPropagation()}>
+    <button type="button" className="drawer-close" onClick={onClose}>×</button>
+    <header className="employee-finance-profile">{profile.profile_photo_url ? <img src={profile.profile_photo_url} alt={`تصویر ${profile.name}`} /> : <span>{profile.name?.[0] || "م"}</span>}<div><small>گزارش مالی متخصص</small><h2 id="employee-finance-title">{profile.name}</h2><p>{profile.specialty || "متخصص بهارناژ"}</p></div></header>
+    <FinancePresetFilter {...{ preset, setPreset, customStart, setCustomStart, customEnd, setCustomEnd }} />
+    {report.loading ? <Skeleton /> : report.error ? <Empty title="دریافت گزارش مالی انجام نشد" /> : <>
+      <div className="employee-finance-stats"><Stat label="درآمد تأییدشده" value={toman(data.received || 0)} note={`خالص: ${toman(data.net_revenue || 0)}`} accent /><Stat label="کمیسیون" value={toman(data.commission_total || 0)} note="مجزا از درآمد سالن" /><Stat label="سرویس تکمیل‌شده" value={new Intl.NumberFormat("fa-IR").format(data.completed_services || 0)} note={`${data.completed_appointments || 0} نوبت`} /><Stat label="میانگین پرداخت" value={toman(data.average_payment || 0)} note={`${data.payments_count || 0} پرداخت`} /><Stat label="گزارش در انتظار" value={toman(data.pending_reports || 0)} note="نیازمند بررسی" /><Stat label="مانده منتسب" value={toman(data.outstanding || 0)} note={`بازپرداخت: ${toman(data.refunded || 0)}`} /></div>
+      <section className="admin-panel finance-chart employee-modal-chart"><div className="panel-title"><div><span>روند عملکرد</span><h3>{employeeChartMetrics[metric]}</h3></div></div><FinanceChartControls grouping={grouping} onGrouping={setGrouping} metric={metric} onMetric={setMetric} metrics={employeeChartMetrics} /><FinanceSeriesChart data={data.series} metric={metric} metrics={employeeChartMetrics} height={270} /></section>
+      <div className="employee-finance-detail-grid">
+        <section><h3>پرداخت‌ها</h3>{data.payments?.length ? data.payments.map((item) => <article key={item.id}><b>{toman(item.employee_amount)}</b><span>{item.customer} · {item.services?.join("، ")}</span><small>{financeDate(item.date)} · {paymentLabels[item.status] || item.status} · مبلغ کل پرداخت {toman(item.amount)}</small></article>) : <Empty />}</section>
+        <section><h3>تراکنش‌ها</h3>{data.transactions?.length ? data.transactions.map((item) => <article key={item.id}><b>{transactionLabels[item.type] || item.type} · {toman(item.employee_amount)}</b><span>{item.customer} · {item.services?.join("، ")}</span><small>{financeDate(item.date)} · نوبت #{item.appointment}</small></article>) : <Empty />}</section>
+        <section><h3>نوبت‌ها</h3>{data.appointments?.length ? data.appointments.map((item) => <article key={item.id}><b>#{item.id} · {item.customer}</b><span>{item.services?.join("، ")}</span><small>{item.date || "—"} · {labels[item.status] || item.status} · {appointmentPaymentLabels[item.payment_status] || item.payment_status}</small></article>) : <Empty />}</section>
+        <section><h3>سرویس‌های انجام‌شده</h3>{data.services_performed?.length ? data.services_performed.map((item) => <article key={item.id}><b>{item.service} · {toman(item.amount)}</b><span>{item.customer} · کمیسیون {toman(item.commission)}</span><small>{item.date} · {labels[item.status] || item.status} · {appointmentPaymentLabels[item.payment_status] || item.payment_status}</small></article>) : <Empty />}</section>
+      </div>
+    </>}
+  </section></div>;
+}
+
 function Finance() {
   const employees = useResource("admin/employees/");
   const [preset, setPreset] = useState("month");
@@ -1987,6 +2038,9 @@ function Finance() {
   const [methodFilter, setMethodFilter] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [chartGrouping, setChartGrouping] = useState("daily");
+  const [chartMetric, setChartMetric] = useState("revenue");
   const [manualOpen, setManualOpen] = useState(false);
   const [manual, setManual] = useState({ appointment: "", amount: "", payment_method: "cash", notes: "" });
   const [refund, setRefund] = useState({ amount: "", reason: "" });
@@ -1998,7 +2052,7 @@ function Finance() {
   const payments = useResource(`admin/payments/?${paymentQuery}`);
   const transactions = useResource(`admin/transactions/?${baseQuery}`);
   const commissions = useResource(`admin/commissions/?${baseQuery}`);
-  const overview = useResource(`admin/revenue/?period=custom&${baseQuery}`);
+  const overview = useResource(`admin/revenue/?period=custom&group_by=${chartGrouping}&${baseQuery}`);
   const appointments = useResource(`admin/appointments/?start_date=${range.start}&end_date=${range.end}${employee ? `&employee=${employee}` : ""}`);
   const refresh = () => { payments.reload(); transactions.reload(); commissions.reload(); overview.reload(); };
   const reviewPayment = async (payment, action) => {
@@ -2027,6 +2081,7 @@ function Finance() {
       {preset === "custom" && <div className="finance-custom-range"><label>از<input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label>تا<input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></div>}
       <select value={employee} onChange={(event) => setEmployee(event.target.value)}><option value="">همه کارکنان</option>{employees.data.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
     </div>
+    {overview.error && <div className="finance-message error">دریافت آمار مالی انجام نشد.</div>}
     {message && <div className="finance-message">{message}</div>}
     <div className="finance-stat-grid">
       <Stat label="پرداخت‌های تأییدشده" value={toman(metrics.received || 0)} note="دریافتی ناخالص" accent />
@@ -2037,14 +2092,15 @@ function Finance() {
       <Stat label="کمیسیون کارکنان" value={toman(metrics.commission_total || 0)} note="مجزا از درآمد سالن" />
     </div>
     <div className="finance-chart-grid">
-      <section className="admin-panel finance-chart"><div className="panel-title"><div><span>روند زمانی</span><h2>درآمد خالص روزانه</h2></div></div>{metrics.series?.length ? <ResponsiveContainer width="100%" height={280}><BarChart data={metrics.series}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={(value) => toman(value)} /><Bar dataKey="revenue" fill="#2d7d70" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer> : <Empty title="داده‌ای برای نمودار نیست" />}</section>
-      <section className="admin-panel finance-chart"><div className="panel-title"><div><span>روش دریافت</span><h2>ترکیب روش‌های پرداخت</h2></div></div>{metrics.methods?.length ? <ResponsiveContainer width="100%" height={280}><PieChart><Pie data={metrics.methods} dataKey="value" nameKey="payment_method" innerRadius={55} outerRadius={90} label={({ payment_method }) => methodLabels[payment_method] || payment_method}>{metrics.methods.map((entry,index) => <Cell key={entry.payment_method} fill={chartColors[index % chartColors.length]} />)}</Pie><Tooltip formatter={(value) => toman(value)} /></PieChart></ResponsiveContainer> : <Empty title="پرداخت تأییدشده‌ای نیست" />}</section>
+      <section className="admin-panel finance-chart"><div className="panel-title"><div><span>روند زمانی</span><h2>{adminChartMetrics[chartMetric]}</h2></div></div><FinanceChartControls grouping={chartGrouping} onGrouping={setChartGrouping} metric={chartMetric} onMetric={setChartMetric} /><FinanceSeriesChart data={metrics.series} metric={chartMetric} /></section>
+      <section className="admin-panel finance-chart service-performance"><div className="panel-title"><div><span>بر پایه پرداخت تأییدشده</span><h2>سهم سرویس‌های پردرآمد</h2></div></div>{metrics.services?.length ? <><ResponsiveContainer width="100%" height={250}><PieChart><Pie data={metrics.services} dataKey="revenue" nameKey="name" innerRadius={55} outerRadius={88} paddingAngle={2}>{metrics.services.map((entry,index) => <Cell key={entry.id} fill={chartColors[index % chartColors.length]} />)}</Pie><Tooltip formatter={(value) => toman(value)} /></PieChart></ResponsiveContainer><div className="service-performance-legend">{metrics.services.slice(0,5).map((item,index) => <div key={item.id}><i style={{ background: chartColors[index % chartColors.length] }} /><span>{item.name}<small>{new Intl.NumberFormat("fa-IR").format(item.paid_services)} سرویس پرداخت‌شده</small></span><b>{new Intl.NumberFormat("fa-IR").format(item.share)}٪</b></div>)}</div></> : <Empty title="سرویس پرداخت‌شده‌ای نیست" />}</section>
     </div>
-    <section className="admin-panel finance-employees"><div className="panel-title"><div><span>تفکیک عملکرد</span><h2>درآمد خدمات و کمیسیون کارکنان</h2></div></div><div className="finance-employee-grid">{metrics.employees?.map((item) => <article key={item.id}><b>{item.name}</b><span>{new Intl.NumberFormat("fa-IR").format(item.completed)} سرویس تکمیل‌شده</span><strong>{toman(item.revenue)}</strong><small>کمیسیون: {toman(item.commission)}</small></article>)}</div>{!metrics.employees?.length && <Empty />}</section>
+    <section className="admin-panel finance-employees"><div className="panel-title"><div><span>تفکیک عملکرد</span><h2>درآمد تأییدشده و کمیسیون کارکنان</h2></div></div><div className="finance-employee-grid">{metrics.employees?.map((item) => <button type="button" className="finance-employee-card" key={item.id} onClick={() => setSelectedEmployee(item)}>{item.profile_photo_url ? <img src={item.profile_photo_url} alt="" /> : <i>{item.name?.[0] || "م"}</i>}<span><b>{item.name}</b><small>{new Intl.NumberFormat("fa-IR").format(item.completed_services)} سرویس · {item.payments} پرداخت</small></span><strong>{toman(item.confirmed_revenue)}</strong><small>کمیسیون: {toman(item.commission)}</small></button>)}</div>{!metrics.employees?.length && <Empty />}</section>
     <section className="admin-panel finance-table-panel"><div className="panel-title"><div><span>پرداخت‌ها</span><h2>سوابق و گزارش‌های پرداخت</h2></div></div><div className="finance-table-filters"><input placeholder="جست‌وجوی مشتری، نوبت یا توضیح" value={search} onChange={(event) => setSearch(event.target.value)} /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">همه وضعیت‌ها</option>{Object.entries(paymentLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select><select value={methodFilter} onChange={(event) => setMethodFilter(event.target.value)}><option value="">همه روش‌ها</option>{Object.entries(methodLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></div>{payments.loading ? <Skeleton /> : payments.data.length ? <div className="finance-table-wrap"><table className="finance-table"><thead><tr><th>تاریخ</th><th>مشتری / نوبت</th><th>گزارش‌دهنده</th><th>مبلغ</th><th>روش</th><th>وضعیت</th><th></th></tr></thead><tbody>{payments.data.map((item) => <tr key={item.id} className={item.status}><td>{financeDate(item.created_at)}</td><td><b>{item.customer_name || "مشتری"}</b><small>نوبت #{item.appointment}</small></td><td>{item.reporter_name || "مدیریت"}</td><td>{toman(item.amount)}</td><td>{methodLabels[item.payment_method]}</td><td><span className={`finance-badge ${item.status}`}>{paymentLabels[item.status]}</span></td><td><button className="admin-ghost" onClick={() => setSelected(item)}>جزئیات</button></td></tr>)}</tbody></table></div> : <Empty />}</section>
     <div className="admin-grid-two"><section className="admin-panel"><div className="panel-title"><div><span>دفتر تغییرناپذیر</span><h2>آخرین تراکنش‌ها</h2></div></div><div className="finance-ledger">{transactions.data.slice(0,8).map((item) => <div key={item.id}><span className={`finance-badge ${item.type}`}>{transactionLabels[item.type] || item.type}</span><b>{toman(item.amount)}</b><small>{item.customer_name || item.description || `نوبت #${item.appointment}`}</small></div>)}</div></section><section className="admin-panel"><div className="panel-title"><div><span>کارکنان</span><h2>آخرین کمیسیون‌ها</h2></div></div><div className="finance-ledger">{commissions.data.slice(0,8).map((item) => <div key={item.id}><span>{item.employee_name}</span><b>{toman(item.commission_amount)}</b><small>{item.service_name} · {item.status}</small></div>)}</div></section></div>
     {selected && <div className="drawer-backdrop" onMouseDown={() => setSelected(null)}><aside className="admin-drawer finance-detail" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" onClick={() => setSelected(null)}>×</button><span className="admin-kicker">پرداخت #{selected.id}</span><h2>{toman(selected.amount)}</h2><div className="finance-detail-summary"><span className={`finance-badge ${selected.status}`}>{paymentLabels[selected.status]}</span><p>نوبت #{selected.appointment} · {selected.customer_name || "مشتری"}</p><p>روش: {methodLabels[selected.payment_method]} · گزارش‌دهنده: {selected.reporter_name || "مدیریت"}</p>{selected.reviewed_by_name && <p>بررسی‌کننده: {selected.reviewed_by_name}</p>}</div><section><h3>سرویس‌ها و متخصصان</h3>{selected.appointment_items?.map((item) => <div className="finance-detail-line" key={item.id}><b>{item.service}</b><span>{item.employee}</span></div>)}</section>{selected.notes && <section><h3>یادداشت</h3><p>{selected.notes}</p></section>}{selected.refunds?.length > 0 && <section><h3>بازپرداخت‌های ثبت‌شده</h3>{selected.refunds.map((item) => <div className="finance-detail-line" key={item.id}><b>{toman(item.amount)}</b><span>{item.reason || "بدون توضیح"}</span></div>)}</section>}{selected.status === "pending" && <div className="finance-review-actions"><button className="admin-success" disabled={busy} onClick={() => reviewPayment(selected,"confirm")}>تأیید گزارش</button><button className="admin-danger" disabled={busy} onClick={() => reviewPayment(selected,"reject")}>رد گزارش</button></div>}{["paid","refunded"].includes(selected.status) && selected.refundable_total > 0 && <form className="finance-refund-form" onSubmit={createRefund}><h3>ثبت بازپرداخت</h3><label>مبلغ<input required type="number" min="1" max={selected.refundable_total} value={refund.amount} onChange={(event) => setRefund({ ...refund, amount: event.target.value })} /></label><label>دلیل<textarea value={refund.reason} onChange={(event) => setRefund({ ...refund, reason: event.target.value })} /></label><button className="admin-danger" disabled={busy}>ثبت بازپرداخت</button></form>}</aside></div>}
     {manualOpen && <div className="modal-backdrop" onMouseDown={() => setManualOpen(false)}><form className="admin-modal" onSubmit={createPayment} onMouseDown={(event) => event.stopPropagation()}><button type="button" className="drawer-close" onClick={() => setManualOpen(false)}>×</button><span className="admin-kicker">ثبت توسط مدیریت</span><h2>پرداخت دستی</h2><label>نوبت<select required value={manual.appointment} onChange={(event) => setManual({ ...manual, appointment: event.target.value })}><option value="">انتخاب نوبت</option>{appointments.data.filter((item) => item.remaining_total > 0 && item.status !== "cancelled").map((item) => <option key={item.id} value={item.id}>#{item.id} · {item.customer_name} · مانده {toman(item.remaining_total)}</option>)}</select></label><label>مبلغ<input required min="1" type="number" value={manual.amount} onChange={(event) => setManual({ ...manual, amount: event.target.value })} /></label><label>روش<select value={manual.payment_method} onChange={(event) => setManual({ ...manual, payment_method: event.target.value })}>{Object.entries(methodLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>یادداشت<textarea value={manual.notes} onChange={(event) => setManual({ ...manual, notes: event.target.value })} /></label><button className="admin-primary" disabled={busy}>ثبت پرداخت</button></form></div>}
+    {selectedEmployee && <EmployeeFinanceModal employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} />}
   </div>;
 }
 function Content() {

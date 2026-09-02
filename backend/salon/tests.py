@@ -115,6 +115,85 @@ class FinalTouchesTests(TestCase):
         self.assertEqual(response.data["commission_total"], 200)
 
 
+class FinanceAnalyticsTests(TestCase):
+    def setUp(self):
+        category = ServiceCategory.objects.create(name="زیبایی")
+        nails = Service.objects.create(category=category, name="nails", persian_name="ناخن", price=600, duration=60)
+        makeup = Service.objects.create(category=category, name="makeup", persian_name="میکاپ", price=400, duration=60)
+        first_user = User.objects.create_user(username="finance-one", first_name="سارا", role="employee")
+        second_user = User.objects.create_user(username="finance-two", first_name="مینا", role="employee")
+        self.first = EmployeeProfile.objects.create(user=first_user, specialty="ناخن", commission_rate=10, is_active=True)
+        self.second = EmployeeProfile.objects.create(user=second_user, specialty="میکاپ", commission_rate=10, is_active=True)
+        customer_user = User.objects.create_user(username="finance-customer", first_name="مشتری")
+        customer = CustomerProfile.objects.create(user=customer_user)
+        self.appointment = Appointment.objects.create(customer=customer, status="confirmed")
+        self.first_item = AppointmentItem.objects.create(appointment=self.appointment, service=nails, employee=self.first, date=timezone.localdate(), start_time="10:00", end_time="11:00")
+        self.second_item = AppointmentItem.objects.create(appointment=self.appointment, service=makeup, employee=self.second, date=timezone.localdate(), start_time="11:00", end_time="12:00")
+        self.first_item.set_completion_status("completed", changed_by=first_user)
+        self.second_item.set_completion_status("completed", changed_by=second_user)
+        self.payment = Payment.objects.create(appointment=self.appointment, amount=500, status="paid", payment_method="card", paid_at=timezone.now(), created_by=first_user, updated_by=first_user)
+        Transaction.objects.create(type="payment", amount=500, appointment=self.appointment, payment=self.payment, created_by=first_user, updated_by=first_user)
+        refund = Refund.objects.create(payment=self.payment, amount=100, reason="اصلاح", created_by=first_user, updated_by=first_user)
+        refund.complete(changed_by=first_user)
+        Payment.objects.create(appointment=self.appointment, amount=100, status="pending", payment_method="cash", created_by=first_user, updated_by=first_user)
+        self.admin = User.objects.create_user(username="finance-owner", role="admin")
+        self.current = timezone.localdate().isoformat()
+
+    def test_admin_grouping_metrics_and_paid_service_shares(self):
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        expected_dates = {
+            "daily": timezone.localdate().isoformat(),
+            "weekly": (timezone.localdate() - timedelta(days=timezone.localdate().weekday())).isoformat(),
+            "monthly": timezone.localdate().replace(day=1).isoformat(),
+        }
+        for grouping in ("daily", "weekly", "monthly"):
+            response = client.get("/api/v1/admin/revenue/", {"period": "custom", "start_date": self.current, "end_date": self.current, "group_by": grouping})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data["series"][0]["revenue"], 400)
+            self.assertEqual(response.data["series"][0]["payments"], 1)
+            self.assertEqual(response.data["series"][0]["appointments"], 1)
+            self.assertEqual(response.data["series"][0]["commission"], 100)
+            self.assertEqual(response.data["series"][0]["average_payment"], 500)
+            self.assertEqual(response.data["series"][0]["date"], expected_dates[grouping])
+        self.assertEqual(response.data["services"][0]["name"], "ناخن")
+        self.assertEqual(response.data["services"][0]["revenue"], 300)
+        self.assertEqual(response.data["services"][0]["share"], 60.0)
+        self.assertEqual(client.get("/api/v1/admin/revenue/", {"period": "custom", "start_date": self.current, "end_date": self.current, "group_by": "yearly"}).status_code, 400)
+
+    def test_admin_employee_detail_uses_allocated_confirmed_money(self):
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        response = client.get(f"/api/v1/admin/employees/{self.first.pk}/finance/", {"period": "custom", "start_date": self.current, "end_date": self.current, "group_by": "daily"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["employee"]["name"], "سارا")
+        self.assertEqual(response.data["received"], 300)
+        self.assertEqual(response.data["refunded"], 60)
+        self.assertEqual(response.data["net_revenue"], 240)
+        self.assertEqual(response.data["commission_total"], 60)
+        self.assertEqual(response.data["pending_reports"], 60)
+        self.assertEqual(response.data["payments_count"], 1)
+        self.assertEqual(response.data["services"][0]["name"], "ناخن")
+        self.assertTrue(response.data["transactions"])
+        self.assertTrue(response.data["appointments"])
+        self.assertTrue(response.data["services_performed"])
+
+    def test_employee_report_is_self_only_and_admin_detail_is_forbidden(self):
+        client = APIClient()
+        client.force_authenticate(self.first.user)
+        response = client.get("/api/v1/employee/earnings/", {"period": "custom", "start_date": self.current, "end_date": self.current, "group_by": "weekly", "employee": self.second.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["employee"]["id"], self.first.pk)
+        self.assertEqual(response.data["received"], 300)
+        self.assertEqual(response.data["services"][0]["name"], "ناخن")
+        self.assertNotContains(response, "میکاپ")
+        self.assertEqual(client.get(f"/api/v1/admin/employees/{self.second.pk}/finance/", {"period": "day"}).status_code, 403)
+        customer = User.objects.create_user(username="finance-outsider", role="customer")
+        client.force_authenticate(customer)
+        self.assertEqual(client.get("/api/v1/employee/earnings/", {"period": "day"}).status_code, 403)
+        self.assertEqual(client.get("/api/v1/admin/revenue/", {"period": "day"}).status_code, 403)
+
+
 class AppointmentItemSchemaTests(TestCase):
     def setUp(self):
         self.customer = User.objects.create_user(username="customer")

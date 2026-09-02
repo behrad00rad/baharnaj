@@ -128,9 +128,28 @@ const { get, post, mockState } = vi.hoisted(() => ({
           outstanding: 0,
           service_revenue: 800,
           commission_total: 80,
-          series: [],
+          series: [{ date: "2026-09-01", revenue: 700, payments: 1, appointments: 1, commission: 80, average_payment: 800 }],
           methods: [],
-          employees: [],
+          services: [{ id: 3, name: "Cut", category: "Hair", revenue: 800, paid_services: 1, share: 100 }],
+          employees: [{ id: 2, name: "Stylist", specialty: "Hair", profile_photo_url: "", confirmed_revenue: 800, net_revenue: 700, refunds: 100, commission: 80, completed_services: 1, appointments: 1, payments: 1, pending_reports: 0, outstanding: 0, average_payment: 800 }],
+        },
+        "admin/employees/2/finance/": {
+          employee: { id: 2, name: "Stylist", specialty: "Hair", profile_photo_url: "" },
+          received: 800,
+          net_revenue: 700,
+          refunded: 100,
+          commission_total: 80,
+          completed_services: 1,
+          completed_appointments: 1,
+          payments_count: 1,
+          average_payment: 800,
+          pending_reports: 0,
+          outstanding: 0,
+          series: [{ date: "2026-09-01", revenue: 700, payments: 1, appointments: 1, commission: 80, services: 1 }],
+          payments: [{ id: 31, date: "2026-09-01T10:00:00Z", customer: "Customer", appointment: 20, services: ["Cut"], amount: 800, employee_amount: 800, method: "card", status: "paid", refunded: 100 }],
+          transactions: [{ id: 33, date: "2026-09-01T10:00:00Z", type: "payment", amount: 800, employee_amount: 800, customer: "Customer", appointment: 20, services: ["Cut"], payment_status: "paid" }],
+          appointments: [{ id: 20, date: "2026-09-01", customer: "Customer", services: ["Cut"], status: "completed", payment_status: "paid", total: 800, paid: 800, employee_outstanding: 0 }],
+          services_performed: [{ id: 21, date: "2026-09-01", customer: "Customer", appointment: 20, service: "Cut", amount: 800, status: "completed", appointment_status: "completed", payment_status: "paid", commission: 80 }],
         },
         "admin/activity/": [],
       }[normalizedEndpoint] || [];
@@ -383,5 +402,27 @@ describe("admin CRUD forms", () => {
     fireEvent.click(await screen.findByRole("button", { name: "جزئیات" }));
     expect(screen.getByText("بازپرداخت‌های ثبت‌شده")).toBeInTheDocument();
     expect(await screen.findAllByText("800 تومان")).not.toHaveLength(0);
+  });
+
+  it("switches finance grouping and metric and opens employee finance details", async () => {
+    render(
+      <MemoryRouter initialEntries={["/finance"]}>
+        <AdminRouter />
+      </MemoryRouter>,
+    );
+    await screen.findByText("سهم سرویس‌های پردرآمد");
+    fireEvent.click(screen.getAllByRole("button", { name: "هفتگی" })[0]);
+    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/admin\/revenue\/\?period=custom&group_by=weekly/)));
+    fireEvent.change(screen.getAllByLabelText("شاخص")[0], { target: { value: "payments" } });
+    expect(screen.getByRole("heading", { name: "تعداد پرداخت‌ها" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Stylist.*800 تومان/ }));
+    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/^admin\/employees\/2\/finance\//)));
+    expect(await screen.findByText("گزارش مالی متخصص")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "تراکنش‌ها" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "سرویس‌های انجام‌شده" })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "هفتگی" }).at(-1));
+    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/^admin\/employees\/2\/finance\/.*group_by=weekly$/)));
+    fireEvent.click(screen.getAllByRole("button", { name: "ماه قبل" }).at(-1));
+    await waitFor(() => expect(get.mock.calls.filter(([endpoint]) => endpoint.startsWith("admin/employees/2/finance/")).length).toBeGreaterThan(2));
   });
 });

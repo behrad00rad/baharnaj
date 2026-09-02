@@ -195,20 +195,29 @@ describe("employee app", () => {
     );
 
     await waitFor(() =>
-      expect(get).toHaveBeenCalledWith("employee/earnings/?period=day"),
+      expect(get).toHaveBeenCalledWith(
+        expect.stringMatching(/^employee\/earnings\/\?period=custom&start_date=.*&end_date=.*&group_by=daily$/),
+      ),
     );
+    const current = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(new Date());
+    fireEvent.click(screen.getByRole("button", { name: "امروز" }));
+    await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringContaining(`start_date=${current}&end_date=${current}`)));
     fireEvent.click(screen.getByRole("button", { name: "هفتگی" }));
     await waitFor(() =>
-      expect(get).toHaveBeenCalledWith("employee/earnings/?period=week"),
+      expect(get).toHaveBeenCalledWith(expect.stringMatching(/group_by=weekly$/)),
     );
     fireEvent.click(screen.getByRole("button", { name: "ماهانه" }));
     await waitFor(() =>
-      expect(get).toHaveBeenCalledWith("employee/earnings/?period=month"),
+      expect(get).toHaveBeenCalledWith(expect.stringMatching(/group_by=monthly$/)),
     );
+    fireEvent.change(screen.getByLabelText("شاخص"), { target: { value: "revenue" } });
+    expect(screen.getByRole("heading", { name: "درآمد ایجادشده" })).toBeInTheDocument();
   });
 
   it("submits notes with completed work and shows backend failures", async () => {
-    const current = new Date().toISOString().slice(0, 10);
+    const current = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Tehran",
+    }).format(new Date());
     get.mockImplementation((endpoint) => {
       if (endpoint === "employee/earnings/?period=day")
         return Promise.resolve({
