@@ -25,6 +25,7 @@ admin.site.register((GalleryAsset, GalleryCategory, Promotion, HomepageSection, 
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
-    list_display = ("persian_name", "name", "category", "price", "duration", "is_active", "is_bookable", "is_deleted")
+    list_display = ("persian_name", "name", "slug", "category", "price", "duration", "is_active", "is_bookable", "is_deleted")
     list_filter = ("category", "is_active", "is_bookable", "is_deleted")
-    search_fields = ("name", "persian_name", "description")
+    search_fields = ("name", "persian_name", "description", "slug", "seo_title")
+    fields = ("category", "name", "persian_name", "description", "slug", "seo_title", "seo_description", "price", "duration", "is_active", "is_bookable", "is_featured", "is_deleted")

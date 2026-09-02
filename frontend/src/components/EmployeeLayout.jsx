@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../shared/auth";
 import NotificationBell from "./NotificationBell";
+import { SEO } from "./SEO";
 import "./Employee.css";
 import "./EmployeeEnhancements.css";
 
@@ -22,6 +23,8 @@ export default function EmployeeLayout() {
       </div>
     );
   return (
+    <>
+    <SEO title="پنل متخصص | بهارناژ" description="پنل داخلی بهارناژ." noindex />
     <div className="employee-app" dir="rtl">
       <header className="employee-header">
         <div className="employee-brand">
@@ -49,5 +52,6 @@ export default function EmployeeLayout() {
         </NavLink>
       </nav>
     </div>
+    </>
   );
 }

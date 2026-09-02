@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../shared/api";
 import { setSession } from "../shared/auth";
+import { SEO } from "../components/SEO";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -25,6 +26,8 @@ export default function Login() {
     }
   };
   return (
+    <>
+    <SEO title="ورود کارکنان | بهارناژ" description="ورود به پنل داخلی بهارناژ." canonicalPath="/login" noindex />
     <section className="login-page container">
       <div>
         <p className="eyebrow">ورود به بهارناژ</p>
@@ -78,5 +81,6 @@ export default function Login() {
         </button>
       </form>
     </section>
+    </>
   );
 }

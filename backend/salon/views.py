@@ -86,7 +86,7 @@ class FirebaseDeviceViewSet(viewsets.ViewSet):
 
 class ServiceListView(generics.ListAPIView):
     permission_classes = (AllowAny,)
-    queryset = Service.objects.filter(is_active=True, is_bookable=True).select_related("category")
+    queryset = Service.objects.filter(is_active=True, is_bookable=True).select_related("category").prefetch_related("images", "employee_links__employee__user")
     serializer_class = ServiceSerializer
 
 

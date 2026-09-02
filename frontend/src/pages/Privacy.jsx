@@ -1,8 +1,10 @@
 import { PageIntro } from "../components/PublicLayout";
+import { SEO } from "../components/SEO";
 
 export default function Privacy() {
   return (
     <>
+      <SEO title="حریم خصوصی | بهارناژ" description="اطلاعات حریم خصوصی رزروهای سالن بهارناژ." canonicalPath="/privacy" />
       <PageIntro
         eyebrow="بهارناژ"
         title="حریم خصوصی"

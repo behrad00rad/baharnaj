@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../shared/auth";
 import { useTheme } from "../shared/theme";
+import { siteConfig } from "../shared/siteConfig";
 
 const publicLinks = [
   ["/", "خانه"],
@@ -130,6 +131,7 @@ export function PublicLayout({ children }) {
               <b>بهارناژ</b>
             </Link>
             <p>فضایی برای مراقبت، انتخاب و تجربه‌ای که با سبک تو هماهنگ است.</p>
+            <address className="footer-contact">{siteConfig.province}، {siteConfig.city}، {siteConfig.area}<br /><a href={`tel:${siteConfig.mobileInternational}`}>{siteConfig.mobile}</a> · هر روز ۹ تا ۲۱</address>
           </div>
           <nav aria-label="پیوندهای پایین صفحه">
             {publicLinks.slice(0, 5).map(([path, label]) => (
@@ -143,6 +145,7 @@ export function PublicLayout({ children }) {
             <Link className="button button-light" to="/book">
               رزرو آنلاین <span>←</span>
             </Link>
+            <a className="footer-instagram" href={siteConfig.instagram} target="_blank" rel="noopener noreferrer">Instagram بهارناژ ↗</a>
           </div>
         </div>
         <div className="container footer-bottom">

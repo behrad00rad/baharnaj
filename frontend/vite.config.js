@@ -11,6 +11,8 @@ export default defineConfig({
     proxy: {
       '/api': { target: proxyTarget, changeOrigin: true },
       '/media': { target: proxyTarget, changeOrigin: true },
+      '/robots.txt': { target: proxyTarget, changeOrigin: true },
+      '/sitemap.xml': { target: proxyTarget, changeOrigin: true },
     },
   },
 })

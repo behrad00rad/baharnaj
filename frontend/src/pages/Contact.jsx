@@ -1,9 +1,12 @@
 import { Link } from "react-router-dom";
 import { PageIntro } from "../components/PublicLayout";
+import { SEO } from "../components/SEO";
+import { siteConfig } from "../shared/siteConfig";
 
 export default function Contact() {
   return (
     <>
+      <SEO title="تماس با سالن بهارناژ در رشت | آدرس و ساعت کاری" description="اطلاعات تماس، آدرس و ساعت کاری سالن زیبایی بهارناژ در رشت، گیلان را ببینید یا نوبت خود را آنلاین رزرو کنید." canonicalPath="/contact" />
       <PageIntro
         eyebrow="CONTACT"
         title={
@@ -33,6 +36,15 @@ export default function Contact() {
             <Link to="/services">مشاهده سرویس‌ها ←</Link>
             <Link to="/team">آشنایی با تیم ←</Link>
           </div>
+        </div>
+        <div className="contact-business">
+          <span>اطلاعات سالن</span>
+          <h2>بهارناژ در رشت</h2>
+          <address>{siteConfig.province}، {siteConfig.city}، {siteConfig.area}</address>
+          <a href={`tel:${siteConfig.mobileInternational}`}>{siteConfig.mobile}</a>
+          <a href={`tel:${siteConfig.landlineInternational}`}>{siteConfig.landline}</a>
+          <p>هر روز ۰۹:۰۰ تا ۲۱:۰۰<br />ممکن است در تعطیلات سوگواری اسلامی تعطیل باشیم.</p>
+          <a href={siteConfig.instagram} target="_blank" rel="noopener noreferrer">Instagram بهارناژ ↗</a>
         </div>
       </section>
     </>

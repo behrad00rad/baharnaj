@@ -15,6 +15,39 @@ from rest_framework.test import APIClient
 from .models import Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, TimeOff, Transaction, User, WorkingSchedule
 
 
+@override_settings(SITE_URL="https://baharnaj.ir")
+class SeoEndpointTests(TestCase):
+    def setUp(self):
+        category = ServiceCategory.objects.create(name="Nails")
+        self.service = Service.objects.create(
+            category=category,
+            name="nail-extension",
+            persian_name="اکستنشن ناخن",
+            price=800,
+            duration=60,
+        )
+
+    def test_service_slug_is_stable_and_public_sitemap_uses_it(self):
+        original_slug = self.service.slug
+        self.service.persian_name = "اکستنشن ناخن ژل"
+        self.service.save()
+        self.service.refresh_from_db()
+        self.assertEqual(self.service.slug, original_slug)
+
+        sitemap = self.client.get("/sitemap.xml")
+        self.assertEqual(sitemap.status_code, 200)
+        self.assertEqual(sitemap["Content-Type"], "application/xml; charset=utf-8")
+        self.assertIn(f"https://baharnaj.ir/services/{original_slug}", sitemap.content.decode())
+
+    def test_robots_advertises_production_sitemap_and_excludes_private_areas(self):
+        response = self.client.get("/robots.txt")
+        content = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Sitemap: https://baharnaj.ir/sitemap.xml", content)
+        self.assertIn("Disallow: /admin/", content)
+        self.assertIn("Disallow: /employee/", content)
+
+
 class AppointmentItemSchemaTests(TestCase):
     def setUp(self):
         self.customer = User.objects.create_user(username="customer")

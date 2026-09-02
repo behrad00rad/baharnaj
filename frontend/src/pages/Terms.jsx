@@ -1,8 +1,10 @@
 import { PageIntro } from "../components/PublicLayout";
+import { SEO } from "../components/SEO";
 
 export default function Terms() {
   return (
     <>
+      <SEO title="قوانین استفاده | بهارناژ" description="قوانین استفاده و رزرو نوبت در سالن بهارناژ." canonicalPath="/terms" />
       <PageIntro
         eyebrow="بهارناژ"
         title="قوانین استفاده"

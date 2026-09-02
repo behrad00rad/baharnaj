@@ -27,7 +27,7 @@ export function ServiceCard({ service, index = 0 }) {
         </span>
       </div>
       <div className="service-card-actions">
-        <Link to={`/services/${service.id}`}>جزئیات</Link>
+        <Link to={`/services/${service.slug || service.id}`}>جزئیات</Link>
         <Link to={`/book?service=${service.id}`}>
           رزرو <span>←</span>
         </Link>

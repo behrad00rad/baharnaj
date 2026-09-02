@@ -16,6 +16,7 @@ import Team from "./pages/Team";
 import Contact from "./pages/Contact";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
+import NotFound from "./pages/NotFound";
 import "./App.css";
 import { api, applyRefreshSession } from "./shared/api";
 import { clearSessionState, markAuthReady, useAuth } from "./shared/auth";
@@ -55,7 +56,7 @@ export default function App() {
           }
         />
         <Route
-          path="/services/:id"
+          path="/services/:slug"
           element={
             <PublicLayout>
               <ServiceDetail />
@@ -136,7 +137,7 @@ export default function App() {
         <Route path="/admin/*" element={<AdminLayout />}>
           <Route path="*" element={<AdminRouter />} />
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<PublicLayout><NotFound /></PublicLayout>} />
       </Routes>
       </BrowserRouter>
     </ThemeProvider>

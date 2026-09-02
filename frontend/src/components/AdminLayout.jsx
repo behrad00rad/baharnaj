@@ -4,6 +4,7 @@ import { clearSession } from "../shared/api";
 import { useAuth } from "../shared/auth";
 import NotificationBell from "./NotificationBell";
 import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
+import { SEO } from "./SEO";
 import "./Admin.css";
 import "./AdminEnhancements.css";
 import "./AdminMobileNav.css";
@@ -41,6 +42,8 @@ export default function AdminLayout() {
       </div>
     );
   return (
+    <>
+    <SEO title="پنل مدیریت | بهارناژ" description="پنل داخلی بهارناژ." noindex />
     <div className="admin-app" dir="rtl">
       <aside
         className={`admin-sidebar ${menuOpen ? "admin-sidebar-open" : ""}`}
@@ -123,5 +126,6 @@ export default function AdminLayout() {
         <Outlet />
       </main>
     </div>
+    </>
   );
 }

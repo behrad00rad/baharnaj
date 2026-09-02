@@ -1,11 +1,17 @@
 import { PageIntro } from "../components/PublicLayout";
 import { EmployeeCard, PublicState } from "../components/PublicUI";
 import { usePublicList } from "../shared/hooks";
+import { SEO } from "../components/SEO";
 
 export default function Team() {
   const { items: employees, state } = usePublicList("employees/");
   return (
     <>
+      <SEO
+        title="تیم سالن بهارناژ در رشت | متخصصان زیبایی"
+        description="با متخصصان فعال سالن بهارناژ در رشت آشنا شوید و هنگام رزرو، متخصص سرویس خود را انتخاب کنید."
+        canonicalPath="/team"
+      />
       <PageIntro
         eyebrow="THE TEAM"
         title={

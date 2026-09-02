@@ -1384,6 +1384,11 @@ function CrudPage({
                         </span>
                       )}
                     </>
+                  ) : field.type === "textarea" ? (
+                    <textarea
+                      value={form[field.name] || ""}
+                      onChange={(event) => setForm({ ...form, [field.name]: event.target.value })}
+                    />
                   ) : (
                     <input
                       type={field.type || "text"}
@@ -2015,6 +2020,7 @@ function AdminRouter() {
             fields={[
               { name: "persian_name", label: "نام فارسی" },
               { name: "name", label: "نام داخلی" },
+              { name: "description", label: "توضیحات", type: "textarea" },
               {
                 name: "category",
                 label: "دسته‌بندی",
@@ -2023,6 +2029,9 @@ function AdminRouter() {
               },
               { name: "price", label: "قیمت", type: "number" },
               { name: "duration", label: "مدت (دقیقه)", type: "number" },
+              { name: "slug", label: "آدرس سرویس (slug)" },
+              { name: "seo_title", label: "عنوان سئو (اختیاری)" },
+              { name: "seo_description", label: "توضیحات سئو (اختیاری)", type: "textarea" },
             ]}
           />
         }

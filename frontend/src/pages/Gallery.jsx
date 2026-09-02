@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageIntro } from "../components/PublicLayout";
 import { MediaImage, PublicState } from "../components/PublicUI";
 import { api } from "../shared/api";
+import { SEO } from "../components/SEO";
 
 const unwrap = (data) => data?.results || data || [];
 
@@ -63,6 +64,12 @@ export default function Gallery() {
 
   return (
     <>
+      <SEO
+        title="گالری نمونه‌کارهای بهارناژ | سالن زیبایی رشت"
+        description="نمونه‌کارهای واقعی منتشرشده از سالن زیبایی بهارناژ در رشت را در گالری ببینید."
+        canonicalPath="/gallery"
+        image={items[0]?.image_url}
+      />
       <PageIntro
         eyebrow="SELECTED WORK"
         title={

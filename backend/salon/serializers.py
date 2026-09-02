@@ -47,6 +47,8 @@ def absolute_media_url(request, value):
 
 class ServiceSerializer(serializers.ModelSerializer):
     employees = serializers.SerializerMethodField()
+    images = serializers.SerializerMethodField()
+    category_name = serializers.CharField(source="category.name", read_only=True)
 
     class Meta:
         model = Service
@@ -54,8 +56,20 @@ class ServiceSerializer(serializers.ModelSerializer):
 
     def get_employees(self, obj):
         return [{"id": link.employee_id, "name": link.employee.user.get_full_name(), "specialty": link.employee.specialty}
-                for link in obj.employee_links.filter(is_active=True).select_related("employee__user")
+                for link in obj.employee_links.all()
+                if link.is_active
                 if link.employee.is_active and not link.employee.is_deleted]
+
+    def get_images(self, obj):
+        request = self.context.get("request")
+        return [
+            {
+                "id": image.id,
+                "image_url": absolute_media_url(request, image.image.url if image.image else image.image_url),
+                "display_order": image.display_order,
+            }
+            for image in sorted((item for item in obj.images.all() if item.is_active), key=lambda item: (item.display_order, item.id))
+        ]
 
 
 class GalleryAssetSerializer(serializers.ModelSerializer):

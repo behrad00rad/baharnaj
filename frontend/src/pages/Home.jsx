@@ -8,6 +8,8 @@ import {
   SectionHeader,
 } from "../components/PublicUI";
 import { usePublicList, useServices } from "../shared/hooks";
+import { SEO } from "../components/SEO";
+import { beautySalonSchema } from "../shared/siteConfig";
 
 export default function Home() {
   const { services, state: serviceState } = useServices();
@@ -18,11 +20,17 @@ export default function Home() {
 
   return (
     <>
+      <SEO
+        title="سالن زیبایی بهارناژ در رشت | Baharnaj"
+        description="سالن زیبایی بهارناژ در رشت؛ سرویس‌های Hair، Nail و Makeup را ببینید، متخصص مناسب را انتخاب کنید و نوبت خود را آنلاین رزرو کنید."
+        image={heroAsset?.image_url}
+        structuredData={beautySalonSchema()}
+      />
       <section className="hero container">
         <div className="hero-copy">
           <p className="eyebrow">BAHARNAJ BEAUTY STUDIO</p>
           <h1>
-            زیبایی را
+            سالن زیبایی بهارناژ در رشت؛ زیبایی را
             <br />
             <em>خودت تعریف کن.</em>
           </h1>

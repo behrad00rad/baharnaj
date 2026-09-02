@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+from django.utils.text import slugify
 from decimal import Decimal
 import uuid
 
@@ -157,6 +158,11 @@ class Service(models.Model):
     name = models.CharField(max_length=120)
     persian_name = models.CharField(max_length=120)
     description = models.TextField(blank=True)
+    # Generated once and kept stable so service URLs do not change when a display
+    # name is edited. Admins can deliberately set a clearer Latin slug if needed.
+    slug = models.SlugField(max_length=160, unique=True, blank=True)
+    seo_title = models.CharField(max_length=160, blank=True)
+    seo_description = models.TextField(blank=True)
     price = models.PositiveIntegerField()
     duration = models.PositiveIntegerField(help_text="Duration in minutes")
     is_active = models.BooleanField(default=True)
@@ -172,6 +178,17 @@ class Service(models.Model):
     def delete(self, using=None, keep_parents=False):
         self.is_deleted = True
         self.save(update_fields=("is_deleted",))
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base_slug = slugify(self.name, allow_unicode=False) or "service"
+            candidate = base_slug
+            suffix = 2
+            while Service.all_objects.exclude(pk=self.pk).filter(slug=candidate).exists():
+                candidate = f"{base_slug}-{suffix}"
+                suffix += 1
+            self.slug = candidate
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.persian_name

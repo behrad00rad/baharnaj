@@ -20,8 +20,11 @@ from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
 from salon.views import CookieRefreshView, CookieTokenView, CsrfView, PasswordResetConfirmView, PasswordResetRequestView
+from salon.seo import robots_txt, sitemap_xml
 
 urlpatterns = [
+    path("robots.txt", robots_txt, name="robots-txt"),
+    path("sitemap.xml", sitemap_xml, name="sitemap-xml"),
     path("admin/", admin.site.urls),
     path("api/v1/", include("salon.urls")),
     path("api/v1/auth/token/", CookieTokenView.as_view()),

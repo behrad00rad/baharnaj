@@ -1,9 +1,15 @@
 import { Link } from "react-router-dom";
 import { PageIntro } from "../components/PublicLayout";
+import { SEO } from "../components/SEO";
 
 export default function About() {
   return (
     <>
+      <SEO
+        title="درباره سالن بهارناژ در رشت | Baharnaj"
+        description="با بهارناژ، سالن زیبایی در رشت، و تجربه شفاف انتخاب سرویس، متخصص و زمان رزرو آشنا شوید."
+        canonicalPath="/about"
+      />
       <PageIntro
         eyebrow="ABOUT BAHARNAJ"
         title={
@@ -31,6 +37,7 @@ export default function About() {
             آنچه اینجا می‌بینی از اطلاعات واقعی سالن می‌آید؛ بدون وعده‌های
             ساختگی و بدون انتخاب‌های از پیش تعیین‌شده.
           </p>
+          <p>بهارناژ در فاز ۲ ضیابری رشت، گیلان قرار دارد و هر روز از ۹ تا ۲۱ پذیرای رزروهای ثبت‌شده است.</p>
           <Link className="button" to="/book">
             انتخاب و رزرو <span>←</span>
           </Link>

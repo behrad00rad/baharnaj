@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { DateModal } from "../components/DatePicker";
 import { api, toman } from "../shared/api";
 import { useServices } from "../shared/hooks";
+import { SEO } from "../components/SEO";
 const steps = ["سرویس‌ها", "متخصص", "زمان", "اطلاعات", "تأیید"];
 const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(
@@ -216,8 +217,10 @@ export default function Booking() {
     }
   };
   if (confirmation)
-    return <Confirmation appointment={confirmation} navigate={navigate} />;
+    return <><SEO title="رزرو ثبت شد | بهارناژ" description="رزرو شما در بهارناژ ثبت شد." canonicalPath="/book" noindex /><Confirmation appointment={confirmation} navigate={navigate} /></>;
   return (
+    <>
+    <SEO title="رزرو آنلاین سالن بهارناژ در رشت" description="سرویس، متخصص و زمان مناسب خود را در سالن زیبایی بهارناژ رشت به‌صورت آنلاین انتخاب و رزرو کنید." canonicalPath="/book" />
     <section className="booking-wizard container">
       <WizardHeader step={step} />
       <div className="wizard-layout">
@@ -329,6 +332,7 @@ export default function Booking() {
         </aside>
       </div>
     </section>
+    </>
   );
 }
 function ServiceStep({ services, servicesState, selected, toggle, onNext }) {

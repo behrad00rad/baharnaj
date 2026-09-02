@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PageIntro } from "../components/PublicLayout";
 import { ServiceGrid } from "../components/ServiceGrid";
 import { useServices } from "../shared/hooks";
+import { SEO } from "../components/SEO";
 
 export default function Services() {
   const { services, state } = useServices();
@@ -23,6 +24,11 @@ export default function Services() {
         );
   return (
     <>
+      <SEO
+        title="خدمات زیبایی در رشت | سالن بهارناژ"
+        description="فهرست واقعی خدمات سالن بهارناژ در رشت را با قیمت، مدت زمان و امکان رزرو آنلاین ببینید."
+        canonicalPath="/services"
+      />
       <PageIntro
         eyebrow="SERVICES"
         title={
@@ -32,7 +38,7 @@ export default function Services() {
             <em>سرویس‌ها.</em>
           </>
         }
-        text="سرویس مناسب را بر اساس زمان، قیمت و چیزی که برایت مهم است پیدا کن. از همین صفحه می‌توانی مستقیم وارد رزرو شوی."
+        text="سرویس مناسب را بر اساس زمان، قیمت و چیزی که برایت مهم است پیدا کن. منوی خدمات بهارناژ در رشت از همین‌جا به رزرو آنلاین وصل می‌شود."
         aside={
           <span className="page-index">
             ۰۱ — {new Intl.NumberFormat("fa-IR").format(services.length)} سرویس

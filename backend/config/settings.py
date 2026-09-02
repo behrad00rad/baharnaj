@@ -41,6 +41,9 @@ PUBLIC_BACKEND_URL = (
     os.getenv("PUBLIC_BACKEND_URL")
     or (f"https://{CODESPACE_BACKEND_HOST}" if CODESPACE_BACKEND_HOST else "")
 ).rstrip("/")
+# This is deliberately independent from API/media origins. It powers sitemap
+# URLs and should be the public frontend domain in every production deployment.
+SITE_URL = os.getenv("SITE_URL", "https://baharnaj.ir").rstrip("/")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
