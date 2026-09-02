@@ -1,0 +1,30 @@
+.admin-mobile-menu-button,.admin-menu-backdrop{display:none}
+.admin-topbar-heading{display:flex;align-items:center;gap:12px}
+
+@media(max-width:650px){
+  .admin-app{display:block}
+  .admin-main{width:100%}
+  .admin-topbar{position:sticky;top:0;z-index:18}
+  .admin-mobile-menu-button{display:grid;width:40px;height:40px;flex:none;place-content:center;gap:5px;border:1px solid var(--line);border-radius:5px;background:var(--white);cursor:pointer}
+  .admin-mobile-menu-button span{display:block;width:18px;height:2px;border-radius:2px;background:var(--ink);transition:transform .2s,opacity .2s}
+  .admin-mobile-menu-button[aria-expanded=true] span:first-child{transform:translateY(7px) rotate(45deg)}
+  .admin-mobile-menu-button[aria-expanded=true] span:nth-child(2){opacity:0}
+  .admin-mobile-menu-button[aria-expanded=true] span:last-child{transform:translateY(-7px) rotate(-45deg)}
+  .admin-menu-backdrop{position:fixed;inset:0;z-index:29;display:block;visibility:hidden;border:0;background:rgba(10,24,21,.56);opacity:0;pointer-events:none;transition:opacity .22s,visibility .22s}
+  .admin-menu-backdrop.visible{visibility:visible;opacity:1;pointer-events:auto}
+  .admin-sidebar{position:fixed;inset:0 0 0 auto;z-index:30;visibility:hidden;width:min(300px,86vw);min-height:100dvh;height:100dvh;padding:24px 18px;overflow-y:auto;transform:translateX(105%);box-shadow:-18px 0 45px rgba(10,24,21,.24);transition:transform .24s ease,visibility .24s}
+  .admin-sidebar.admin-sidebar-open{visibility:visible;transform:translateX(0)}
+  .admin-sidebar .admin-mark{justify-content:flex-start;padding:0 10px 28px}
+  .admin-sidebar .admin-mark>div{font-size:initial}
+  .admin-sidebar nav a{justify-content:flex-start;padding:12px 13px;font-size:13px}
+  .admin-sidebar nav a i{width:20px;font-size:18px}
+  .admin-sidebar-foot{grid-template-columns:1fr 1fr;gap:8px}
+  .admin-sidebar-foot a,.admin-sidebar-foot button{justify-content:center;min-height:44px;padding:10px;border:1px solid #2d4943;font-size:0}
+  .admin-sidebar-foot span{display:none}
+  .admin-sidebar-foot i{width:auto;font-size:20px}
+}
+
+@media(max-width:430px){
+  .admin-sidebar{width:min(290px,88vw);padding-inline:16px}
+  .admin-topbar-heading strong{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}

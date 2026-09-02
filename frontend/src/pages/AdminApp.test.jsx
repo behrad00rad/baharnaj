@@ -305,6 +305,35 @@ describe("admin CRUD forms", () => {
     );
   });
 
+  it("marks one seven-day mobile week and navigates it independently", async () => {
+    render(
+      <MemoryRouter initialEntries={["/appointments"]}>
+        <AdminRouter />
+      </MemoryRouter>,
+    );
+
+    const current = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Tehran",
+    }).format(new Date());
+    await screen.findByRole("button", { name: current });
+    const initialWeek = screen
+      .getAllByRole("button", { name: /^\d{4}-\d{2}-\d{2}$/ })
+      .filter((cell) => cell.classList.contains("current-week"));
+    expect(initialWeek).toHaveLength(7);
+
+    fireEvent.click(screen.getByRole("button", { name: "هفته بعد" }));
+    expect(screen.getByRole("button", { name: current })).not.toHaveClass(
+      "selected",
+    );
+    const nextWeek = screen
+      .getAllByRole("button", { name: /^\d{4}-\d{2}-\d{2}$/ })
+      .filter((cell) => cell.classList.contains("current-week"));
+    expect(nextWeek).toHaveLength(7);
+    expect(nextWeek.some((cell) => cell.classList.contains("selected"))).toBe(
+      true,
+    );
+  });
+
   it("uses real dashboard statistics and net payment revenue", async () => {
     render(
       <MemoryRouter initialEntries={["/"]}>

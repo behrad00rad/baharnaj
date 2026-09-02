@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearSession } from "../shared/api";
 import { useAuth } from "../shared/auth";
@@ -5,6 +6,7 @@ import NotificationBell from "./NotificationBell";
 import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
 import "./Admin.css";
 import "./AdminEnhancements.css";
+import "./AdminMobileNav.css";
 
 const links = [
   ["/", "نمای کلی", "⌂"],
@@ -19,6 +21,13 @@ const links = [
 export default function AdminLayout() {
   const navigate = useNavigate();
   const { role } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    document.body.style.overflow = menuOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [menuOpen]);
   const logout = async () => {
     await disableCurrentFirebaseDevice();
     clearSession();
@@ -33,7 +42,11 @@ export default function AdminLayout() {
     );
   return (
     <div className="admin-app" dir="rtl">
-      <aside className="admin-sidebar">
+      <aside
+        className={`admin-sidebar ${menuOpen ? "admin-sidebar-open" : ""}`}
+        id="admin-navigation"
+        aria-label="منوی مدیریت"
+      >
         <div className="admin-mark">
           <span>ب</span>
           <div>
@@ -43,29 +56,61 @@ export default function AdminLayout() {
         </div>
         <nav>
           {links.map(([path, label, icon]) => (
-            <NavLink end={path === "/"} key={path} to={`/admin${path}`}>
+            <NavLink
+              end={path === "/"}
+              key={path}
+              to={`/admin${path}`}
+              onClick={() => setMenuOpen(false)}
+            >
               <i>{icon}</i>
               {label}
             </NavLink>
           ))}
         </nav>
         <div className="admin-sidebar-foot">
-          <NavLink to="/">← وب‌سایت عمومی</NavLink>
-          <button onClick={logout}>خروج از حساب</button>
+          <NavLink to="/" aria-label="بازگشت به وب‌سایت" title="بازگشت به وب‌سایت">
+            <i aria-hidden="true">↗</i>
+            <span>وب‌سایت عمومی</span>
+          </NavLink>
+          <button onClick={logout} aria-label="خروج از حساب" title="خروج از حساب">
+            <i aria-hidden="true">↪</i>
+            <span>خروج از حساب</span>
+          </button>
         </div>
       </aside>
+      <button
+        className={`admin-menu-backdrop ${menuOpen ? "visible" : ""}`}
+        type="button"
+        aria-label="بستن منوی مدیریت"
+        tabIndex={menuOpen ? 0 : -1}
+        onClick={() => setMenuOpen(false)}
+      />
       <main className="admin-main">
         <header className="admin-topbar">
-          <div>
-            <span className="admin-kicker">پنل مدیریت</span>
-            <strong>
-              امروز،{" "}
-              {new Intl.DateTimeFormat("fa-IR", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              }).format(new Date())}
-            </strong>
+          <div className="admin-topbar-heading">
+            <button
+              className="admin-mobile-menu-button"
+              type="button"
+              aria-label={menuOpen ? "بستن منوی مدیریت" : "باز کردن منوی مدیریت"}
+              aria-expanded={menuOpen}
+              aria-controls="admin-navigation"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <span />
+              <span />
+              <span />
+            </button>
+            <div>
+              <span className="admin-kicker">پنل مدیریت</span>
+              <strong>
+                امروز،{" "}
+                {new Intl.DateTimeFormat("fa-IR", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                }).format(new Date())}
+              </strong>
+            </div>
           </div>
           <div className="admin-top-actions">
             <NotificationBell />

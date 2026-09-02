@@ -326,6 +326,13 @@ function Appointments() {
     setSelectedDate(today);
     setVisibleMonth(`${today.slice(0, 7)}-01`);
   };
+  const moveWeek = (direction) => {
+    const next = new Date(`${selectedDate}T12:00:00`);
+    next.setDate(next.getDate() + direction * 7);
+    const nextDate = localIsoDate(next);
+    setSelectedDate(nextDate);
+    setVisibleMonth(nextDate);
+  };
   return (
     <div className="admin-page">
       <Header
@@ -389,6 +396,8 @@ function Appointments() {
         error={resource.error}
         onPrevious={() => moveMonth(-1)}
         onNext={() => moveMonth(1)}
+        onPreviousWeek={() => moveWeek(-1)}
+        onNextWeek={() => moveWeek(1)}
         onToday={selectToday}
         onSelect={(date) => {
           setSelectedDate(date);
@@ -483,6 +492,8 @@ function AppointmentCalendar({
   onSelect,
   onPrevious,
   onNext,
+  onPreviousWeek,
+  onNextWeek,
   onToday,
 }) {
   const value = new Date(`${visibleMonth}T12:00:00`);
@@ -494,6 +505,14 @@ function AppointmentCalendar({
   const first = toGregorian(jalali.jy, jalali.jm, 1);
   const start = new Date(first.gy, first.gm - 1, first.gd);
   start.setDate(start.getDate() - start.getDay());
+  const selectedWeekStart = new Date(`${selectedDate}T12:00:00`);
+  selectedWeekStart.setDate(
+    selectedWeekStart.getDate() - selectedWeekStart.getDay(),
+  );
+  selectedWeekStart.setHours(0, 0, 0, 0);
+  const selectedWeekEnd = new Date(selectedWeekStart);
+  selectedWeekEnd.setDate(selectedWeekEnd.getDate() + 6);
+  selectedWeekEnd.setHours(23, 59, 59, 999);
   return (
     <section className="admin-panel appointment-calendar">
       <div className="panel-title">
@@ -504,7 +523,7 @@ function AppointmentCalendar({
             {new Intl.NumberFormat("fa-IR").format(jalali.jm)}
           </h2>
         </div>
-        <div className="calendar-month-actions">
+        <div className="calendar-month-actions calendar-desktop-actions">
           <button type="button" aria-label="ماه قبل" onClick={onPrevious}>
             ‹
           </button>
@@ -512,6 +531,17 @@ function AppointmentCalendar({
             امروز
           </button>
           <button type="button" aria-label="ماه بعد" onClick={onNext}>
+            ›
+          </button>
+        </div>
+        <div className="calendar-week-actions">
+          <button type="button" aria-label="هفته قبل" onClick={onPreviousWeek}>
+            ‹
+          </button>
+          <button type="button" onClick={onToday}>
+            این هفته
+          </button>
+          <button type="button" aria-label="هفته بعد" onClick={onNextWeek}>
             ›
           </button>
         </div>
@@ -549,6 +579,8 @@ function AppointmentCalendar({
                 }),
             );
             const services = Object.entries(serviceCounts);
+            const isSelectedWeek =
+              day >= selectedWeekStart && day <= selectedWeekEnd;
             return (
               <button
                 type="button"
@@ -557,6 +589,7 @@ function AppointmentCalendar({
                 className={[
                   iso === selectedDate && "selected",
                   iso === today && "today",
+                  isSelectedWeek && "current-week",
                   (local.jy !== jalali.jy || local.jm !== jalali.jm) && "muted",
                 ]
                   .filter(Boolean)
@@ -565,6 +598,11 @@ function AppointmentCalendar({
               >
                 <span className="calendar-day-number">
                   {new Intl.NumberFormat("fa-IR").format(local.jd)}
+                </span>
+                <span className="calendar-day-weekday">
+                  {new Intl.DateTimeFormat("fa-IR", { weekday: "long" }).format(
+                    day,
+                  )}
                 </span>
                 <span className="calendar-day-badges">
                   {services.slice(0, 2).map(([name, count]) => (
