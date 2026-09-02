@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { PageIntro, PublicLayout } from './components/PublicLayout'
+import { PublicLayout } from './components/PublicLayout'
 import Booking from './pages/Booking'
 import AdminLayout from './components/AdminLayout'
 import AdminRouter from './pages/AdminApp'
@@ -36,7 +36,7 @@ export default function App() {
     <Route path="/gallery" element={<PublicLayout><Gallery /></PublicLayout>} />
     <Route path="/book" element={<PublicLayout><Booking /></PublicLayout>} />
     <Route path="/login" element={<PublicLayout><Login /></PublicLayout>} />
-    <Route path="/booking-confirmation" element={<PublicLayout><PageIntro eyebrow="رزرو" title="رزرو شما تأیید شد." text="اطلاعات نوبت شما اینجا نمایش داده می‌شود." /></PublicLayout>} />
+    <Route path="/booking-confirmation" element={<Navigate to="/book" replace />} />
     <Route path="/about" element={<PublicLayout><About /></PublicLayout>} />
     <Route path="/team" element={<PublicLayout><Team /></PublicLayout>} />
     <Route path="/contact" element={<PublicLayout><Contact /></PublicLayout>} />

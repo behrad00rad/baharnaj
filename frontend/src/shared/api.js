@@ -42,10 +42,5 @@ api.interceptors.response.use((response) => response, async (error) => {
 export const clearSession = () => {
   clearSessionState()
 }
-export const fallbackServices = [
-  { id: 1, persian_name: 'رنگ و احیای مو', description: 'رنگی درخشان با مراقبت عمیق و شخصی‌سازی‌شده', price: 2500000, duration: 150 },
-  { id: 2, persian_name: 'کوتاهی و استایل', description: 'فرم‌دهی حرفه‌ای متناسب با چهره و سبک زندگی شما', price: 850000, duration: 60 },
-  { id: 3, persian_name: 'مانیکور لوکس', description: 'مراقبت کامل از دست‌ها با جزئیات ظریف', price: 650000, duration: 75 },
-]
 export const toman = (value) => `${new Intl.NumberFormat('fa-IR').format(value || 0)} تومان`
 export const getTokenRole = () => null

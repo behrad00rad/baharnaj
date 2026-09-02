@@ -1,23 +1,31 @@
 import { Link } from 'react-router-dom'
 import { ServiceGrid } from '../components/ServiceGrid'
-import { useServices } from '../shared/hooks'
-
-const gallery = [
-  ['https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=900&q=85', 'آیین آرامش'],
-  ['https://images.unsplash.com/photo-1516975080664-ed2fc6a32937?auto=format&fit=crop&w=700&q=85', 'جزئیات ظریف'],
-  ['https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=800&q=85', 'رنگ و درخشش'],
-]
+import { ArrowLink, EmployeeCard, MediaImage, PublicState, SectionHeader } from '../components/PublicUI'
+import { usePublicList, useServices } from '../shared/hooks'
 
 export default function Home() {
-  const { services } = useServices()
+  const { services, state: serviceState } = useServices()
+  const { items: gallery, state: galleryState } = usePublicList('gallery/')
+  const { items: employees, state: employeeState } = usePublicList('employees/')
+  const heroAsset = gallery[0]
+
   return <>
-    <section className="hero editorial-hero container"><div className="hero-copy"><p className="eyebrow">استودیو زیبایی بهارناژ · تهران</p><h1>زیبایی،<br /><em>به سبک تو.</em></h1><p className="lead">جایی برای مکث کردن، تازه شدن و دوباره عاشق خودت شدن.</p><Link className="button" to="/book">شروع تجربه <span>←</span></Link></div><div className="hero-art"><div className="image-frame"><img src={gallery[0][0]} alt="فضای آرام استودیو بهارناژ" fetchPriority="high" /></div><div className="round-note">آرامش<br />در هر لمس</div><div className="vertical-label">BEAUTY · CARE · RITUAL</div></div></section>
-    <section className="intro identity container"><p className="eyebrow">یک آیین کوچک برای خودت</p><h2>هر روز، کمی <em>بیشتر</em><br />خودت باش.</h2><p>ما باور داریم زیبایی از لحظه‌ای شروع می‌شود که برای خودت وقت می‌گذاری. در بهارناژ، هر خدمت با دقت، آرامش و عشق انجام می‌شود.</p></section>
-    <section className="home-band"><div className="container home-band-inner"><div><p className="eyebrow">انتخاب سردبیر</p><h2>خدماتی برای<br /><em>درخشش تو.</em></h2></div><Link to="/services">دیدن همه خدمات ←</Link></div><ServiceGrid services={services.slice(0, 3)} /></section>
-    <section className="specialists container"><div className="section-heading"><div><p className="eyebrow">دست‌های مطمئن</p><h2>متخصصان ما</h2></div><span>هر تجربه، با امضای یک هنرمند</span></div><div className="specialist-grid"><article><div className="specialist-image"><img src={gallery[1][0]} alt="متخصص بهارناژ" loading="lazy" /></div><h3>مریم احمدی</h3><p>رنگ و احیای مو</p></article><article><div className="specialist-image"><img src={gallery[2][0]} alt="متخصص بهارناژ" loading="lazy" /></div><h3>سارا رضایی</h3><p>کوتاهی و استایل</p></article><article><div className="specialist-image initials">ن</div><h3>نیلوفر کریمی</h3><p>مانیکور و مراقبت ناخن</p></article></div></section>
-    <section className="home-gallery container"><div className="section-heading"><div><p className="eyebrow">لحظه‌های بهارناژ</p><h2>در قاب ما</h2></div><Link to="/gallery">گالری کامل ←</Link></div><div className="home-gallery-grid">{gallery.map(([src, title]) => <Link to="/gallery" key={src}><img src={src} alt={title} loading="lazy" srcSet={`${src}&w=500 500w, ${src}&w=900 900w`} sizes="(max-width: 700px) 90vw, 33vw" /><span>{title}</span></Link>)}</div></section>
-    <section className="testimonial container"><p className="eyebrow">از زبان شما</p><blockquote>«بهارناژ فقط یک سالن نیست؛ چند ساعت آرامش است که با خودت به خانه می‌بری.»</blockquote><span>مریم · مشتری بهارناژ</span></section>
-    <section className="home-cta"><div className="container"><p className="eyebrow">آماده یک تغییر کوچک؟</p><h2>وقت خودت را<br /><em>رزرو کن.</em></h2><Link className="button" to="/book">رزرو نوبت <span>←</span></Link></div></section>
-    <section className="location container"><div><p className="eyebrow">منتظرت هستیم</p><h2>در قلب تهران</h2><p>خیابان ولیعصر، کوچه نهم<br />شنبه تا پنجشنبه · ۹ تا ۲۰</p></div><a className="location-link" href="https://maps.google.com/?q=Tehran" target="_blank" rel="noreferrer">باز کردن نقشه ↗</a></section>
+    <section className="hero container"><div className="hero-copy"><p className="eyebrow">BAHARNAJ BEAUTY STUDIO</p><h1>زیبایی را<br /><em>خودت تعریف کن.</em></h1><p className="lead">خدمت، متخصص و زمان مناسب را انتخاب کن؛ تجربه تو از همین‌جا شروع می‌شود.</p><div className="hero-actions"><Link className="button" to="/book">رزرو آنلاین <span>←</span></Link><ArrowLink to="/gallery">دیدن نمونه‌کارها</ArrowLink></div><div className="hero-index"><span>استودیو زیبایی بهارناژ</span><span>انتخاب آگاهانه · تجربه شخصی</span></div></div><div className="hero-visual"><div className="hero-image"><MediaImage src={heroAsset?.image_url} alt={heroAsset?.title || 'گالری بهارناژ'} eager /></div><span className="hero-stamp">BEAUTY<br />ON YOUR<br />TERMS</span><p>{heroAsset?.title || 'بهارناژ، به سبک تو'}</p></div></section>
+
+    <section className="manifesto container"><span className="manifesto-number">۰۱</span><p>بهارناژ جایی برای انتخاب‌های شخصی توست؛ بدون نسخه‌های تکراری، با تمرکز روی چیزی که واقعاً می‌خواهی.</p></section>
+
+    <section className="home-services section-dark"><div className="container"><SectionHeader eyebrow="SERVICES / 02" title="خدمت‌هایی برای حالِ تازه." text="قیمت، مدت و جزئیات هر خدمت شفاف است؛ انتخاب از تو، اجرای دقیق از ما." action={<ArrowLink to="/services">همه خدمات</ArrowLink>} /><ServiceGrid services={services.slice(0, 6)} state={serviceState} /></div></section>
+
+    <section className="home-work container"><SectionHeader eyebrow="SELECTED WORK / 03" title="کارهای منتخب" text="تصاویر واقعی ثبت‌شده در گالری بهارناژ." action={<ArrowLink to="/gallery">گالری کامل</ArrowLink>} />
+      {galleryState === 'ready' && gallery.length ? <div className="home-work-grid">{gallery.slice(0, 5).map((item, index) => <Link className={`work-item work-item-${index + 1}`} to="/gallery" key={item.id}><MediaImage src={item.image_url} alt={item.title || item.category || 'نمونه‌کار بهارناژ'} /><span><b>{item.title || item.category || 'بهارناژ'}</b>{item.category && <small>{item.category}</small>}</span></Link>)}</div> : <PublicState state={galleryState} empty="هنوز تصویری در گالری ثبت نشده است." error="گالری در حال حاضر در دسترس نیست؛ سایر بخش‌ها همچنان قابل استفاده‌اند." />}
+    </section>
+
+    <section className="brand-story"><div className="container brand-story-grid"><div><p className="eyebrow">WHY BAHARNAJ / 04</p><h2>یک تجربه،<br />نه فقط یک نوبت.</h2></div><div className="brand-principles"><article><span>۰۱</span><h3>انتخاب روشن</h3><p>خدمات، متخصص و زمان را قبل از ثبت نهایی می‌بینی و انتخاب می‌کنی.</p></article><article><span>۰۲</span><h3>هماهنگ با تو</h3><p>رزرو چند خدمت در یک مسیر ساده، با برنامه زمانی واقعی سالن.</p></article><article><span>۰۳</span><h3>جزئیات دقیق</h3><p>هر خدمت با زمان و قیمت ثبت‌شده خودش نمایش داده می‌شود.</p></article></div></div></section>
+
+    <section className="home-team container"><SectionHeader eyebrow="THE TEAM / 05" title="آدم‌های پشت تجربه" text="متخصصان فعال بهارناژ؛ همان‌هایی که هنگام رزرو انتخاب می‌کنی." action={<ArrowLink to="/team">دیدن تیم</ArrowLink>} />
+      {employeeState === 'ready' && employees.length ? <div className="employee-grid">{employees.slice(0, 3).map((employee) => <EmployeeCard employee={employee} key={employee.id} />)}</div> : <PublicState state={employeeState} empty="در حال حاضر متخصص فعالی برای نمایش ثبت نشده است." />}
+    </section>
+
+    <section className="booking-callout"><div className="container"><p className="eyebrow">YOUR NEXT LOOK</p><h2>برای تغییر بعدی<br /><em>آماده‌ای؟</em></h2><p>چند دقیقه تا انتخاب خدمت، متخصص و زمان مناسب فاصله داری.</p><Link className="button button-light" to="/book">شروع رزرو <span>←</span></Link></div></section>
   </>
 }
