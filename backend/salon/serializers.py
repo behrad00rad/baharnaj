@@ -12,10 +12,28 @@ from rest_framework import serializers
 from .models import (
     AccountLogin, AdminActionLog, Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile,
     EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, ServiceImage,
-    BookingHold, BookingHoldItem, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
+    BookingHold, BookingHoldItem, Notification, PushSubscription, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
 )
 from .validators import validate_no_employee_overlap
 from .security import validate_image_upload, validate_phone
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ("id", "type", "title", "message", "is_read", "created_at", "read_at", "target_url", "appointment", "payment")
+        read_only_fields = fields
+
+
+class PushSubscriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PushSubscription
+        fields = ("endpoint", "p256dh", "auth")
+
+    def validate_endpoint(self, value):
+        if not value.startswith("https://"):
+            raise serializers.ValidationError("نشانی اشتراک Push باید امن باشد.")
+        return value
 
 
 def absolute_media_url(request, value):

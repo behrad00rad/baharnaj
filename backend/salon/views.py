@@ -19,10 +19,55 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
+from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, GalleryAsset, GalleryCategory, Notification, Payment, PushSubscription, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, GalleryCategorySerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, PushSubscriptionSerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+
+
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = (IsAdmin | IsEmployee,)
+    serializer_class = NotificationSerializer
+
+    def get_queryset(self):
+        return Notification.objects.filter(recipient=self.request.user).select_related("appointment", "payment")
+
+    @action(detail=False, methods=("get",), url_path="unread-count")
+    def unread_count(self, request):
+        return Response({"count": self.get_queryset().filter(is_read=False).count()})
+
+    @action(detail=True, methods=("post",))
+    def read(self, request, pk=None):
+        notification = self.get_object()
+        if not notification.is_read:
+            notification.is_read = True
+            notification.read_at = timezone.now()
+            notification.save(update_fields=("is_read", "read_at"))
+        return Response(self.get_serializer(notification).data)
+
+    @action(detail=False, methods=("post",), url_path="read-all")
+    def read_all(self, request):
+        self.get_queryset().filter(is_read=False).update(is_read=True, read_at=timezone.now())
+        return Response({"count": 0})
+
+
+class PushSubscriptionViewSet(viewsets.ViewSet):
+    permission_classes = (IsAdmin | IsEmployee,)
+
+    def list(self, request):
+        return Response({"public_key": settings.WEB_PUSH_VAPID_PUBLIC_KEY, "configured": bool(settings.WEB_PUSH_VAPID_PUBLIC_KEY)})
+
+    def create(self, request):
+        serializer = PushSubscriptionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        subscription, _ = PushSubscription.objects.update_or_create(endpoint=data["endpoint"], defaults={"user": request.user, "p256dh": data["p256dh"], "auth": data["auth"], "is_active": True})
+        return Response(PushSubscriptionSerializer(subscription).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=("post",), url_path="disable")
+    def disable(self, request):
+        PushSubscription.objects.filter(user=request.user, endpoint=request.data.get("endpoint", "")).update(is_active=False)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ServiceListView(generics.ListAPIView):
@@ -160,6 +205,8 @@ class EmployeeSelfBookingView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         appointment = serializer.save()
+        from .notifications import notify_appointment_created
+        notify_appointment_created(appointment, actor=request.user)
         return Response(EmployeeAppointmentSerializer(appointment, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
@@ -294,7 +341,12 @@ class CustomerBookingView(generics.GenericAPIView):
             item.end_time = request.data.get("end_time", item.end_time)
             item.full_clean()
             item.save(update_fields=("date", "start_time", "end_time", "updated_at"))
-        appointment.set_status("cancelled", reason=request.data.get("reason", "لغو توسط مشتری")) if request.data.get("cancel") else None
+            from .notifications import notify_appointment_rescheduled
+            notify_appointment_rescheduled(appointment)
+        if request.data.get("cancel"):
+            appointment.set_status("cancelled", reason=request.data.get("reason", "لغو توسط مشتری"))
+            from .notifications import notify_appointment_cancelled
+            notify_appointment_cancelled(appointment)
         return Response(AppointmentSerializer(appointment, context={"request": request}).data)
 
 
@@ -400,6 +452,8 @@ class AdminAppointmentViewSet(AdminModelViewSet):
 
     def perform_create(self, serializer):
         appointment = serializer.save()
+        from .notifications import notify_appointment_created
+        notify_appointment_created(appointment, actor=self.request.user)
         AdminActionLog.objects.create(actor=self.request.user, action="create", model_name="Appointment", object_id=str(appointment.pk), details={"status": appointment.status})
 
     def perform_update(self, serializer):
@@ -410,6 +464,9 @@ class AdminAppointmentViewSet(AdminModelViewSet):
                 item.set_completion_status("completed", changed_by=self.request.user)
         else:
             appointment.set_status(status_value, changed_by=self.request.user)
+        if status_value == "cancelled":
+            from .notifications import notify_appointment_cancelled
+            notify_appointment_cancelled(appointment, actor=self.request.user)
         appointment.refresh_from_db()
         serializer.instance = appointment
         AdminActionLog.objects.create(actor=self.request.user, action="update", model_name="Appointment", object_id=str(appointment.pk), details={"fields": ["status"]})
@@ -418,6 +475,14 @@ class AdminAppointmentViewSet(AdminModelViewSet):
 class AppointmentItemViewSet(AdminModelViewSet):
     queryset = AppointmentItem.objects.select_related("appointment", "service", "employee__user")
     serializer_class = AppointmentItemSerializer
+
+    def perform_update(self, serializer):
+        item = self.get_object()
+        old_schedule = (item.date, item.start_time, item.end_time)
+        item = serializer.save(updated_by=self.request.user)
+        if old_schedule != (item.date, item.start_time, item.end_time):
+            from .notifications import notify_appointment_rescheduled
+            notify_appointment_rescheduled(item.appointment)
 
     @action(detail=True, methods=("post",))
     @transaction.atomic
@@ -435,6 +500,10 @@ class AppointmentItemViewSet(AdminModelViewSet):
             item.updated_by = request.user
             item.save(update_fields=("notes", "updated_by", "updated_at"))
         item.set_completion_status(status_map[requested_action], changed_by=request.user, reason=reason)
+        item.appointment.refresh_from_db()
+        if requested_action == "cancel" and item.appointment.status == "cancelled":
+            from .notifications import notify_appointment_cancelled
+            notify_appointment_cancelled(item.appointment, actor=request.user)
         return Response(AppointmentItemSerializer(item, context={"request": request}).data)
 
 
@@ -474,6 +543,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
             payment=payment,
             defaults={"type": "payment", "amount": payment.amount, "appointment": appointment, "description": payment.notes, "created_by": request.user, "updated_by": request.user},
         )
+        from .notifications import notify_payment_reviewed
+        notify_payment_reviewed(payment, confirmed=True)
         return Response(self.get_serializer(payment).data)
 
     @action(detail=True, methods=("post",))
@@ -487,6 +558,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
         payment.reviewed_at = timezone.now()
         payment.updated_by = request.user
         payment.save(update_fields=("status", "reviewed_by", "reviewed_at", "updated_by", "updated_at"))
+        from .notifications import notify_payment_reviewed
+        notify_payment_reviewed(payment, confirmed=False)
         return Response(self.get_serializer(payment).data)
 
 
@@ -740,6 +813,8 @@ class EmployeeAppointmentPaymentReportView(generics.GenericAPIView):
             created_by=request.user,
             updated_by=request.user,
         )
+        from .notifications import notify_payment_reported
+        notify_payment_reported(payment)
         return Response(self.get_serializer(payment).data, status=status.HTTP_201_CREATED)
 
 

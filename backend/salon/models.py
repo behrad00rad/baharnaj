@@ -46,6 +46,48 @@ class User(AbstractUser):
         super().save(*args, **kwargs)
 
 
+class Notification(models.Model):
+    TYPE_CHOICES = [
+        ("appointment_created", "Appointment created"),
+        ("appointment_assigned", "Appointment assigned"),
+        ("appointment_rescheduled", "Appointment rescheduled"),
+        ("appointment_cancelled", "Appointment cancelled"),
+        ("appointment_updated", "Appointment updated"),
+        ("payment_reported", "Payment reported"),
+        ("payment_confirmed", "Payment confirmed"),
+        ("payment_rejected", "Payment rejected"),
+    ]
+
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
+    type = models.CharField(max_length=40, choices=TYPE_CHOICES)
+    title = models.CharField(max_length=160)
+    message = models.TextField()
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    target_url = models.CharField(max_length=255, blank=True)
+    appointment = models.ForeignKey("Appointment", on_delete=models.SET_NULL, null=True, blank=True, related_name="notifications")
+    payment = models.ForeignKey("Payment", on_delete=models.SET_NULL, null=True, blank=True, related_name="notifications")
+    dedupe_key = models.CharField(max_length=255, unique=True, null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [models.Index(fields=("recipient", "is_read", "created_at"), name="notif_recipient_read_idx")]
+
+
+class PushSubscription(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="push_subscriptions")
+    endpoint = models.URLField(max_length=1000, unique=True)
+    p256dh = models.CharField(max_length=255)
+    auth = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-last_used_at",)
+
+
 class CustomerProfile(SoftDeleteModel):
     user = models.OneToOneField(User, on_delete=models.PROTECT, related_name="customer_profile")
     notes = models.TextField(blank=True)

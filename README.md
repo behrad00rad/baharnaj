@@ -19,8 +19,8 @@ python -m venv .venv
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 cp .env.example .env
-python manage.py migrate
-python manage.py runserver
+~~python manage.py migrate
+~~python manage.py runserver
 ```
 
 On Windows PowerShell, activate the environment with `.venv\Scripts\Activate.ps1`.
