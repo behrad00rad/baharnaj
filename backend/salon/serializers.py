@@ -12,7 +12,7 @@ from rest_framework import serializers
 from .models import (
     AccountLogin, AdminActionLog, Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile,
     EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, ServiceImage,
-    BookingHold, BookingHoldItem, Notification, PushSubscription, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
+    BookingHold, BookingHoldItem, FirebaseDevice, Notification, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
 )
 from .validators import validate_no_employee_overlap
 from .security import validate_image_upload, validate_phone
@@ -25,14 +25,15 @@ class NotificationSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class PushSubscriptionSerializer(serializers.ModelSerializer):
+class FirebaseDeviceSerializer(serializers.ModelSerializer):
     class Meta:
-        model = PushSubscription
-        fields = ("endpoint", "p256dh", "auth")
+        model = FirebaseDevice
+        fields = ("token", "device_label", "is_active", "last_seen_at")
+        read_only_fields = ("is_active", "last_seen_at")
 
-    def validate_endpoint(self, value):
-        if not value.startswith("https://"):
-            raise serializers.ValidationError("نشانی اشتراک Push باید امن باشد.")
+    def validate_token(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("شناسه دستگاه الزامی است.")
         return value
 
 

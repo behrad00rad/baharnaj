@@ -17,3 +17,5 @@ coverage/
 .mypy_cache/
 *.log
 .DS_Store
+backend/private_key.pem
+backend/public_key.pem

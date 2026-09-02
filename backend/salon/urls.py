@@ -6,7 +6,7 @@ from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminGalleryC
 										EmployeeAppointmentsView, EmployeeCustomerOptionsView, EmployeeListView, EmployeeSelfBookingView, EmployeeSelfServiceListView, EmployeeStatisticsView, GalleryCategoryListView,
 					ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
 					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
-					PaymentViewSet, PushSubscriptionViewSet, NotificationViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
+					PaymentViewSet, FirebaseDeviceViewSet, NotificationViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
 										EmployeeEarningsView, EmployeeAppointmentPaymentReportView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView)
 
 router = DefaultRouter()
@@ -22,7 +22,7 @@ router.register("admin/transactions", TransactionViewSet, basename="transaction"
 router.register("admin/payments", PaymentViewSet, basename="payment")
 router.register("admin/refunds", RefundViewSet, basename="refund")
 router.register("notifications", NotificationViewSet, basename="notification")
-router.register("push-subscriptions", PushSubscriptionViewSet, basename="push-subscription")
+router.register("firebase-devices", FirebaseDeviceViewSet, basename="firebase-device")
 router.register("admin/commissions", EmployeeCommissionViewSet, basename="commission")
 router.register("admin/service-images", ServiceImageViewSet, basename="service-image")
 router.register("admin/activity", AdminActionLogViewSet, basename="admin-activity")

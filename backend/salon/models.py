@@ -76,6 +76,7 @@ class Notification(models.Model):
 
 
 class PushSubscription(models.Model):
+    """Deprecated raw Web Push registrations retained until the FCM rollout is complete."""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="push_subscriptions")
     endpoint = models.URLField(max_length=1000, unique=True)
     p256dh = models.CharField(max_length=255)
@@ -86,6 +87,20 @@ class PushSubscription(models.Model):
 
     class Meta:
         ordering = ("-last_used_at",)
+
+
+class FirebaseDevice(models.Model):
+    """An FCM registration token for one browser/device (users may have many)."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="firebase_devices")
+    token = models.TextField(unique=True)
+    device_label = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ("-last_seen_at",)
 
 
 class CustomerProfile(SoftDeleteModel):

@@ -58,10 +58,18 @@ class NotificationTests(TestCase):
         self.assertTrue(Notification.objects.filter(recipient=self.admin, type="appointment_created").exists())
 
     def test_push_failure_never_removes_or_fails_in_app_notification(self):
-        with patch("salon.notifications._send_push", side_effect=RuntimeError("provider down")):
+        with patch("salon.notifications.send_fcm_notification", side_effect=RuntimeError("provider down")):
             with self.captureOnCommitCallbacks(execute=True):
                 notification = notify_users([self.employee_users[0]], type="appointment_updated", title="Saved", message="Still saved")[0]
         self.assertTrue(Notification.objects.filter(pk=notification.pk).exists())
+
+    def test_authenticated_user_can_send_test_notification(self):
+        client = APIClient()
+        client.force_authenticate(self.employee_users[0])
+        response = client.post("/api/v1/firebase-devices/test/")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["title"], "اعلان آزمایشی بهارناژ")
+        self.assertTrue(Notification.objects.filter(pk=response.data["id"], recipient=self.employee_users[0]).exists())
 
     def test_payment_report_and_review_notify_the_correct_roles(self):
         client = APIClient()

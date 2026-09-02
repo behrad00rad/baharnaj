@@ -19,10 +19,10 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, GalleryAsset, GalleryCategory, Notification, Payment, PushSubscription, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
+from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, PushSubscriptionSerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
@@ -51,23 +51,37 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         return Response({"count": 0})
 
 
-class PushSubscriptionViewSet(viewsets.ViewSet):
+class FirebaseDeviceViewSet(viewsets.ViewSet):
     permission_classes = (IsAdmin | IsEmployee,)
 
     def list(self, request):
-        return Response({"public_key": settings.WEB_PUSH_VAPID_PUBLIC_KEY, "configured": bool(settings.WEB_PUSH_VAPID_PUBLIC_KEY)})
+        configured = bool(settings.FIREBASE_PROJECT_ID and settings.FIREBASE_SERVICE_ACCOUNT_CONFIGURED)
+        return Response({"configured": configured})
 
     def create(self, request):
-        serializer = PushSubscriptionSerializer(data=request.data)
+        serializer = FirebaseDeviceSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        subscription, _ = PushSubscription.objects.update_or_create(endpoint=data["endpoint"], defaults={"user": request.user, "p256dh": data["p256dh"], "auth": data["auth"], "is_active": True})
-        return Response(PushSubscriptionSerializer(subscription).data, status=status.HTTP_201_CREATED)
+        device, _ = FirebaseDevice.objects.update_or_create(token=data["token"], defaults={"user": request.user, "device_label": data.get("device_label", ""), "is_active": True, "last_seen_at": timezone.now()})
+        return Response(FirebaseDeviceSerializer(device).data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=("post",), url_path="disable")
     def disable(self, request):
-        PushSubscription.objects.filter(user=request.user, endpoint=request.data.get("endpoint", "")).update(is_active=False)
+        FirebaseDevice.objects.filter(user=request.user, token=request.data.get("token", "")).update(is_active=False)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=("post",), url_path="test")
+    def test_notification(self, request):
+        from .notifications import notify_users
+        target_url = "/admin" if request.user.role == "admin" else "/employee"
+        notification = notify_users(
+            [request.user],
+            type="appointment_updated",
+            title="اعلان آزمایشی بهارناژ",
+            message="اگر این پیام را می‌بینید، سیستم اعلان به‌درستی کار می‌کند.",
+            target_url=target_url,
+        )[0]
+        return Response(NotificationSerializer(notification).data, status=status.HTTP_201_CREATED)
 
 
 class ServiceListView(generics.ListAPIView):

@@ -1,53 +1,24 @@
-import json
 import logging
 
-from django.conf import settings
 from django.db import transaction
-from django.utils import timezone
 
-from .models import Notification, PushSubscription, User
+from .firebase import send_fcm_notification
+from .models import Notification, User
 
 logger = logging.getLogger(__name__)
 
 
-def _send_push(notification_id):
-    notification = Notification.objects.filter(pk=notification_id).first()
-    if not notification or not all((settings.WEB_PUSH_VAPID_PRIVATE_KEY, settings.WEB_PUSH_VAPID_PUBLIC_KEY, settings.WEB_PUSH_CONTACT)):
-        return
-    try:
-        from pywebpush import WebPushException, webpush
-    except ImportError:
-        logger.warning("Web Push is configured but pywebpush is unavailable")
-        return
-    payload = json.dumps({"title": notification.title, "body": notification.message, "target_url": notification.target_url or "/"}, ensure_ascii=False)
-    for subscription in notification.recipient.push_subscriptions.filter(is_active=True):
-        try:
-            webpush(
-                subscription_info={"endpoint": subscription.endpoint, "keys": {"p256dh": subscription.p256dh, "auth": subscription.auth}},
-                data=payload,
-                vapid_private_key=settings.WEB_PUSH_VAPID_PRIVATE_KEY,
-                vapid_claims={"sub": settings.WEB_PUSH_CONTACT},
-                ttl=300,
-            )
-            PushSubscription.objects.filter(pk=subscription.pk).update(last_used_at=timezone.now())
-        except WebPushException as exc:
-            status_code = getattr(getattr(exc, "response", None), "status_code", None)
-            if status_code in {404, 410}:
-                PushSubscription.objects.filter(pk=subscription.pk).update(is_active=False)
-            logger.warning("Web Push delivery failed", extra={"notification_id": notification.pk, "status_code": status_code})
-        except Exception:
-            logger.exception("Unexpected Web Push delivery failure", extra={"notification_id": notification.pk})
-
-
 def _safe_send_push(notification_id):
     try:
-        _send_push(notification_id)
+        notification = Notification.objects.filter(pk=notification_id).first()
+        if notification:
+            send_fcm_notification(notification)
     except Exception:
-        logger.exception("Web Push dispatch failed", extra={"notification_id": notification_id})
+        logger.exception("FCM dispatch failed", extra={"notification_id": notification_id})
 
 
 def notify_users(recipients, *, type, title, message, target_url="", appointment=None, payment=None, dedupe_key=None):
-    """Persist one notification per recipient, then attempt optional push after commit."""
+    """Persist the authoritative notification, then dispatch FCM after commit."""
     notifications = []
     recipient_ids = {recipient.pk for recipient in recipients if recipient and recipient.pk}
     for recipient_id in recipient_ids:
