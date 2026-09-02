@@ -644,30 +644,6 @@ function ContactStep({
           }
         />
       </label>
-      <label className="check-label">
-        <input
-          type="checkbox"
-          checked={contact.account}
-          onChange={(event) =>
-            setContact({ ...contact, account: event.target.checked })
-          }
-        />{" "}
-        ساخت حساب کاربری برای مشاهده سوابق رزرو
-      </label>
-      {contact.account && (
-        <label>
-          رمز عبور حساب
-          <input
-            required
-            minLength="8"
-            type="password"
-            value={contact.password || ""}
-            onChange={(event) =>
-              setContact({ ...contact, password: event.target.value })
-            }
-          />
-        </label>
-      )}
       <div className="wizard-footer">
         <Back onClick={onBack} />
         <Next disabled={!hold}>بررسی اطلاعات</Next>
