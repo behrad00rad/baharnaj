@@ -6,7 +6,7 @@ export default function Terms() {
       <PageIntro
         eyebrow="بهارناژ"
         title="قوانین استفاده"
-        text="رزرو نوبت به معنی پذیرش قوانین خدمات و زمان‌بندی است."
+        text="رزرو نوبت به معنی پذیرش قوانین سرویس‌ها و زمان‌بندی است."
       />
       <section className="editorial container">
         <h2>قرار ما با شما.</h2>

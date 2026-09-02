@@ -1,0 +1,170 @@
+/*
+ * Baharnaj visual system
+ * Change colors here—not inside page/component styles. Every token describes
+ * its purpose so both themes can evolve without rewriting the UI.
+ */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Page, surfaces, typography and dividers */
+  --color-page-bg: #f4f1e9;
+  --color-surface: #fffdf8;
+  --color-surface-subtle: #ebe6da;
+  --color-surface-raised: #ffffff;
+  --color-text-primary: #171715;
+  --color-text-secondary: #716e66;
+  --color-text-tertiary: #89877f;
+  --color-border: #cbc6ba;
+  --color-border-strong: #9b978e;
+
+  /* Brand */
+  --color-brand-primary: #bf5b3d;
+  --color-brand-primary-hover: #9f452f;
+  --color-brand-accent: #c9ff4a;
+  --color-brand-accent-text: #171715;
+  --color-focus: #86b51e;
+
+  /* Navigation and footer */
+  --color-navbar-bg: #f4f1e9;
+  --color-navbar-text: #171715;
+  --color-mobile-nav-bg: #171715;
+  --color-mobile-nav-text: #f4f1e9;
+  --color-footer-bg: #171715;
+  --color-footer-text: #f4f1e9;
+  --color-footer-muted: #aaa79f;
+  --color-footer-border: #3d3d39;
+
+  /* Homepage sections */
+  --color-home-hero-bg: #f4f1e9;
+  --color-home-services-bg: #171715;
+  --color-home-services-text: #f4f1e9;
+  --color-home-services-muted: #aaa79f;
+  --color-home-services-border: #494844;
+  --color-home-services-hover: #22221f;
+  --color-home-gallery-bg: #f4f1e9;
+  --color-home-about-bg: #bf5b3d;
+  --color-home-about-text: #ffffff;
+  --color-home-about-muted: rgba(255, 255, 255, 0.76);
+  --color-home-about-border: rgba(255, 255, 255, 0.3);
+  --color-home-team-bg: #f4f1e9;
+  --color-home-cta-bg: #c9ff4a;
+  --color-home-cta-text: #171715;
+
+  /* Forms and buttons */
+  --color-field-bg: #fffdf8;
+  --color-field-text: #171715;
+  --color-field-placeholder: #89877f;
+  --color-field-border: #cbc6ba;
+  --color-field-disabled: #e7e3da;
+  --color-button-primary-bg: #1d6b62;
+  --color-button-primary-text: #ffffff;
+  --color-button-primary-hover: #15544d;
+  --color-button-secondary-bg: #dcece5;
+  --color-button-secondary-text: #1d6b62;
+  --color-button-ghost-text: #53635d;
+  --color-button-danger-bg: #a6524a;
+  --color-button-danger-text: #ffffff;
+  --color-button-success-bg: #28765f;
+  --color-button-success-text: #ffffff;
+
+  /* Feedback */
+  --color-success-bg: #e2f2e9;
+  --color-success-text: #23654f;
+  --color-warning-bg: #fff3dc;
+  --color-warning-text: #886739;
+  --color-error-bg: #fae9e6;
+  --color-error-text: #943d2b;
+  --color-info-bg: #e6f0ed;
+  --color-info-text: #32675c;
+  --color-on-image: #ffffff;
+  --color-lightbox-bg: rgba(10, 10, 9, 0.92);
+  --color-lightbox-surface: #111111;
+  --color-lightbox-muted: #aaaaaa;
+  --color-lightbox-border: #555555;
+
+  /* Media, overlays and depth */
+  --color-media-overlay: rgba(0, 0, 0, 0.7);
+  --color-modal-overlay: rgba(23, 23, 21, 0.66);
+  --shadow-raised: 0 18px 50px rgba(33, 26, 24, 0.11);
+  --shadow-modal: 0 30px 90px rgba(0, 0, 0, 0.25);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-page-bg: #121311;
+  --color-surface: #1a1c19;
+  --color-surface-subtle: #242620;
+  --color-surface-raised: #20221e;
+  --color-text-primary: #f1eee6;
+  --color-text-secondary: #b8b5ac;
+  --color-text-tertiary: #918e86;
+  --color-border: #3b3d36;
+  --color-border-strong: #5c5f55;
+
+  --color-brand-primary: #e27c5e;
+  --color-brand-primary-hover: #f19072;
+  --color-brand-accent: #d3ff64;
+  --color-brand-accent-text: #121311;
+  --color-focus: #d3ff64;
+
+  --color-navbar-bg: #121311;
+  --color-navbar-text: #f1eee6;
+  --color-mobile-nav-bg: #0d0e0c;
+  --color-mobile-nav-text: #f1eee6;
+  --color-footer-bg: #0d0e0c;
+  --color-footer-text: #f1eee6;
+  --color-footer-muted: #aaa9a1;
+  --color-footer-border: #34362f;
+
+  --color-home-hero-bg: #121311;
+  --color-home-services-bg: #080908;
+  --color-home-services-text: #f1eee6;
+  --color-home-services-muted: #aaa9a1;
+  --color-home-services-border: #35372f;
+  --color-home-services-hover: #171915;
+  --color-home-gallery-bg: #121311;
+  --color-home-about-bg: #713625;
+  --color-home-about-text: #fff8f2;
+  --color-home-about-muted: rgba(255, 248, 242, 0.76);
+  --color-home-about-border: rgba(255, 248, 242, 0.3);
+  --color-home-team-bg: #191b17;
+  --color-home-cta-bg: #a8d83b;
+  --color-home-cta-text: #0e100d;
+
+  --color-field-bg: #1a1c19;
+  --color-field-text: #f1eee6;
+  --color-field-placeholder: #918e86;
+  --color-field-border: #4a4c43;
+  --color-field-disabled: #292b26;
+  --color-button-primary-bg: #3b8b7e;
+  --color-button-primary-text: #ffffff;
+  --color-button-primary-hover: #4aa294;
+  --color-button-secondary-bg: #223a35;
+  --color-button-secondary-text: #a8dbcf;
+  --color-button-ghost-text: #c4c8c1;
+  --color-button-danger-bg: #b75d55;
+  --color-button-danger-text: #ffffff;
+  --color-button-success-bg: #38846d;
+  --color-button-success-text: #ffffff;
+
+  --color-success-bg: #18382d;
+  --color-success-text: #94d7bd;
+  --color-warning-bg: #44351d;
+  --color-warning-text: #efd092;
+  --color-error-bg: #442522;
+  --color-error-text: #f0aaa2;
+  --color-info-bg: #203631;
+  --color-info-text: #a2d4c8;
+  --color-on-image: #ffffff;
+  --color-lightbox-bg: rgba(0, 0, 0, 0.94);
+  --color-lightbox-surface: #080908;
+  --color-lightbox-muted: #b6b5ae;
+  --color-lightbox-border: #565850;
+
+  --color-media-overlay: rgba(0, 0, 0, 0.74);
+  --color-modal-overlay: rgba(0, 0, 0, 0.78);
+  --shadow-raised: 0 18px 50px rgba(0, 0, 0, 0.28);
+  --shadow-modal: 0 30px 90px rgba(0, 0, 0, 0.5);
+}

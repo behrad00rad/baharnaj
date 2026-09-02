@@ -4,12 +4,13 @@ import { useAuth } from "../shared/auth";
 import NotificationBell from "./NotificationBell";
 import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
 import "./Admin.css";
+import "./AdminEnhancements.css";
 
 const links = [
   ["/", "نمای کلی", "⌂"],
   ["/appointments", "نوبت‌ها", "◷"],
   ["/employees", "کارمندان", "♙"],
-  ["/services", "خدمات", "✦"],
+  ["/services", "سرویس‌ها", "✦"],
   ["/customers", "مشتریان", "◌"],
   ["/finance", "مالی", "₺"],
   ["/content", "محتوا", "▧"],

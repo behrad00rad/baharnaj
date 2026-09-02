@@ -46,7 +46,7 @@ export function ServiceGrid({
       <PublicState
         state={state}
         empty={empty}
-        error="دریافت فهرست خدمات ممکن نیست. لطفاً دوباره تلاش کنید."
+        error="دریافت فهرست سرویس‌ها ممکن نیست. لطفاً دوباره تلاش کنید."
       />
     );
   return (

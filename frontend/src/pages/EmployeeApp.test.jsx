@@ -3,19 +3,24 @@ import { describe, expect, it, vi } from "vitest";
 import EmployeeApp from "./EmployeeApp";
 import { MemoryRouter } from "react-router-dom";
 
-const { get, post, patch } = vi.hoisted(() => ({
+const { get, post, patch, clearSession, disableCurrentFirebaseDevice, navigate } = vi.hoisted(() => ({
   get: vi.fn(() => Promise.resolve({ data: [] })),
   post: vi.fn(() => Promise.resolve({ data: {} })),
   patch: vi.fn(() => Promise.resolve({ data: {} })),
+  clearSession: vi.fn(),
+  disableCurrentFirebaseDevice: vi.fn(() => Promise.resolve()),
+  navigate: vi.fn(),
 }));
 vi.mock("../shared/api", () => ({
   api: { get, post, patch },
+  clearSession,
   toman: (value) => `${value} تومان`,
 }));
+vi.mock("../shared/firebasePush", () => ({ disableCurrentFirebaseDevice }));
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
-  return { ...actual, useNavigate: () => vi.fn() };
+  return { ...actual, useNavigate: () => navigate };
 });
 
 describe("employee app", () => {
@@ -117,7 +122,7 @@ describe("employee app", () => {
     expect(screen.queryByText("ساعات کاری من")).not.toBeInTheDocument();
     expect(screen.queryByText("تخصص")).not.toBeInTheDocument();
     expect(screen.queryByText("ثبت مرخصی")).not.toBeInTheDocument();
-    expect(screen.queryByText("خدمات قابل ارائه")).not.toBeInTheDocument();
+    expect(screen.queryByText("سرویس‌های قابل ارائه")).not.toBeInTheDocument();
   });
 
   it("uploads the selected profile photo as multipart form data", async () => {
@@ -139,6 +144,19 @@ describe("employee app", () => {
       ),
     );
     expect(patch.mock.calls.at(-1)[1].get("profile_photo")).toBe(photo);
+  });
+
+  it("keeps logout in the profile danger area", async () => {
+    render(
+      <MemoryRouter initialEntries={["/profile"]}>
+        <EmployeeApp />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "خروج از حساب" }));
+    await waitFor(() => expect(disableCurrentFirebaseDevice).toHaveBeenCalled());
+    expect(clearSession).toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith("/login", { replace: true });
   });
 
   it("submits the employee password change form", async () => {

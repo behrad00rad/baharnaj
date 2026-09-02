@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, Route, Routes, useNavigate } from "react-router-dom";
-import { api, toman } from "../shared/api";
+import { api, clearSession, toman } from "../shared/api";
 import { JalaliDatePicker } from "../components/DatePicker";
+import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
 
 const unwrap = (data) => data?.results || data || [];
 const statusNames = {
@@ -299,7 +300,7 @@ function NewAppointment() {
           </>
         )}
         <fieldset className="employee-service-list">
-          <legend>خدمات من</legend>
+          <legend>سرویس‌های من</legend>
           {services.loading ? (
             <Skeleton />
           ) : (
@@ -341,7 +342,7 @@ function NewAppointment() {
               ))}
             </div>
             {!slots.length && (
-              <small>زمان آزادی برای این ترکیب خدمات وجود ندارد.</small>
+              <small>زمان آزادی برای این ترکیب سرویس‌ها وجود ندارد.</small>
             )}
           </>
         ) : null}
@@ -956,7 +957,7 @@ function AppointmentDetail({ item, close, onSaved }) {
         </div>
       )}
       <div className="employee-card">
-        <h2>یادداشت خدمات</h2>
+        <h2>یادداشت سرویس‌ها</h2>
         <textarea
           className="employee-note"
           placeholder="یادداشت‌ها و محصولات مصرف‌شده را ثبت کنید..."
@@ -1013,11 +1014,11 @@ function Earnings() {
         ))}
       </div>
       <section className="employee-card next-card">
-        <span className="employee-kicker">خدمات تکمیل‌شده</span>
+        <span className="employee-kicker">سرویس‌های تکمیل‌شده</span>
         <strong className="next-time">
           {resource.data.completed_services || 0}
         </strong>
-        <p>فقط خدماتی که تکمیل و ثبت شده‌اند</p>
+        <p>فقط سرویس‌هایی که تکمیل و ثبت شده‌اند</p>
         <span className="employee-kicker">کمیسیون من</span>
         <strong className="next-time">
           {toman(resource.data.employee_commission)}
@@ -1163,6 +1164,7 @@ function WeeklyScheduleEditor() {
   );
 }
 function Profile() {
+  const navigate = useNavigate();
   const profile = useData("employee/profile/");
   const [form, setForm] = useState({});
   const [message, setMessage] = useState("");
@@ -1174,6 +1176,11 @@ function Profile() {
   });
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
+  const logout = async () => {
+    await disableCurrentFirebaseDevice();
+    clearSession();
+    navigate("/login", { replace: true });
+  };
   const save = async (event) => {
     event.preventDefault();
     if (saving) return;
@@ -1216,7 +1223,24 @@ function Profile() {
   return (
     <div className="employee-page">
       <Heading kicker="حساب کاربری" title="پروفایل و دسترسی" />
-      <section className="employee-card">
+      <section className="employee-card employee-profile-card">
+        <div className="employee-profile-identity">
+          <div className="employee-profile-photo">
+            {profile.data.profile_photo_url || profile.data.profile_photo ? (
+              <img
+                src={profile.data.profile_photo_url || profile.data.profile_photo}
+                alt={`تصویر پروفایل ${profile.data.name || "متخصص"}`}
+              />
+            ) : (
+              <span aria-hidden="true">{(profile.data.name || "ب")[0]}</span>
+            )}
+          </div>
+          <div>
+            <span className="employee-kicker">متخصص بهارناژ</span>
+            <h2>{profile.data.name || "پروفایل من"}</h2>
+            <p>{profile.data.bio || "معرفی کوتاه خود را تکمیل کنید."}</p>
+          </div>
+        </div>
         <form className="employee-form" onSubmit={save}>
           <label>
             نام نمایشی
@@ -1231,7 +1255,7 @@ function Profile() {
               }
             />
           </label>
-          <label>
+          <label className="employee-file-field">
             تصویر پروفایل
             <input
               type="file"
@@ -1305,6 +1329,15 @@ function Profile() {
       <Link className="employee-action" to="/employee/availability">
         مدیریت برنامه کاری
       </Link>
+      <section className="employee-card employee-danger-zone">
+        <div>
+          <h2>خروج از پنل</h2>
+          <p>برای ورود دوباره باید نام کاربری و رمز عبور خود را وارد کنید.</p>
+        </div>
+        <button className="employee-danger" type="button" onClick={logout}>
+          خروج از حساب
+        </button>
+      </section>
     </div>
   );
 }

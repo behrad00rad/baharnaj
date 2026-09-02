@@ -1,9 +1,8 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { clearSession } from "../shared/api";
 import { useAuth } from "../shared/auth";
 import NotificationBell from "./NotificationBell";
-import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
 import "./Employee.css";
+import "./EmployeeEnhancements.css";
 
 const links = [
   ["/", "امروز", "⌂"],
@@ -22,11 +21,6 @@ export default function EmployeeLayout() {
         <button onClick={() => navigate("/login")}>بازگشت به ورود</button>
       </div>
     );
-  const logout = async () => {
-    await disableCurrentFirebaseDevice();
-    clearSession();
-    navigate("/login", { replace: true });
-  };
   return (
     <div className="employee-app" dir="rtl">
       <header className="employee-header">
@@ -37,9 +31,6 @@ export default function EmployeeLayout() {
             <small>روز کاری من</small>
           </div>
         </div>
-        <button type="button" onClick={() => navigate("/")}>
-          بازگشت به سایت
-        </button>
         <NotificationBell />
       </header>
       <main>
@@ -52,10 +43,10 @@ export default function EmployeeLayout() {
             <span>{label}</span>
           </NavLink>
         ))}
-        <button onClick={logout}>
-          <i>↪</i>
-          <span>خروج</span>
-        </button>
+        <NavLink className="employee-site-link" to="/">
+          <i>↙</i>
+          <span>بازگشت به سایت</span>
+        </NavLink>
       </nav>
     </div>
   );

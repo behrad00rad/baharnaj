@@ -6,7 +6,7 @@ export default function Privacy() {
       <PageIntro
         eyebrow="بهارناژ"
         title="حریم خصوصی"
-        text="اطلاعات شما فقط برای هماهنگی خدمات استفاده می‌شود."
+        text="اطلاعات شما فقط برای هماهنگی سرویس‌ها استفاده می‌شود."
       />
       <section className="editorial container">
         <h2>اعتماد شما برای ما مهم است.</h2>

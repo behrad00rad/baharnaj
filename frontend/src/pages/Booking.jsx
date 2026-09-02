@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { DateModal } from "../components/DatePicker";
 import { api, toman } from "../shared/api";
 import { useServices } from "../shared/hooks";
-const steps = ["خدمات", "متخصص", "زمان", "اطلاعات", "تأیید"];
+const steps = ["سرویس‌ها", "متخصص", "زمان", "اطلاعات", "تأیید"];
 const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(
     new Date(),
@@ -549,7 +549,7 @@ function BookingSummary({
   return (
     <div className="booking-summary">
       <div>
-        <small>خدمات و متخصصان</small>
+        <small>سرویس‌ها و متخصصان</small>
         {chosenServices.map((service) => (
           <span key={service.id}>
             <b>{service.persian_name || service.name}</b>

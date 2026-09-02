@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../shared/auth";
+import { useTheme } from "../shared/theme";
 
 const publicLinks = [
   ["/", "خانه"],
-  ["/services", "خدمات"],
+  ["/services", "سرویس‌ها"],
   ["/gallery", "گالری"],
   ["/team", "تیم"],
   ["/about", "درباره ما"],
@@ -15,6 +16,7 @@ export function PublicLayout({ children }) {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const { accessToken, role } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const panelPath =
     role === "employee" ? "/employee" : role === "admin" ? "/admin" : null;
   const panelLabel =
@@ -47,6 +49,15 @@ export function PublicLayout({ children }) {
             ))}
           </div>
           <div className="nav-actions">
+            <button
+              className="theme-toggle"
+              type="button"
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? "فعال‌کردن حالت روشن" : "فعال‌کردن حالت تاریک"}
+              title={theme === "dark" ? "حالت روشن" : "حالت تاریک"}
+            >
+              <span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
+            </button>
             {accessToken && panelPath ? (
               <Link className="panel-link" to={panelPath}>
                 {panelLabel}
@@ -91,6 +102,10 @@ export function PublicLayout({ children }) {
             </Link>
           ))}
           <div className="mobile-nav-actions">
+            <button className="mobile-theme-toggle" type="button" onClick={toggleTheme}>
+              <span aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
+              {theme === "dark" ? "حالت روشن" : "حالت تاریک"}
+            </button>
             {accessToken && panelPath ? (
               <Link to={panelPath} onClick={closeMenu}>
                 {panelLabel}

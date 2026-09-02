@@ -19,6 +19,7 @@ import Terms from "./pages/Terms";
 import "./App.css";
 import { api, applyRefreshSession } from "./shared/api";
 import { clearSessionState, markAuthReady, useAuth } from "./shared/auth";
+import { ThemeProvider } from "./shared/theme";
 
 let authBootstrapPromise;
 
@@ -34,7 +35,8 @@ export default function App() {
   }, []);
   if (!ready) return null;
   return (
-    <BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
       <Routes>
         <Route
           path="/"
@@ -136,6 +138,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }

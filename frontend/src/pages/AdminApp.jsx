@@ -205,13 +205,13 @@ function DashboardHome() {
           <div className="panel-title">
             <div>
               <span>عملکرد</span>
-              <h2>محبوب‌ترین خدمات</h2>
+              <h2>محبوب‌ترین سرویس‌ها</h2>
             </div>
           </div>
           {stats.loading ? (
             <Skeleton count={5} />
           ) : stats.error ? (
-            <Empty title="دریافت آمار خدمات انجام نشد" />
+            <Empty title="دریافت آمار سرویس‌ها انجام نشد" />
           ) : stats.data.top_services?.length ? (
             <div className="rank-list">
               {stats.data.top_services.map((service, index) => (
@@ -757,7 +757,7 @@ function AdminAppointmentForm({ close, onCreated }) {
           </label>
         )}
         <fieldset className="admin-service-picker">
-          <legend>خدمات و متخصصان</legend>
+          <legend>سرویس‌ها و متخصصان</legend>
           {selections.map((selection, index) => (
             <div className="appointment-line" key={index}>
               <label>
@@ -940,7 +940,7 @@ function AppointmentDrawer({ item, close, onSaved }) {
           {item.customer?.phone || item.customer_phone || "شماره ثبت نشده"}
         </p>
         <div className="drawer-section">
-          <h3>خدمات رزرو</h3>
+          <h3>سرویس‌های رزرو</h3>
           {item.items?.length ? (
             item.items.map((line) => (
               <div className="drawer-item" key={line.id}>
@@ -1714,7 +1714,7 @@ function EmployeeManagement() {
               )}
             </label>
             <fieldset className="admin-service-picker">
-              <legend>خدمات قابل ارائه</legend>
+              <legend>سرویس‌های قابل ارائه</legend>
               {services.data
                 .filter((service) => service.is_active && service.is_bookable)
                 .map((service) => (
@@ -1972,7 +1972,7 @@ function AdminRouter() {
           <CrudPage
             type="سرویس"
             endpoint="admin/services/"
-            title="مدیریت خدمات"
+            title="مدیریت سرویس‌ها"
             eyebrow="کاتالوگ"
             fields={[
               { name: "persian_name", label: "نام فارسی" },
