@@ -1,50 +1,127 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import Booking from './Booking'
-import { MemoryRouter } from 'react-router-dom'
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import Booking from "./Booking";
+import { MemoryRouter } from "react-router-dom";
 
 const { get, post } = vi.hoisted(() => ({
-  get: vi.fn((url) => Promise.resolve({ data: url.startsWith('employees/') ? [{ id: 7, name: 'متخصص' }] : { slots: ['10:00'] } })),
-  post: vi.fn((url) => Promise.resolve({ data: url === 'appointments/' ? { confirmation_code: 'ABC', items: [] } : { token: 'hold', expires_at: 'later' } })),
-}))
-vi.mock('../shared/hooks', () => ({ useServices: () => ({ services: [{ id: 1, name: 'Cut', persian_name: 'کوتاهی', price: 800, duration: 60, category_name: 'مو' }, { id: 2, name: 'Color', persian_name: 'رنگ', price: 1200, duration: 60, category_name: 'مو' }] }) }))
-vi.mock('../components/DatePicker', () => ({ DateModal: ({ onChange }) => <button type="button" onClick={() => onChange('2026-08-31')}>انتخاب تاریخ آزمایشی</button> }))
-vi.mock('../shared/api', () => ({ api: { get, post, delete: vi.fn(() => Promise.resolve()) }, toman: (value) => `${value} تومان` }))
+  get: vi.fn((url) =>
+    Promise.resolve({
+      data: url.startsWith("employees/")
+        ? [{ id: 7, name: "متخصص" }]
+        : { slots: ["10:00"] },
+    }),
+  ),
+  post: vi.fn((url) =>
+    Promise.resolve({
+      data:
+        url === "appointments/"
+          ? { confirmation_code: "ABC", items: [] }
+          : { token: "hold", expires_at: "later" },
+    }),
+  ),
+}));
+vi.mock("../shared/hooks", () => ({
+  useServices: () => ({
+    services: [
+      {
+        id: 1,
+        name: "Cut",
+        persian_name: "کوتاهی",
+        price: 800,
+        duration: 60,
+        category_name: "مو",
+      },
+      {
+        id: 2,
+        name: "Color",
+        persian_name: "رنگ",
+        price: 1200,
+        duration: 60,
+        category_name: "مو",
+      },
+    ],
+  }),
+}));
+vi.mock("../components/DatePicker", () => ({
+  DateModal: ({ onChange }) => (
+    <button type="button" onClick={() => onChange("2026-08-31")}>
+      انتخاب تاریخ آزمایشی
+    </button>
+  ),
+}));
+vi.mock("../shared/api", () => ({
+  api: { get, post, delete: vi.fn(() => Promise.resolve()) },
+  toman: (value) => `${value} تومان`,
+}));
 
-describe('booking wizard', () => {
-  beforeEach(() => { window.history.pushState({}, '', '/book') })
+describe("booking wizard", () => {
+  beforeEach(() => {
+    window.history.pushState({}, "", "/book");
+  });
 
-  it('moves from service selection to employee selection and validates selection', async () => {
-    render(<MemoryRouter><Booking /></MemoryRouter>)
-    expect(screen.getByText('خدمتت را انتخاب کن.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /کوتاهی/ })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /کوتاهی/ }))
-    fireEvent.click(screen.getByRole('button', { name: /انتخاب متخصص/ }))
-    expect(screen.getByText('متخصصت را انتخاب کن.')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByText('متخصص فعالی برای این خدمت پیدا نشد.')).toBeInTheDocument())
-  })
+  it("moves from service selection to employee selection and validates selection", async () => {
+    render(
+      <MemoryRouter>
+        <Booking />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("سرویس‌ت را انتخاب کن.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /کوتاهی/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /کوتاهی/ }));
+    fireEvent.click(screen.getByRole("button", { name: /انتخاب متخصص/ }));
+    expect(screen.getByText("متخصصت را انتخاب کن.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.getByText("متخصص فعالی برای این سرویس پیدا نشد."),
+      ).toBeInTheDocument(),
+    );
+  });
 
-  it('submits every selected service as sequential held booking items', async () => {
-    render(<MemoryRouter><Booking /></MemoryRouter>)
-    fireEvent.click(screen.getByRole('button', { name: /کوتاهی/ }))
-    fireEvent.click(screen.getByRole('button', { name: /رنگ/ }))
-    fireEvent.click(screen.getByRole('button', { name: /انتخاب متخصص/ }))
-    await screen.findAllByRole('button', { name: /متخصص/ })
-    fireEvent.click(screen.getAllByRole('button', { name: /متخصص/ })[0])
-    fireEvent.click(screen.getAllByRole('button', { name: /متخصص/ })[1])
-    fireEvent.click(screen.getByRole('button', { name: /انتخاب تاریخ و ساعت/ }))
-    fireEvent.click(screen.getByRole('button', { name: 'تاریخ نوبت' }))
-    fireEvent.click(screen.getByRole('button', { name: /انتخاب تاریخ آزمایشی/ }))
-    await screen.findByRole('button', { name: '10:00' })
-    fireEvent.click(screen.getByRole('button', { name: '10:00' }))
-    fireEvent.click(screen.getByRole('button', { name: /ادامه/ }))
-    await waitFor(() => expect(post).toHaveBeenCalledWith('booking-holds/', { items: expect.any(Array) }))
-    const heldItems = post.mock.calls[0][1].items
-    expect(heldItems).toMatchObject([{ service: 1, start_time: '10:00', end_time: '11:00' }, { service: 2, start_time: '11:00', end_time: '12:00' }])
-    fireEvent.change(screen.getByLabelText('نام و نام خانوادگی'), { target: { value: 'بهار' } })
-    fireEvent.change(screen.getByLabelText('شماره موبایل'), { target: { value: '09121234567' } })
-    fireEvent.click(screen.getByRole('button', { name: /بررسی اطلاعات/ }))
-    fireEvent.click(screen.getByRole('button', { name: /ثبت نهایی رزرو/ }))
-    await waitFor(() => expect(post).toHaveBeenCalledWith('appointments/', expect.objectContaining({ items: heldItems })))
-  })
-})
+  it("submits every selected service as sequential held booking items", async () => {
+    render(
+      <MemoryRouter>
+        <Booking />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /کوتاهی/ }));
+    fireEvent.click(screen.getByRole("button", { name: /رنگ/ }));
+    fireEvent.click(screen.getByRole("button", { name: /انتخاب متخصص/ }));
+    await screen.findAllByRole("button", { name: /متخصص/ });
+    fireEvent.click(screen.getAllByRole("button", { name: /متخصص/ })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /متخصص/ })[1]);
+    fireEvent.click(
+      screen.getByRole("button", { name: /انتخاب تاریخ و ساعت/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "تاریخ نوبت" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /انتخاب تاریخ آزمایشی/ }),
+    );
+    await screen.findByRole("button", { name: "10:00" });
+    fireEvent.click(screen.getByRole("button", { name: "10:00" }));
+    fireEvent.click(screen.getByRole("button", { name: /ادامه/ }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith("booking-holds/", {
+        items: expect.any(Array),
+      }),
+    );
+    const heldItems = post.mock.calls[0][1].items;
+    expect(heldItems).toMatchObject([
+      { service: 1, start_time: "10:00", end_time: "11:00" },
+      { service: 2, start_time: "11:00", end_time: "12:00" },
+    ]);
+    fireEvent.change(screen.getByLabelText("نام و نام خانوادگی"), {
+      target: { value: "بهار" },
+    });
+    fireEvent.change(screen.getByLabelText("شماره موبایل"), {
+      target: { value: "09121234567" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /بررسی اطلاعات/ }));
+    fireEvent.click(screen.getByRole("button", { name: /ثبت نهایی رزرو/ }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        "appointments/",
+        expect.objectContaining({ items: heldItems }),
+      ),
+    );
+  });
+});
