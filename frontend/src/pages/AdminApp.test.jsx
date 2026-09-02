@@ -3,8 +3,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import AdminRouter from "./AdminApp";
 
-const { get, post } = vi.hoisted(() => ({
+const { get, post, mockState } = vi.hoisted(() => ({
+  mockState: { pendingPayment: false },
   get: vi.fn((endpoint) => {
+    if (mockState.pendingPayment && endpoint.startsWith("admin/payments/?"))
+      return Promise.resolve({
+        data: [
+          {
+            id: 31,
+            appointment: 20,
+            amount: 800,
+            payment_method: "cash",
+            status: "pending",
+            customer_name: "Customer",
+            reporter_name: "Stylist",
+            created_by: 2,
+          },
+        ],
+      });
     const current = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Tehran",
     }).format(new Date());
@@ -29,6 +45,7 @@ const { get, post } = vi.hoisted(() => ({
           },
         ],
       });
+    const normalizedEndpoint = endpoint.split("?")[0];
     const data =
       {
         "admin/employees/": [],
@@ -63,6 +80,15 @@ const { get, post } = vi.hoisted(() => ({
             amount: 800,
             payment_method: "card",
             status: "paid",
+            refundable_total: 700,
+            refunds: [
+              {
+                id: 32,
+                amount: 100,
+                reason: "اصلاح مبلغ",
+                status: "completed",
+              },
+            ],
           },
         ],
         "admin/refunds/": [
@@ -94,8 +120,20 @@ const { get, post } = vi.hoisted(() => ({
             status: "pending",
           },
         ],
+        "admin/revenue/": {
+          received: 800,
+          refunded: 100,
+          net_revenue: 700,
+          pending_reports: 0,
+          outstanding: 0,
+          service_revenue: 800,
+          commission_total: 80,
+          series: [],
+          methods: [],
+          employees: [],
+        },
         "admin/activity/": [],
-      }[endpoint] || [];
+      }[normalizedEndpoint] || [];
     return Promise.resolve({ data });
   }),
   post: vi.fn((endpoint) =>
@@ -112,7 +150,10 @@ vi.mock("../shared/api", () => ({
 }));
 
 describe("admin CRUD forms", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockState.pendingPayment = false;
+  });
 
   it("loads eligible users for existing employee creation", async () => {
     render(
@@ -133,31 +174,15 @@ describe("admin CRUD forms", () => {
   });
 
   it("allows an admin to confirm a pending employee payment report", async () => {
-    get
-      .mockResolvedValueOnce({
-        data: [
-          {
-            id: 31,
-            appointment: 20,
-            amount: 800,
-            payment_method: "cash",
-            status: "pending",
-            customer_name: "Customer",
-            reporter_name: "Stylist",
-            created_by: 2,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({ data: [] })
-      .mockResolvedValueOnce({ data: [] })
-      .mockResolvedValueOnce({ data: [] });
+    mockState.pendingPayment = true;
     render(
       <MemoryRouter initialEntries={["/finance"]}>
         <AdminRouter />
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "تأیید" }));
+    fireEvent.click(await screen.findByRole("button", { name: "جزئیات" }));
+    fireEvent.click(screen.getByRole("button", { name: "تأیید گزارش" }));
 
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith("admin/payments/31/confirm/"),
@@ -345,7 +370,7 @@ describe("admin CRUD forms", () => {
     expect(screen.getByText("پرداخت منهای بازپرداخت")).toBeInTheDocument();
   });
 
-  it("shows immutable payment, refund, transaction, and commission history", async () => {
+  it("shows immutable payment and commission history with refunds inside payment details", async () => {
     render(
       <MemoryRouter initialEntries={["/finance"]}>
         <AdminRouter />
@@ -353,9 +378,10 @@ describe("admin CRUD forms", () => {
     );
 
     expect(await screen.findByText("پرداخت‌ها")).toBeInTheDocument();
-    expect(screen.getByText("بازپرداخت‌ها")).toBeInTheDocument();
-    expect(screen.getByText("تراکنش‌های تغییرناپذیر")).toBeInTheDocument();
-    expect(screen.getByText("کمیسیون متخصصان")).toBeInTheDocument();
+    expect(screen.getByText("آخرین تراکنش‌ها")).toBeInTheDocument();
+    expect(screen.getByText("آخرین کمیسیون‌ها")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "جزئیات" }));
+    expect(screen.getByText("بازپرداخت‌های ثبت‌شده")).toBeInTheDocument();
     expect(await screen.findAllByText("800 تومان")).not.toHaveLength(0);
   });
 });

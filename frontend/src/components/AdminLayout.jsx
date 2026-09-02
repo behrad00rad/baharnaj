@@ -5,6 +5,7 @@ import { useAuth } from "../shared/auth";
 import NotificationBell from "./NotificationBell";
 import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
 import { SEO } from "./SEO";
+import { useTheme } from "../shared/theme";
 import "./Admin.css";
 import "./AdminEnhancements.css";
 import "./AdminMobileNav.css";
@@ -22,6 +23,7 @@ const links = [
 export default function AdminLayout() {
   const navigate = useNavigate();
   const { role } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
@@ -116,6 +118,7 @@ export default function AdminLayout() {
             </div>
           </div>
           <div className="admin-top-actions">
+            <button className="panel-theme-toggle" type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "فعال‌کردن حالت روشن" : "فعال‌کردن حالت تاریک"} title={theme === "dark" ? "حالت روشن" : "حالت تاریک"}>{theme === "dark" ? "☀" : "☾"}</button>
             <NotificationBell />
             <div className="admin-user">
               <span>مدیر</span>

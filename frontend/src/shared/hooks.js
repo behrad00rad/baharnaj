@@ -26,3 +26,23 @@ export function useServices() {
   }, [])
   return { services, state }
 }
+
+export function useService(slug) {
+  const [service, setService] = useState(null)
+  const [state, setState] = useState('loading')
+  useEffect(() => {
+    let active = true
+    setState('loading')
+    api.get(`services/${encodeURIComponent(slug)}/`).then(({ data }) => {
+      if (!active) return
+      setService(data)
+      setState('ready')
+    }).catch((error) => {
+      if (!active) return
+      setService(null)
+      setState(error.response?.status === 404 ? 'not-found' : 'error')
+    })
+    return () => { active = false }
+  }, [slug])
+  return { service, state }
+}

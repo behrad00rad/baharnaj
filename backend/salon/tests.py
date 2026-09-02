@@ -12,7 +12,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from .models import Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, TimeOff, Transaction, User, WorkingSchedule
+from .models import Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WorkingSchedule
 
 
 @override_settings(SITE_URL="https://baharnaj.ir")
@@ -46,6 +46,73 @@ class SeoEndpointTests(TestCase):
         self.assertIn("Sitemap: https://baharnaj.ir/sitemap.xml", content)
         self.assertIn("Disallow: /admin/", content)
         self.assertIn("Disallow: /employee/", content)
+
+
+class FinalTouchesTests(TestCase):
+    def setUp(self):
+        self.category = ServiceCategory.objects.create(name="Nail")
+        self.service = Service.objects.create(category=self.category, name="manicure", persian_name="مانیکور", short_description="معرفی واقعی سرویس", description="متن کامل سرویس", price=1000, duration=60)
+        employee_user = User.objects.create_user(username="specialist", first_name="سارا", role="employee")
+        self.employee = EmployeeProfile.objects.create(user=employee_user, specialty="ناخن", bio="معرفی عمومی متخصص", commission_rate=20, is_active=True)
+        EmployeeService.objects.create(employee=self.employee, service=self.service)
+        customer_user = User.objects.create_user(username="customer-final", first_name="مشتری")
+        customer = CustomerProfile.objects.create(user=customer_user)
+        self.appointment = Appointment.objects.create(customer=customer, status="confirmed")
+        self.item = AppointmentItem.objects.create(appointment=self.appointment, service=self.service, employee=self.employee, date=timezone.localdate(), start_time="10:00", end_time="11:00")
+
+    def test_service_article_and_public_bio_come_from_backend(self):
+        ServiceImage.objects.create(service=self.service, image_url="https://cdn.example.test/manicure.jpg", alt_text="نمونه مانیکور", is_active=True)
+        detail = self.client.get(f"/api/v1/services/{self.service.slug}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.data["short_description"], "معرفی واقعی سرویس")
+        self.assertEqual(detail.data["images"][0]["alt_text"], "نمونه مانیکور")
+        employees = self.client.get("/api/v1/employees/")
+        self.assertEqual(employees.data[0]["bio"], "معرفی عمومی متخصص")
+        self.assertEqual(employees.data[0]["services"][0]["slug"], self.service.slug)
+
+    def test_pending_reports_reduce_partial_reportable_balance(self):
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+        endpoint = f"/api/v1/employee/appointments/{self.appointment.pk}/payments/"
+        first = client.post(endpoint, {"amount": 400, "payment_method": "cash"}, format="json")
+        self.assertEqual(first.status_code, 201)
+        summary = client.get(endpoint)
+        self.assertEqual(summary.data["pending_total"], 400)
+        self.assertEqual(summary.data["reportable_total"], 600)
+        self.assertEqual(client.post(endpoint, {"amount": 700, "payment_method": "cash"}, format="json").status_code, 400)
+        self.assertEqual(client.post(endpoint, {"amount": 600, "payment_method": "card"}, format="json").status_code, 201)
+        self.assertEqual(client.post(endpoint, {"amount": 1, "payment_method": "cash"}, format="json").status_code, 400)
+
+    def test_employee_cancellation_actor_reason_and_time_reach_admin(self):
+        client = APIClient()
+        client.force_authenticate(self.employee.user)
+        response = client.post(f"/api/v1/employee/appointment-items/{self.item.pk}/action/", {"status": "cancel", "reason": "عدم امکان حضور"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        admin = User.objects.create_user(username="admin-final", role="admin")
+        client.force_authenticate(admin)
+        detail = client.get(f"/api/v1/admin/appointments/{self.appointment.pk}/")
+        cancellation = detail.data["status_history"][-1]
+        self.assertEqual(cancellation["reason"], "عدم امکان حضور")
+        self.assertEqual(cancellation["changed_by_name"], "سارا")
+        self.assertEqual(cancellation["changed_by_role"], "employee")
+        self.assertTrue(cancellation["changed_at"])
+
+    def test_finance_overview_uses_existing_payment_refund_and_commission_records(self):
+        self.item.set_completion_status("completed", changed_by=self.employee.user)
+        payment = Payment.objects.create(appointment=self.appointment, amount=1000, status="paid", payment_method="card", paid_at=timezone.now(), created_by=self.employee.user, updated_by=self.employee.user)
+        refund = Refund.objects.create(payment=payment, amount=100, reason="اصلاح پرداخت", created_by=self.employee.user, updated_by=self.employee.user)
+        refund.complete(changed_by=self.employee.user)
+        admin = User.objects.create_user(username="finance-admin", role="admin")
+        client = APIClient()
+        client.force_authenticate(admin)
+        current = timezone.localdate().isoformat()
+        response = client.get("/api/v1/admin/revenue/", {"period": "custom", "start_date": current, "end_date": current, "employee": self.employee.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["received"], 1000)
+        self.assertEqual(response.data["refunded"], 100)
+        self.assertEqual(response.data["net_revenue"], 900)
+        self.assertEqual(response.data["service_revenue"], 1000)
+        self.assertEqual(response.data["commission_total"], 200)
 
 
 class AppointmentItemSchemaTests(TestCase):

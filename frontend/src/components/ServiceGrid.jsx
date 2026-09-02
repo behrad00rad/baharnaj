@@ -1,12 +1,14 @@
 import { Link } from "react-router-dom";
 import { toman } from "../shared/api";
-import { PublicState } from "./PublicUI";
+import { MediaImage, PublicState } from "./PublicUI";
 
 export function ServiceCard({ service, index = 0 }) {
   const name = service.persian_name || service.name;
   const category = service.category_name || service.category?.name;
+  const image = service.images?.[0];
   return (
     <article className="service-card">
+      {image?.image_url && <Link className="service-card-media" to={`/services/${service.slug || service.id}`}><MediaImage src={image.image_url} alt={image.alt_text || `${name} در بهارناژ`} /></Link>}
       <div className="service-card-top">
         <span>
           {new Intl.NumberFormat("fa-IR", {
@@ -18,7 +20,7 @@ export function ServiceCard({ service, index = 0 }) {
       </div>
       <div className="service-card-copy">
         <h3>{name}</h3>
-        {service.description && <p>{service.description}</p>}
+        {(service.short_description || service.description) && <p>{service.short_description || service.description}</p>}
       </div>
       <div className="service-meta">
         <span>{toman(service.price)}</span>
@@ -27,7 +29,7 @@ export function ServiceCard({ service, index = 0 }) {
         </span>
       </div>
       <div className="service-card-actions">
-        <Link to={`/services/${service.slug || service.id}`}>جزئیات</Link>
+        <Link to={`/services/${service.slug || service.id}`}>مشاهده سرویس</Link>
         <Link to={`/book?service=${service.id}`}>
           رزرو <span>←</span>
         </Link>

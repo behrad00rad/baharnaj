@@ -158,6 +158,7 @@ class Service(models.Model):
     name = models.CharField(max_length=120)
     persian_name = models.CharField(max_length=120)
     description = models.TextField(blank=True)
+    short_description = models.CharField(max_length=320, blank=True)
     # Generated once and kept stable so service URLs do not change when a display
     # name is edited. Admins can deliberately set a clearer Latin slug if needed.
     slug = models.SlugField(max_length=160, unique=True, blank=True)
@@ -207,6 +208,7 @@ class ServiceImage(models.Model):
     service = models.ForeignKey(Service, on_delete=models.CASCADE, related_name="images")
     image = models.ImageField(upload_to="services/")
     image_url = models.URLField(max_length=500, blank=True)
+    alt_text = models.CharField(max_length=220, blank=True)
     display_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
 

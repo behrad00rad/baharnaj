@@ -165,7 +165,7 @@ export default function Home() {
         {employeeState === "ready" && employees.length ? (
           <div className="employee-grid">
             {employees.slice(0, 3).map((employee) => (
-              <EmployeeCard employee={employee} key={employee.id} />
+              <EmployeeCard employee={employee} compact key={employee.id} />
             ))}
           </div>
         ) : (

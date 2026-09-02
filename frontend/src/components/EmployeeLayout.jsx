@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../shared/auth";
 import NotificationBell from "./NotificationBell";
 import { SEO } from "./SEO";
+import { useTheme } from "../shared/theme";
 import "./Employee.css";
 import "./EmployeeEnhancements.css";
 
@@ -15,6 +16,7 @@ const links = [
 export default function EmployeeLayout() {
   const navigate = useNavigate();
   const { role } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   if (role !== "employee")
     return (
       <div className="employee-denied" dir="rtl">
@@ -34,7 +36,7 @@ export default function EmployeeLayout() {
             <small>روز کاری من</small>
           </div>
         </div>
-        <NotificationBell />
+        <div className="employee-header-actions"><button className="panel-theme-toggle" type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "فعال‌کردن حالت روشن" : "فعال‌کردن حالت تاریک"}>{theme === "dark" ? "☀" : "☾"}</button><NotificationBell /></div>
       </header>
       <main>
         <Outlet />

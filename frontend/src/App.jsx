@@ -1,11 +1,9 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { PublicLayout } from "./components/PublicLayout";
 import Booking from "./pages/Booking";
 import AdminLayout from "./components/AdminLayout";
-import AdminRouter from "./pages/AdminApp";
 import EmployeeLayout from "./components/EmployeeLayout";
-import EmployeeApp from "./pages/EmployeeApp";
 import Gallery from "./pages/Gallery";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -23,6 +21,8 @@ import { clearSessionState, markAuthReady, useAuth } from "./shared/auth";
 import { ThemeProvider } from "./shared/theme";
 
 let authBootstrapPromise;
+const AdminRouter = lazy(() => import("./pages/AdminApp"));
+const EmployeeApp = lazy(() => import("./pages/EmployeeApp"));
 
 // App is intentionally limited to routing; page behavior lives beside its page.
 export default function App() {
@@ -132,10 +132,10 @@ export default function App() {
           }
         />
         <Route path="/employee/*" element={<EmployeeLayout />}>
-          <Route path="*" element={<EmployeeApp />} />
+          <Route path="*" element={<Suspense fallback={null}><EmployeeApp /></Suspense>} />
         </Route>
         <Route path="/admin/*" element={<AdminLayout />}>
-          <Route path="*" element={<AdminRouter />} />
+          <Route path="*" element={<Suspense fallback={null}><AdminRouter /></Suspense>} />
         </Route>
         <Route path="*" element={<PublicLayout><NotFound /></PublicLayout>} />
       </Routes>

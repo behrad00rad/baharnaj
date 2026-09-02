@@ -28,4 +28,4 @@ class ServiceAdmin(admin.ModelAdmin):
     list_display = ("persian_name", "name", "slug", "category", "price", "duration", "is_active", "is_bookable", "is_deleted")
     list_filter = ("category", "is_active", "is_bookable", "is_deleted")
     search_fields = ("name", "persian_name", "description", "slug", "seo_title")
-    fields = ("category", "name", "persian_name", "description", "slug", "seo_title", "seo_description", "price", "duration", "is_active", "is_bookable", "is_featured", "is_deleted")
+    fields = ("category", "name", "persian_name", "short_description", "description", "slug", "seo_title", "seo_description", "price", "duration", "is_active", "is_bookable", "is_featured", "is_deleted")

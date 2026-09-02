@@ -449,13 +449,14 @@ function EmployeeStep({
                 >
                   <div className="employee-photo">
                     {employee.profile_photo_url ? (
-                      <img src={employee.profile_photo_url} alt="" />
+                      <img src={employee.profile_photo_url} alt={`تصویر ${employee.name || "متخصص بهارناژ"}`} loading="lazy" />
                     ) : (
                       (employee.name || "م")[0]
                     )}
                   </div>
                   <strong>{employee.name || "متخصص بهارناژ"}</strong>
                   {employee.specialty && <small>{employee.specialty}</small>}
+                  {employee.bio && <p>{employee.bio}</p>}
                 </button>
               ))}
             </div>

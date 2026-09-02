@@ -703,15 +703,10 @@ function PaymentReport({ appointmentId }) {
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    if (!form.amount && history.data.remaining_total) {
-      setForm((current) => ({
-        ...current,
-        amount: String(history.data.remaining_total),
-      }));
-    }
-  }, [form.amount, history.data.remaining_total]);
+  const pendingTotal = Number(history.data.pending_total || 0);
+  const reportableTotal = history.data.reportable_total == null
+    ? Math.max(0, Number(history.data.remaining_total || 0) - pendingTotal)
+    : Number(history.data.reportable_total);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -720,7 +715,7 @@ function PaymentReport({ appointmentId }) {
     try {
       await api.post(`employee/appointments/${appointmentId}/payments/`, {
         ...form,
-        amount: Number(form.amount),
+        amount: Number(form.amount || reportableTotal),
       });
       setForm({ amount: "", payment_method: "cash", notes: "" });
       setMessage("گزارش پرداخت برای تأیید مدیریت ثبت شد.");
@@ -750,15 +745,16 @@ function PaymentReport({ appointmentId }) {
               <span>مانده قابل پرداخت</span>
               <b>{toman(history.data.remaining_total)}</b>
             </div>
+            {pendingTotal > 0 && <div><span>گزارش در انتظار تأیید</span><b>{toman(pendingTotal)}</b></div>}
           </div>
-          <form className="employee-form" onSubmit={submit}>
+          {reportableTotal > 0 ? <form className="employee-form" onSubmit={submit}>
             <label>
               مبلغ
               <input
                 type="number"
                 min="1"
-                max={history.data.remaining_total}
-                value={form.amount}
+                max={reportableTotal}
+                value={form.amount || String(reportableTotal)}
                 onChange={(event) =>
                   setForm({ ...form, amount: event.target.value })
                 }
@@ -791,12 +787,12 @@ function PaymentReport({ appointmentId }) {
             </label>
             <button
               className="employee-action"
-              disabled={saving || !history.data.remaining_total}
+              disabled={saving || !reportableTotal}
             >
               {saving ? "در حال ثبت..." : "ثبت پرداخت"}
             </button>
             {message && <small className="schedule-message">{message}</small>}
-          </form>
+          </form> : <div className={`payment-report-state ${pendingTotal > 0 ? "pending" : "paid"}`}>{pendingTotal > 0 ? "مبلغ کامل گزارش شده و در انتظار تأیید مدیریت است." : "مبلغ کامل پرداخت شده است."}</div>}
           <div className="payment-history">
             {history.data.payments?.map((payment) => (
               <div className="time-off-row" key={payment.id}>
@@ -920,16 +916,6 @@ function AppointmentDetail({ item, close, onSaved }) {
         </div>
       ) : (
         <div className="detail-buttons">
-          <button disabled={busy} onClick={() => act("arrival")}>
-            تأیید حضور
-          </button>
-          <button
-            className="secondary"
-            disabled={busy}
-            onClick={() => act("start")}
-          >
-            شروع سرویس
-          </button>
           <button disabled={busy} onClick={() => act("complete")}>
             تکمیل نوبت
           </button>

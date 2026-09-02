@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import AdminLayout from "./AdminLayout";
+import { ThemeProvider } from "../shared/theme";
 
 vi.mock("../shared/auth", () => ({
   useAuth: () => ({ role: "admin" }),
@@ -17,11 +18,13 @@ vi.mock("./NotificationBell", () => ({
 function renderLayout() {
   return render(
     <MemoryRouter initialEntries={["/admin"]}>
-      <Routes>
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<p>نمای کلی پنل</p>} />
-        </Route>
-      </Routes>
+      <ThemeProvider>
+        <Routes>
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<p>نمای کلی پنل</p>} />
+          </Route>
+        </Routes>
+      </ThemeProvider>
     </MemoryRouter>,
   );
 }

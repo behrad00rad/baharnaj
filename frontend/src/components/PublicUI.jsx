@@ -65,10 +65,10 @@ export function PublicState({
   return <div className="public-state">{empty}</div>;
 }
 
-export function EmployeeCard({ employee }) {
+export function EmployeeCard({ employee, compact = false }) {
   const name = employee.name?.trim() || "متخصص بهارناژ";
   return (
-    <article className="employee-card">
+    <article className={`employee-card ${compact ? "employee-card-compact" : ""}`}>
       <div className="employee-card-media">
         <MediaImage src={employee.profile_photo_url} alt={`تصویر ${name}`} />
       </div>
@@ -79,6 +79,8 @@ export function EmployeeCard({ employee }) {
           {employee.specialty && <p>{employee.specialty}</p>}
         </div>
       </div>
+      {employee.bio && <p className="employee-card-bio">{employee.bio}</p>}
+      {!compact && employee.services?.length > 0 && <div className="employee-card-services">{employee.services.map((service) => <Link key={service.id} to={`/services/${service.slug || service.id}`}>{service.name}</Link>)}</div>}
     </article>
   );
 }

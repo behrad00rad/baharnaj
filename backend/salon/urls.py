@@ -4,7 +4,7 @@ from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminGalleryC
 					AdminUserViewSet, AdminCustomerOptionsView, AdminEmployeeEligibleUsersView, AdminRevenueView, AdminServiceCategoryViewSet, AdminTransactionTypesView, BookingHoldDeleteView,
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView, BookingHoldView,
 										EmployeeAppointmentsView, EmployeeCustomerOptionsView, EmployeeListView, EmployeeSelfBookingView, EmployeeSelfServiceListView, EmployeeStatisticsView, GalleryCategoryListView,
-					ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
+					ServiceDetailView, ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
 					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
 					PaymentViewSet, FirebaseDeviceViewSet, NotificationViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
 										EmployeeEarningsView, EmployeeAppointmentPaymentReportView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView)
@@ -32,6 +32,7 @@ router.register("employee/schedule", EmployeeWorkingScheduleViewSet, basename="e
 
 urlpatterns = [
 	path("services/", ServiceListView.as_view(), name="service-list"),
+	path("services/<str:slug>/", ServiceDetailView.as_view(), name="service-detail"),
 	path("gallery/", GalleryListView.as_view(), name="gallery-list"),
 	path("gallery/categories/", GalleryCategoryListView.as_view(), name="gallery-category-list"),
 	path("employees/", EmployeeListView.as_view(), name="employee-list"),

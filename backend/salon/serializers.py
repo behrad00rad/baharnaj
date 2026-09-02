@@ -67,6 +67,7 @@ class ServiceSerializer(serializers.ModelSerializer):
                 "id": image.id,
                 "image_url": absolute_media_url(request, image.image.url if image.image else image.image_url),
                 "display_order": image.display_order,
+                "alt_text": image.alt_text,
             }
             for image in sorted((item for item in obj.images.all() if item.is_active), key=lambda item: (item.display_order, item.id))
         ]
@@ -119,10 +120,11 @@ class AdminGalleryAssetSerializer(GalleryAssetSerializer):
 class EmployeeSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source="user.get_full_name", read_only=True)
     profile_photo_url = serializers.SerializerMethodField()
+    services = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeProfile
-        fields = ("id", "name", "specialty", "is_active", "profile_photo", "profile_photo_url")
+        fields = ("id", "name", "specialty", "bio", "services", "is_active", "profile_photo", "profile_photo_url")
         extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
 
     def get_profile_photo_url(self, obj):
@@ -132,6 +134,13 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if isinstance(value, str):
             raise serializers.ValidationError("لطفاً یک فایل تصویر جدید انتخاب کنید.")
         return validate_image_upload(value)
+
+    def get_services(self, obj):
+        return [
+            {"id": link.service_id, "name": link.service.persian_name, "slug": link.service.slug}
+            for link in obj.service_links.all()
+            if link.is_active and link.service.is_active and link.service.is_bookable
+        ]
 
 
 class EmployeeSelfProfileSerializer(serializers.ModelSerializer):
@@ -293,10 +302,8 @@ class UserAdminSerializer(serializers.ModelSerializer):
         fields = ("id", "username", "first_name", "last_name", "email", "phone", "role", "account_status", "is_active", "is_staff")
 
 
-class ServiceAdminSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Service
-        fields = "__all__"
+class ServiceAdminSerializer(ServiceSerializer):
+    pass
 
 
 class ServiceImageSerializer(serializers.ModelSerializer):
@@ -363,10 +370,11 @@ class AppointmentSerializer(serializers.ModelSerializer):
     remaining_total = serializers.IntegerField(read_only=True)
     payment_status = serializers.CharField(read_only=True)
     payments = serializers.SerializerMethodField()
+    status_history = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
-        fields = ("id", "customer", "items", "status", "notes", "created_by", "updated_by", "created_at", "updated_at", "confirmation_code", "customer_name", "customer_phone", "hold_token", "create_account", "account_password", "appointment_total", "paid_total", "refunded_total", "net_paid", "remaining_total", "payment_status", "payments")
+        fields = ("id", "customer", "items", "status", "notes", "created_by", "updated_by", "created_at", "updated_at", "confirmation_code", "customer_name", "customer_phone", "hold_token", "create_account", "account_password", "appointment_total", "paid_total", "refunded_total", "net_paid", "remaining_total", "payment_status", "payments", "status_history")
         read_only_fields = ("id", "customer", "created_by", "updated_by", "created_at", "updated_at")
 
     def get_customer_name(self, obj):
@@ -398,6 +406,20 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 ],
             }
             for payment in obj.payments.all()
+        ]
+
+    def get_status_history(self, obj):
+        return [
+            {
+                "id": entry.id,
+                "status": entry.status,
+                "reason": entry.reason,
+                "changed_at": entry.changed_at,
+                "changed_by": entry.changed_by_id,
+                "changed_by_name": (entry.changed_by.get_full_name() or entry.changed_by.username) if entry.changed_by else "سیستم",
+                "changed_by_role": entry.changed_by.role if entry.changed_by else "system",
+            }
+            for entry in obj.status_history.all()
         ]
 
     def validate_items(self, items):
@@ -613,6 +635,11 @@ class WaitlistEntrySerializer(serializers.ModelSerializer):
 
 
 class TransactionSerializer(serializers.ModelSerializer):
+    customer_name = serializers.CharField(source="appointment.customer.user.get_full_name", read_only=True)
+    reporter_name = serializers.CharField(source="created_by.get_full_name", read_only=True)
+    payment_method = serializers.CharField(source="payment.payment_method", read_only=True)
+    payment_status = serializers.CharField(source="payment.status", read_only=True)
+
     class Meta:
         model = Transaction
         fields = "__all__"
@@ -625,6 +652,8 @@ class PaymentSerializer(serializers.ModelSerializer):
     reporter_name = serializers.CharField(source="created_by.get_full_name", read_only=True)
     customer_name = serializers.CharField(source="appointment.customer.user.get_full_name", read_only=True)
     reviewed_by_name = serializers.CharField(source="reviewed_by.get_full_name", read_only=True)
+    appointment_items = serializers.SerializerMethodField()
+    refunds = serializers.SerializerMethodField()
 
     class Meta:
         model = Payment
@@ -636,6 +665,15 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     def get_refundable_total(self, obj):
         return max(obj.amount - self.get_refunded_total(obj), 0)
+
+    def get_appointment_items(self, obj):
+        return [
+            {"id": item.id, "service": item.service.persian_name, "employee": item.employee.user.get_full_name() or item.employee.user.username}
+            for item in obj.appointment.items.all()
+        ]
+
+    def get_refunds(self, obj):
+        return [{"id": refund.id, "amount": refund.amount, "reason": refund.reason, "status": refund.status, "created_at": refund.created_at} for refund in obj.refunds.all()]
 
     def validate(self, attrs):
         appointment = attrs.get("appointment")

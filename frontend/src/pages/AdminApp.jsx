@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Route, Routes, useNavigate } from "react-router-dom";
 import { toGregorian, toJalaali } from "jalaali-js";
 import { JalaliDatePicker } from "../components/DatePicker";
 import { api, toman } from "../shared/api";
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 const today = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Tehran",
@@ -265,19 +266,24 @@ function DashboardHome() {
 }
 function AppointmentRow({ item, onClick }) {
   const line = item.items?.[0] || item;
+  const hasCancelledService = item.status !== "cancelled" && item.items?.some(
+    (entry) => entry.completion_status === "cancelled",
+  );
+  const visualStatus = hasCancelledService ? "partially-cancelled" : item.status;
   const details =
     item.items
       ?.map((entry) => `${entry.service_name} · ${entry.employee_name}`)
       .join("، ") || line.service_name;
   return (
-    <button className="appointment-row" onClick={onClick}>
+    <button className={`appointment-row ${visualStatus}`} onClick={onClick}>
       <span className="time">{line.start_time || "--:--"}</span>
       <span>
         <b>{item.customer_name || item.customer?.name || `رزرو #${item.id}`}</b>
         <small>{details || `نوبت ${item.items?.length || 1} سرویس`}</small>
       </span>
-      <em className={`status ${item.status}`}>
-        {labels[item.status] || item.status}
+      <em className={`status ${visualStatus}`}>
+        {hasCancelledService ? "لغو بخشی" : labels[item.status] || item.status}
+        <small>{item.payment_status === "paid" ? " · تسویه" : item.remaining_total ? ` · مانده ${toman(item.remaining_total)}` : ""}</small>
       </em>
     </button>
   );
@@ -930,6 +936,9 @@ function AppointmentDrawer({ item, close, onSaved }) {
   });
   const [refund, setRefund] = useState({ payment: "", amount: "", reason: "" });
   const [financeError, setFinanceError] = useState("");
+  const cancelledLine = item.items?.find((line) => line.completion_status === "cancelled");
+  const cancellation = [...(item.status_history || [])].reverse().find((entry) => entry.status === "cancelled" || (entry.changed_by_role === "employee" && entry.reason));
+  const isCancelled = item.status === "cancelled" || Boolean(cancelledLine);
   const changeStatus = async (status) => {
     setSaving(true);
     try {
@@ -966,7 +975,7 @@ function AppointmentDrawer({ item, close, onSaved }) {
   return (
     <div className="drawer-backdrop" onMouseDown={close}>
       <aside
-        className="admin-drawer"
+        className={`admin-drawer appointment-drawer ${isCancelled ? "is-cancelled" : ""}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <button className="drawer-close" onClick={close}>
@@ -977,6 +986,8 @@ function AppointmentDrawer({ item, close, onSaved }) {
         <p className="drawer-meta">
           {item.customer?.phone || item.customer_phone || "شماره ثبت نشده"}
         </p>
+        <div className="appointment-summary-bar"><span className={`status ${item.status}`}>{labels[item.status]}</span><b>{item.items?.[0]?.date} · {item.items?.[0]?.start_time?.slice(0,5)}</b><span>{item.items?.length || 0} سرویس</span></div>
+        {isCancelled && <section className="cancellation-card"><span>لغو شده</span><h3>{item.status === "cancelled" ? "این نوبت لغو شده است" : `${cancelledLine?.service_name || "یک سرویس"} از این نوبت لغو شده است`}</h3><dl><div><dt>لغو توسط</dt><dd>{cancellation?.changed_by_name || "ثبت نشده"}{cancellation?.changed_by_role === "employee" ? " (متخصص)" : ""}</dd></div><div><dt>زمان لغو</dt><dd>{cancellation?.changed_at ? new Intl.DateTimeFormat("fa-IR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(cancellation.changed_at)) : "ثبت نشده"}</dd></div><div><dt>دلیل</dt><dd>{cancellation?.reason || "دلیلی ثبت نشده است."}</dd></div></dl></section>}
         <div className="drawer-section">
           <h3>سرویس‌های رزرو</h3>
           {item.items?.length ? (
@@ -987,13 +998,14 @@ function AppointmentDrawer({ item, close, onSaved }) {
                   {line.date} · {line.start_time} تا {line.end_time}
                 </span>
                 <em>{toman(line.price_snapshot)}</em>
+                <span className={`status ${line.completion_status}`}>{labels[line.completion_status] || line.completion_status}</span>
               </div>
             ))
           ) : (
             <Empty />
           )}
         </div>
-        <div className="drawer-actions">
+        {!['completed', 'cancelled'].includes(item.status) && <div className="drawer-actions">
           <button disabled={saving} onClick={() => changeStatus("confirmed")}>
             تأیید
           </button>
@@ -1007,7 +1019,7 @@ function AppointmentDrawer({ item, close, onSaved }) {
           >
             لغو رزرو
           </button>
-        </div>
+        </div>}
         <div className="drawer-section">
           <h3>وضعیت مالی</h3>
           <div className="mini-summary">
@@ -1024,7 +1036,7 @@ function AppointmentDrawer({ item, close, onSaved }) {
           <p className="drawer-meta">
             وضعیت: {item.payment_status || "unpaid"}
           </p>
-          <form className="employee-form" onSubmit={recordPayment}>
+          {item.status !== "cancelled" && <form className="employee-form" onSubmit={recordPayment}>
             <label>
               مبلغ پرداخت
               <input
@@ -1068,7 +1080,7 @@ function AppointmentDrawer({ item, close, onSaved }) {
             >
               ثبت پرداخت
             </button>
-          </form>
+          </form>}
           {item.payments?.map((entry) => (
             <div className="drawer-item" key={entry.id}>
               <b>
@@ -1129,7 +1141,7 @@ function AppointmentDrawer({ item, close, onSaved }) {
             item.status_history.map((history) => (
               <p className="history-row" key={history.id}>
                 <b>{labels[history.status] || history.status}</b>
-                <span>{history.reason || "بدون توضیح"}</span>
+                <span>{history.changed_by_name || "سیستم"} · {history.changed_at ? new Intl.DateTimeFormat("fa-IR", { dateStyle: "short", timeStyle: "short" }).format(new Date(history.changed_at)) : ""}<br />{history.reason || "بدون توضیح"}</span>
               </p>
             ))
           ) : (
@@ -1756,6 +1768,14 @@ function EmployeeManagement() {
                 <small className="admin-field-error">{errors.phone}</small>
               )}
             </label>
+            <label>
+              تخصص عمومی
+              <input value={form.specialty || ""} onChange={(event) => update("specialty", event.target.value)} />
+            </label>
+            <label>
+              معرفی عمومی متخصص
+              <textarea value={form.bio || ""} onChange={(event) => update("bio", event.target.value)} placeholder="متنی که در سایت و مرحله انتخاب متخصص نمایش داده می‌شود" />
+            </label>
             <fieldset className="admin-service-picker">
               <legend>سرویس‌های قابل ارائه</legend>
               {services.data
@@ -1851,133 +1871,181 @@ function EmployeeManagement() {
     </div>
   );
 }
-function Finance() {
-  const payments = useResource("admin/payments/");
-  const refunds = useResource("admin/refunds/");
-  const transactions = useResource("admin/transactions/");
-  const commissions = useResource("admin/commissions/");
-  const [reviewingPayment, setReviewingPayment] = useState(null);
-  const [reviewError, setReviewError] = useState("");
-  const reviewPayment = async (payment, action) => {
-    setReviewingPayment(payment.id);
-    setReviewError("");
-    try {
-      await api.post(`admin/payments/${payment.id}/${action}/`);
-      payments.reload();
-      transactions.reload();
-    } catch (error) {
-      setReviewError(firstError(error, "بررسی پرداخت انجام نشد"));
-    } finally {
-      setReviewingPayment(null);
+function ServiceManagement() {
+  const services = useResource("admin/services/");
+  const categories = useResource("admin/service-categories/");
+  const [form, setForm] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [imageAlt, setImageAlt] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const update = (name, value) => setForm((current) => ({ ...current, [name]: value }));
+  const openNew = () => {
+    setForm({ category: "", name: "", persian_name: "", short_description: "", description: "", price: "", duration: "", slug: "", seo_title: "", seo_description: "", is_active: true, is_bookable: true, is_featured: false });
+    setFiles([]);
+    setImageAlt("");
+    setMessage("");
+  };
+  const uploadImages = async (serviceId) => {
+    for (const [index, file] of files.entries()) {
+      const body = new FormData();
+      body.append("service", serviceId);
+      body.append("image", file);
+      body.append("alt_text", imageAlt);
+      body.append("display_order", index);
+      body.append("is_active", "true");
+      await api.post("admin/service-images/", body);
     }
   };
-  const section = (title, resource, render) => (
+  const submit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setMessage("");
+    const payload = Object.fromEntries(Object.entries(form).filter(([key]) => !["id", "images", "employees", "category_name", "is_deleted"].includes(key)));
+    try {
+      const { data } = form.id ? await api.patch(`admin/services/${form.id}/`, payload) : await api.post("admin/services/", payload);
+      await uploadImages(data.id);
+      setForm(null);
+      setFiles([]);
+      services.reload();
+      setMessage("صفحه سرویس با موفقیت ذخیره شد.");
+    } catch (error) {
+      setMessage(firstError(error, "ذخیره سرویس انجام نشد"));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const removeImage = async (imageId) => {
+    await api.delete(`admin/service-images/${imageId}/`);
+    setForm((current) => ({ ...current, images: current.images.filter((image) => image.id !== imageId) }));
+    services.reload();
+  };
+  return <div className="admin-page service-admin-page">
+    <Header eyebrow="کاتالوگ و محتوای عمومی" title="مدیریت سرویس‌ها" action="افزودن سرویس" onAction={openNew} />
+    {message && <Toast message={message} type={message.includes("نشد") ? "error" : "success"} />}
     <section className="admin-panel">
-      <div className="panel-title">
-        <div>
-          <span>حسابداری</span>
-          <h2>{title}</h2>
-        </div>
-      </div>
-      {resource.loading ? (
-        <Skeleton />
-      ) : resource.error ? (
-        <Empty title="دریافت اطلاعات انجام نشد" />
-      ) : resource.data.length ? (
-        <div className="entity-list">{resource.data.map(render)}</div>
-      ) : (
-        <Empty />
-      )}
+      {services.loading ? <Skeleton count={5} /> : <div className="service-admin-list">{services.data.map((service) => <article key={service.id}>
+        <div className="service-admin-thumb">{service.images?.[0]?.image_url ? <img src={service.images[0].image_url} alt="" /> : (service.persian_name || "س")[0]}</div>
+        <div><b>{service.persian_name || service.name}</b><small>{service.short_description || service.description || "محتوای صفحه هنوز کامل نشده است."}</small></div>
+        <span className={`finance-badge ${service.is_active ? "paid" : "failed"}`}>{service.is_active ? "منتشرشده" : "غیرفعال"}</span>
+        <button className="admin-secondary" onClick={() => { setForm(service); setFiles([]); setImageAlt(""); setMessage(""); }}>ویرایش صفحه</button>
+      </article>)}</div>}
     </section>
-  );
-  return (
-    <div className="admin-page">
-      <Header eyebrow="حسابداری" title="مالی و پرداخت‌ها" />
-      <div className="admin-grid-two">
-        {section("پرداخت‌ها", payments, (item) => (
-          <article key={item.id}>
-            <div className="entity-avatar">پ</div>
-            <div>
-              <b>{toman(item.amount)}</b>
-              <small>
-                نوبت #{item.appointment} · {item.customer_name || "مشتری"} ·{" "}
-                {item.payment_method}
-              </small>
-              {item.created_by && (
-                <small>گزارش‌دهنده: {item.reporter_name || "کارمند"}</small>
-              )}
-            </div>
-            <span>
-              {item.status === "pending"
-                ? "در انتظار تأیید"
-                : item.status === "paid"
-                  ? "تأیید شده"
-                  : item.status === "failed"
-                    ? "رد شده"
-                    : item.status}
-            </span>
-            {item.status === "pending" && (
-              <div className="finance-review-actions">
-                <button
-                  className="admin-primary"
-                  disabled={reviewingPayment === item.id}
-                  onClick={() => reviewPayment(item, "confirm")}
-                >
-                  تأیید
-                </button>
-                <button
-                  className="admin-secondary"
-                  disabled={reviewingPayment === item.id}
-                  onClick={() => reviewPayment(item, "reject")}
-                >
-                  رد
-                </button>
-              </div>
-            )}
-          </article>
-        ))}
-        {reviewError && (
-          <small className="admin-field-error">{reviewError}</small>
-        )}
-        {section("بازپرداخت‌ها", refunds, (item) => (
-          <article key={item.id}>
-            <div className="entity-avatar">ب</div>
-            <div>
-              <b>{toman(item.amount)}</b>
-              <small>{item.reason || `پرداخت #${item.payment}`}</small>
-            </div>
-            <span>{item.status}</span>
-          </article>
-        ))}
-      </div>
-      <div className="admin-grid-two">
-        {section("تراکنش‌های تغییرناپذیر", transactions, (item) => (
-          <article key={item.id}>
-            <div className="entity-avatar">ت</div>
-            <div>
-              <b>{toman(item.amount)}</b>
-              <small>{item.description || `نوبت #${item.appointment}`}</small>
-            </div>
-            <span>{item.type}</span>
-          </article>
-        ))}
-        {section("کمیسیون متخصصان", commissions, (item) => (
-          <article key={item.id}>
-            <div className="entity-avatar">ک</div>
-            <div>
-              <b>{item.employee_name || `متخصص #${item.employee}`}</b>
-              <small>
-                {item.service_name} · پایه {toman(item.base_amount)}
-              </small>
-            </div>
-            <span>
-              {toman(item.commission_amount)} · {item.status}
-            </span>
-          </article>
-        ))}
-      </div>
+    {form && <div className="modal-backdrop" onMouseDown={() => setForm(null)}><form className="admin-modal service-editor" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
+      <button type="button" className="drawer-close" onClick={() => setForm(null)}>×</button>
+      <span className="admin-kicker">{form.id ? "ویرایش مقاله سرویس" : "سرویس جدید"}</span><h2>{form.persian_name || "محتوای سرویس"}</h2>
+      <fieldset><legend>اطلاعات اصلی</legend><div className="service-editor-grid">
+        <label>نام فارسی<input required value={form.persian_name || ""} onChange={(event) => update("persian_name", event.target.value)} /></label>
+        <label>نام داخلی<input required value={form.name || ""} onChange={(event) => update("name", event.target.value)} /></label>
+        <label>دسته‌بندی<select required value={form.category || ""} onChange={(event) => update("category", event.target.value)}><option value="">انتخاب کنید</option>{categories.data.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+        <label>آدرس سرویس (slug)<input dir="ltr" value={form.slug || ""} onChange={(event) => update("slug", event.target.value)} /><small>تغییر این مقدار، آدرس عمومی سرویس را تغییر می‌دهد.</small></label>
+      </div></fieldset>
+      <fieldset><legend>محتوای صفحه سرویس</legend><label>معرفی کوتاه<textarea maxLength="320" value={form.short_description || ""} onChange={(event) => update("short_description", event.target.value)} /></label><label>متن کامل مقاله<textarea className="service-article-input" value={form.description || ""} onChange={(event) => update("description", event.target.value)} /></label></fieldset>
+      <fieldset><legend>تصاویر</legend>{form.images?.length > 0 && <div className="service-image-admin-grid">{form.images.map((image) => <div key={image.id}><img src={image.image_url} alt={image.alt_text || ""} /><span>{image.alt_text || "بدون متن جایگزین"}</span><button type="button" className="admin-danger" onClick={() => removeImage(image.id)}>حذف تصویر</button></div>)}</div>}<label>افزودن تصاویر<input type="file" accept="image/*" multiple onChange={(event) => setFiles([...event.target.files])} /></label><label>توضیح تصاویر جدید<input value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} placeholder="مثلاً نمونه مانیکور در بهارناژ" /></label></fieldset>
+      <fieldset><legend>قیمت و مدت</legend><div className="service-editor-grid"><label>قیمت (تومان)<input required min="0" type="number" value={form.price || ""} onChange={(event) => update("price", event.target.value)} /></label><label>مدت (دقیقه)<input required min="1" type="number" value={form.duration || ""} onChange={(event) => update("duration", event.target.value)} /></label></div></fieldset>
+      <fieldset><legend>SEO</legend><label>عنوان سئو<input value={form.seo_title || ""} onChange={(event) => update("seo_title", event.target.value)} /></label><label>توضیحات سئو<textarea value={form.seo_description || ""} onChange={(event) => update("seo_description", event.target.value)} /></label></fieldset>
+      <fieldset><legend>وضعیت انتشار</legend><div className="service-status-controls"><label><input type="checkbox" checked={Boolean(form.is_active)} onChange={(event) => update("is_active", event.target.checked)} /> فعال</label><label><input type="checkbox" checked={Boolean(form.is_bookable)} onChange={(event) => update("is_bookable", event.target.checked)} /> قابل رزرو</label><label><input type="checkbox" checked={Boolean(form.is_featured)} onChange={(event) => update("is_featured", event.target.checked)} /> ویژه</label></div></fieldset>
+      {message && <small className="admin-field-error">{message}</small>}<button className="admin-primary" disabled={saving}>{saving ? "در حال ذخیره…" : "ذخیره صفحه سرویس"}</button>
+    </form></div>}
+  </div>;
+}
+
+const paymentLabels = { pending: "در انتظار تأیید", paid: "تأیید شده", failed: "رد شده", refunded: "بازپرداخت شده" };
+const methodLabels = { cash: "نقدی", card: "کارت", bank_transfer: "انتقال بانکی", online: "آنلاین", other: "سایر" };
+const transactionLabels = { payment: "پرداخت", refund: "بازپرداخت", commission: "کمیسیون", expense: "هزینه" };
+const chartColors = ["#2d7d70", "#d5a26d", "#7c9b91", "#b75d55", "#8c72a6"];
+
+function financeDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : new Intl.DateTimeFormat("fa-IR", { dateStyle: "medium" }).format(date);
+}
+
+function financeRange(preset, customStart, customEnd) {
+  const anchor = new Date(`${today}T12:00:00`);
+  let start = new Date(anchor);
+  let end = new Date(anchor);
+  if (preset === "week") start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  if (preset === "month") start.setDate(1);
+  if (preset === "last-month") {
+    start = new Date(anchor.getFullYear(), anchor.getMonth() - 1, 1, 12);
+    end = new Date(anchor.getFullYear(), anchor.getMonth(), 0, 12);
+  }
+  if (preset === "custom") return { start: customStart || today, end: customEnd || today };
+  return { start: localIsoDate(start), end: localIsoDate(end) };
+}
+
+function Finance() {
+  const employees = useResource("admin/employees/");
+  const [preset, setPreset] = useState("month");
+  const [customStart, setCustomStart] = useState(today);
+  const [customEnd, setCustomEnd] = useState(today);
+  const [employee, setEmployee] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [methodFilter, setMethodFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manual, setManual] = useState({ appointment: "", amount: "", payment_method: "cash", notes: "" });
+  const [refund, setRefund] = useState({ amount: "", reason: "" });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const range = useMemo(() => financeRange(preset, customStart, customEnd), [preset, customStart, customEnd]);
+  const baseQuery = new URLSearchParams({ start_date: range.start, end_date: range.end, ...(employee && { employee }) });
+  const paymentQuery = new URLSearchParams({ ...Object.fromEntries(baseQuery), ...(statusFilter && { status: statusFilter }), ...(methodFilter && { payment_method: methodFilter }), ...(search && { q: search }) });
+  const payments = useResource(`admin/payments/?${paymentQuery}`);
+  const transactions = useResource(`admin/transactions/?${baseQuery}`);
+  const commissions = useResource(`admin/commissions/?${baseQuery}`);
+  const overview = useResource(`admin/revenue/?period=custom&${baseQuery}`);
+  const appointments = useResource(`admin/appointments/?start_date=${range.start}&end_date=${range.end}${employee ? `&employee=${employee}` : ""}`);
+  const refresh = () => { payments.reload(); transactions.reload(); commissions.reload(); overview.reload(); };
+  const reviewPayment = async (payment, action) => {
+    setBusy(true); setMessage("");
+    try { const { data } = await api.post(`admin/payments/${payment.id}/${action}/`); setSelected(data); refresh(); }
+    catch (error) { setMessage(firstError(error, "بررسی پرداخت انجام نشد")); }
+    finally { setBusy(false); }
+  };
+  const createPayment = async (event) => {
+    event.preventDefault(); setBusy(true); setMessage("");
+    try { await api.post("admin/payments/", { ...manual, amount: Number(manual.amount) }); setManualOpen(false); setManual({ appointment: "", amount: "", payment_method: "cash", notes: "" }); setMessage("پرداخت دستی ثبت شد."); refresh(); }
+    catch (error) { setMessage(firstError(error, "ثبت پرداخت انجام نشد")); }
+    finally { setBusy(false); }
+  };
+  const createRefund = async (event) => {
+    event.preventDefault(); setBusy(true); setMessage("");
+    try { await api.post("admin/refunds/", { payment: selected.id, amount: Number(refund.amount), reason: refund.reason }); setRefund({ amount: "", reason: "" }); setSelected(null); setMessage("بازپرداخت در سابقه پرداخت ثبت شد."); refresh(); }
+    catch (error) { setMessage(firstError(error, "ثبت بازپرداخت انجام نشد")); }
+    finally { setBusy(false); }
+  };
+  const metrics = overview.data && !Array.isArray(overview.data) ? overview.data : {};
+  return <div className="admin-page finance-page">
+    <Header eyebrow="گزارش‌های قابل حسابرسی" title="مالی و پرداخت‌ها" action="ثبت پرداخت دستی" onAction={() => setManualOpen(true)} />
+    <div className="finance-filters">
+      <div className="segmented">{[["day","امروز"],["week","این هفته"],["month","این ماه"],["last-month","ماه قبل"],["custom","بازه دلخواه"]].map(([value,label]) => <button key={value} className={preset === value ? "selected" : ""} onClick={() => setPreset(value)}>{label}</button>)}</div>
+      {preset === "custom" && <div className="finance-custom-range"><label>از<input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label>تا<input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></div>}
+      <select value={employee} onChange={(event) => setEmployee(event.target.value)}><option value="">همه کارکنان</option>{employees.data.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
     </div>
-  );
+    {message && <div className="finance-message">{message}</div>}
+    <div className="finance-stat-grid">
+      <Stat label="پرداخت‌های تأییدشده" value={toman(metrics.received || 0)} note="دریافتی ناخالص" accent />
+      <Stat label="درآمد خالص" value={toman(metrics.net_revenue || 0)} note={`پس از ${toman(metrics.refunded || 0)} بازپرداخت`} />
+      <Stat label="گزارش در انتظار" value={toman(metrics.pending_reports || 0)} note="نیازمند بررسی مدیریت" />
+      <Stat label="مانده نوبت‌ها" value={toman(metrics.outstanding || 0)} note="پرداخت‌نشده در بازه" />
+      <Stat label="ارزش خدمات تکمیل‌شده" value={toman(metrics.service_revenue || 0)} note="درآمد مشارکتی خدمات" />
+      <Stat label="کمیسیون کارکنان" value={toman(metrics.commission_total || 0)} note="مجزا از درآمد سالن" />
+    </div>
+    <div className="finance-chart-grid">
+      <section className="admin-panel finance-chart"><div className="panel-title"><div><span>روند زمانی</span><h2>درآمد خالص روزانه</h2></div></div>{metrics.series?.length ? <ResponsiveContainer width="100%" height={280}><BarChart data={metrics.series}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={(value) => toman(value)} /><Bar dataKey="revenue" fill="#2d7d70" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer> : <Empty title="داده‌ای برای نمودار نیست" />}</section>
+      <section className="admin-panel finance-chart"><div className="panel-title"><div><span>روش دریافت</span><h2>ترکیب روش‌های پرداخت</h2></div></div>{metrics.methods?.length ? <ResponsiveContainer width="100%" height={280}><PieChart><Pie data={metrics.methods} dataKey="value" nameKey="payment_method" innerRadius={55} outerRadius={90} label={({ payment_method }) => methodLabels[payment_method] || payment_method}>{metrics.methods.map((entry,index) => <Cell key={entry.payment_method} fill={chartColors[index % chartColors.length]} />)}</Pie><Tooltip formatter={(value) => toman(value)} /></PieChart></ResponsiveContainer> : <Empty title="پرداخت تأییدشده‌ای نیست" />}</section>
+    </div>
+    <section className="admin-panel finance-employees"><div className="panel-title"><div><span>تفکیک عملکرد</span><h2>درآمد خدمات و کمیسیون کارکنان</h2></div></div><div className="finance-employee-grid">{metrics.employees?.map((item) => <article key={item.id}><b>{item.name}</b><span>{new Intl.NumberFormat("fa-IR").format(item.completed)} سرویس تکمیل‌شده</span><strong>{toman(item.revenue)}</strong><small>کمیسیون: {toman(item.commission)}</small></article>)}</div>{!metrics.employees?.length && <Empty />}</section>
+    <section className="admin-panel finance-table-panel"><div className="panel-title"><div><span>پرداخت‌ها</span><h2>سوابق و گزارش‌های پرداخت</h2></div></div><div className="finance-table-filters"><input placeholder="جست‌وجوی مشتری، نوبت یا توضیح" value={search} onChange={(event) => setSearch(event.target.value)} /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">همه وضعیت‌ها</option>{Object.entries(paymentLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select><select value={methodFilter} onChange={(event) => setMethodFilter(event.target.value)}><option value="">همه روش‌ها</option>{Object.entries(methodLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></div>{payments.loading ? <Skeleton /> : payments.data.length ? <div className="finance-table-wrap"><table className="finance-table"><thead><tr><th>تاریخ</th><th>مشتری / نوبت</th><th>گزارش‌دهنده</th><th>مبلغ</th><th>روش</th><th>وضعیت</th><th></th></tr></thead><tbody>{payments.data.map((item) => <tr key={item.id} className={item.status}><td>{financeDate(item.created_at)}</td><td><b>{item.customer_name || "مشتری"}</b><small>نوبت #{item.appointment}</small></td><td>{item.reporter_name || "مدیریت"}</td><td>{toman(item.amount)}</td><td>{methodLabels[item.payment_method]}</td><td><span className={`finance-badge ${item.status}`}>{paymentLabels[item.status]}</span></td><td><button className="admin-ghost" onClick={() => setSelected(item)}>جزئیات</button></td></tr>)}</tbody></table></div> : <Empty />}</section>
+    <div className="admin-grid-two"><section className="admin-panel"><div className="panel-title"><div><span>دفتر تغییرناپذیر</span><h2>آخرین تراکنش‌ها</h2></div></div><div className="finance-ledger">{transactions.data.slice(0,8).map((item) => <div key={item.id}><span className={`finance-badge ${item.type}`}>{transactionLabels[item.type] || item.type}</span><b>{toman(item.amount)}</b><small>{item.customer_name || item.description || `نوبت #${item.appointment}`}</small></div>)}</div></section><section className="admin-panel"><div className="panel-title"><div><span>کارکنان</span><h2>آخرین کمیسیون‌ها</h2></div></div><div className="finance-ledger">{commissions.data.slice(0,8).map((item) => <div key={item.id}><span>{item.employee_name}</span><b>{toman(item.commission_amount)}</b><small>{item.service_name} · {item.status}</small></div>)}</div></section></div>
+    {selected && <div className="drawer-backdrop" onMouseDown={() => setSelected(null)}><aside className="admin-drawer finance-detail" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" onClick={() => setSelected(null)}>×</button><span className="admin-kicker">پرداخت #{selected.id}</span><h2>{toman(selected.amount)}</h2><div className="finance-detail-summary"><span className={`finance-badge ${selected.status}`}>{paymentLabels[selected.status]}</span><p>نوبت #{selected.appointment} · {selected.customer_name || "مشتری"}</p><p>روش: {methodLabels[selected.payment_method]} · گزارش‌دهنده: {selected.reporter_name || "مدیریت"}</p>{selected.reviewed_by_name && <p>بررسی‌کننده: {selected.reviewed_by_name}</p>}</div><section><h3>سرویس‌ها و متخصصان</h3>{selected.appointment_items?.map((item) => <div className="finance-detail-line" key={item.id}><b>{item.service}</b><span>{item.employee}</span></div>)}</section>{selected.notes && <section><h3>یادداشت</h3><p>{selected.notes}</p></section>}{selected.refunds?.length > 0 && <section><h3>بازپرداخت‌های ثبت‌شده</h3>{selected.refunds.map((item) => <div className="finance-detail-line" key={item.id}><b>{toman(item.amount)}</b><span>{item.reason || "بدون توضیح"}</span></div>)}</section>}{selected.status === "pending" && <div className="finance-review-actions"><button className="admin-success" disabled={busy} onClick={() => reviewPayment(selected,"confirm")}>تأیید گزارش</button><button className="admin-danger" disabled={busy} onClick={() => reviewPayment(selected,"reject")}>رد گزارش</button></div>}{["paid","refunded"].includes(selected.status) && selected.refundable_total > 0 && <form className="finance-refund-form" onSubmit={createRefund}><h3>ثبت بازپرداخت</h3><label>مبلغ<input required type="number" min="1" max={selected.refundable_total} value={refund.amount} onChange={(event) => setRefund({ ...refund, amount: event.target.value })} /></label><label>دلیل<textarea value={refund.reason} onChange={(event) => setRefund({ ...refund, reason: event.target.value })} /></label><button className="admin-danger" disabled={busy}>ثبت بازپرداخت</button></form>}</aside></div>}
+    {manualOpen && <div className="modal-backdrop" onMouseDown={() => setManualOpen(false)}><form className="admin-modal" onSubmit={createPayment} onMouseDown={(event) => event.stopPropagation()}><button type="button" className="drawer-close" onClick={() => setManualOpen(false)}>×</button><span className="admin-kicker">ثبت توسط مدیریت</span><h2>پرداخت دستی</h2><label>نوبت<select required value={manual.appointment} onChange={(event) => setManual({ ...manual, appointment: event.target.value })}><option value="">انتخاب نوبت</option>{appointments.data.filter((item) => item.remaining_total > 0 && item.status !== "cancelled").map((item) => <option key={item.id} value={item.id}>#{item.id} · {item.customer_name} · مانده {toman(item.remaining_total)}</option>)}</select></label><label>مبلغ<input required min="1" type="number" value={manual.amount} onChange={(event) => setManual({ ...manual, amount: event.target.value })} /></label><label>روش<select value={manual.payment_method} onChange={(event) => setManual({ ...manual, payment_method: event.target.value })}>{Object.entries(methodLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>یادداشت<textarea value={manual.notes} onChange={(event) => setManual({ ...manual, notes: event.target.value })} /></label><button className="admin-primary" disabled={busy}>ثبت پرداخت</button></form></div>}
+  </div>;
 }
 function Content() {
   return (
@@ -2011,30 +2079,7 @@ function AdminRouter() {
       <Route path="employees" element={<EmployeeManagement />} />
       <Route
         path="services"
-        element={
-          <CrudPage
-            type="سرویس"
-            endpoint="admin/services/"
-            title="مدیریت سرویس‌ها"
-            eyebrow="کاتالوگ"
-            fields={[
-              { name: "persian_name", label: "نام فارسی" },
-              { name: "name", label: "نام داخلی" },
-              { name: "description", label: "توضیحات", type: "textarea" },
-              {
-                name: "category",
-                label: "دسته‌بندی",
-                type: "select",
-                optionsEndpoint: "admin/service-categories/",
-              },
-              { name: "price", label: "قیمت", type: "number" },
-              { name: "duration", label: "مدت (دقیقه)", type: "number" },
-              { name: "slug", label: "آدرس سرویس (slug)" },
-              { name: "seo_title", label: "عنوان سئو (اختیاری)" },
-              { name: "seo_description", label: "توضیحات سئو (اختیاری)", type: "textarea" },
-            ]}
-          />
-        }
+        element={<ServiceManagement />}
       />
       <Route
         path="customers"
