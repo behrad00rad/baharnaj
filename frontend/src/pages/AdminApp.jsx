@@ -9,6 +9,13 @@ const today = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Tehran",
 }).format(new Date());
 const unwrap = (data) => data?.results || data || [];
+const searchText = (value) => String(value ?? "").replace(/[\u064A\u0649]/g, "ی").replace(/\u0643/g, "ک").toLocaleLowerCase("fa-IR");
+const entityName = (item) => [item.persian_name, item.name, item.first_name, item.last_name, item.title].filter(Boolean).join(" ") || `مورد #${item.id}`;
+const matchesSearch = (item, query, fields = []) => {
+  const needle = searchText(query).trim();
+  if (!needle) return true;
+  return [entityName(item), item.username, item.phone, item.email, item.specialty, item.description, ...fields.map((field) => item[Array.isArray(field) ? field[0] : field.name])].some((value) => searchText(value).includes(needle));
+};
 const firstError = (error, fallback) => {
   const value = Object.values(error.response?.data || {})[0];
   return (Array.isArray(value) ? value[0] : value) || fallback;
@@ -1170,6 +1177,8 @@ function CrudPage({
   const [optionDrafts, setOptionDrafts] = useState({});
   const [optionErrors, setOptionErrors] = useState({});
   const [optionSaving, setOptionSaving] = useState({});
+  const [search, setSearch] = useState("");
+  const filteredItems = useMemo(() => resource.data.filter((item) => matchesSearch(item, search, fields)), [resource.data, search, fields]);
   useEffect(() => {
     const selectFields = fields.filter((field) => field.optionsEndpoint);
     if (!selectFields.length) return;
@@ -1181,7 +1190,7 @@ function CrudPage({
           .catch(() => [field.name, []]),
       ),
     ).then((results) => setOptions(Object.fromEntries(results)));
-  }, [endpoint]);
+  }, [endpoint, fields]);
   const createOption = async (field) => {
     const name = (optionDrafts[field.name] || "").trim();
     if (!name) {
@@ -1261,25 +1270,20 @@ function CrudPage({
       />
       <section className="admin-panel">
         <div className="list-toolbar">
-          <input placeholder={`جست‌وجو در ${title}`} />
-          <span>{resource.data.length} مورد</span>
+          <div className="admin-list-search"><span aria-hidden="true">⌕</span><input type="search" placeholder={`جست‌وجو در ${title}`} value={search} onChange={(event) => setSearch(event.target.value)} />{search && <button className="admin-list-search-clear" type="button" aria-label="پاک کردن جست‌وجو" onClick={() => setSearch("")}>×</button>}</div>
+          <span>{filteredItems.length} از {resource.data.length} مورد</span>
         </div>
         {resource.loading ? (
           <Skeleton count={6} />
-        ) : resource.data.length ? (
+        ) : filteredItems.length ? (
           <div className="entity-list">
-            {resource.data.map((item) => (
+            {filteredItems.map((item) => (
               <article key={item.id}>
                 <div className="entity-avatar">
-                  {(item.persian_name || item.name || item.title || "ب")[0]}
+                  {entityName(item)[0]}
                 </div>
                 <div>
-                  <b>
-                    {item.persian_name ||
-                      item.name ||
-                      item.title ||
-                      `مورد #${item.id}`}
-                  </b>
+                  <b>{entityName(item)}</b>
                   <small>
                     {item.description ||
                       item.specialty ||
@@ -1307,8 +1311,8 @@ function CrudPage({
           </div>
         ) : (
           <Empty
-            title={`${title} خالی است`}
-            text={`برای شروع، اولین ${type} را اضافه کنید.`}
+            title={search ? "نتیجه‌ای پیدا نشد" : `${title} خالی است`}
+            text={search ? "عبارت جست‌وجو را تغییر دهید یا آن را پاک کنید." : `برای شروع، اولین ${type} را اضافه کنید.`}
           />
         )}
       </section>
@@ -1576,6 +1580,8 @@ function EmployeeManagement() {
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState("");
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const filteredEmployees = useMemo(() => resource.data.filter((employee) => matchesSearch(employee, search)), [resource.data, search]);
   const update = (name, value) => setForm({ ...form, [name]: value });
   const submit = async (event) => {
     event.preventDefault();
@@ -1613,6 +1619,7 @@ function EmployeeManagement() {
       setSaving(false);
     }
   };
+
   return (
     <div className="admin-page">
       <Header
@@ -1629,19 +1636,18 @@ function EmployeeManagement() {
       />
       <section className="admin-panel">
         <div className="list-toolbar">
-          <input placeholder="جست‌وجو در کارمندان" />
-          <span>{resource.data.length} مورد</span>
+          <div className="admin-list-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="جست‌وجو در کارمندان" value={search} onChange={(event) => setSearch(event.target.value)} />{search && <button className="admin-list-search-clear" type="button" aria-label="پاک کردن جست‌وجو" onClick={() => setSearch("")}>×</button>}</div>
+          <span>{filteredEmployees.length} از {resource.data.length} مورد</span>
         </div>
         {resource.loading ? (
           <Skeleton count={6} />
-        ) : resource.data.length ? (
+        ) : filteredEmployees.length ? (
           <div className="entity-list">
-            {resource.data.map((employee) => (
+            {filteredEmployees.map((employee) => (
               <article key={employee.id}>
                 <div className="entity-avatar">{(employee.name || "ب")[0]}</div>
                 <div>
                   <b>{employee.name}</b>
-                  <small>{employee.specialty || "تخصص ثبت نشده"}</small>
                 </div>
                 <span>{employee.is_active ? "فعال" : "غیرفعال"}</span>
                 <button
@@ -1657,14 +1663,14 @@ function EmployeeManagement() {
                 >
                   ویرایش
                 </button>
-                <button onClick={() => setScheduleEmployee(employee)}>
+                <button style={{ width: "100px", padding: "8px", wordBreak: 'none', whiteSpace: 'nowrap' }} onClick={() => setScheduleEmployee(employee)}>
                   ویرایش ساعات کاری
                 </button>
               </article>
             ))}
           </div>
         ) : (
-          <Empty title="کارمندی ثبت نشده" />
+          <Empty title={search ? "کارمندی پیدا نشد" : "کارمندی ثبت نشده"} text={search ? "نام، شماره تماس یا تخصص دیگری را جست‌وجو کنید." : undefined} />
         )}
       </section>
       {open && (

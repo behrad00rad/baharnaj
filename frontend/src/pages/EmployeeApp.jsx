@@ -245,121 +245,48 @@ function NewAppointment() {
   return (
     <div className="employee-page">
       <Heading kicker="ثبت سریع" title="نوبت جدید" />
-      <form className="employee-form employee-card" onSubmit={submit}>
-        <label>
-          جستجوی مشتری
-          <input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setCustomer(null);
-            }}
-            placeholder="نام یا شماره تماس"
-          />
-        </label>
-        {customers.map((entry) => (
-          <button
-            className="employee-appointment"
-            type="button"
-            key={entry.id}
-            onClick={() => {
-              setCustomer(entry);
-              setQuery(entry.name);
-            }}
-          >
-            <span>
-              <b>{entry.name}</b>
-              <small>{entry.phone}</small>
-            </span>
-          </button>
-        ))}
-        {customer ? (
-          <div className="detail-notes">مشتری انتخاب‌شده: {customer.name}</div>
-        ) : (
-          <>
-            <label>
-              نام مشتری جدید
-              <input
-                value={newCustomer.name}
-                onChange={(event) =>
-                  setNewCustomer({ ...newCustomer, name: event.target.value })
-                }
-                required
-              />
-            </label>
-            <label>
-              شماره تماس
-              <input
-                type="tel"
-                value={newCustomer.phone}
-                onChange={(event) =>
-                  setNewCustomer({ ...newCustomer, phone: event.target.value })
-                }
-                required
-              />
-            </label>
-          </>
-        )}
-        <fieldset className="employee-service-list">
-          <legend>سرویس‌های من</legend>
+      <p className="new-appointment-lead">مشتری، سرویس و زمان مناسب را انتخاب کنید تا نوبت در برنامه شما ثبت شود.</p>
+      <form className="employee-form new-appointment-form" onSubmit={submit}>
+        <section className="employee-card appointment-step customer-step">
+          <div className="appointment-step-title"><span>۱</span><div><h2>مشتری</h2><p>مشتری قبلی را پیدا کنید یا اطلاعات مشتری جدید را وارد کنید.</p></div></div>
+          <label>
+            جستجوی مشتری
+            <input value={query} onChange={(event) => { setQuery(event.target.value); setCustomer(null); }} placeholder="نام یا شماره تماس" />
+          </label>
+          {customers.length > 0 && <div className="customer-search-results">{customers.map((entry) => (
+            <button className="customer-search-result" type="button" key={entry.id} onClick={() => { setCustomer(entry); setQuery(entry.name); }}>
+              <i aria-hidden="true">{entry.name?.[0] || "م"}</i><span><b>{entry.name}</b><small>{entry.phone}</small></span><em>انتخاب</em>
+            </button>
+          ))}</div>}
+          {customer ? (
+            <div className="selected-customer"><span><b>{customer.name}</b><small>{customer.phone}</small></span><button type="button" onClick={() => { setCustomer(null); setQuery(""); }}>تغییر مشتری</button></div>
+          ) : (
+            <div className="new-customer-fields"><label>نام مشتری جدید<input value={newCustomer.name} onChange={(event) => setNewCustomer({ ...newCustomer, name: event.target.value })} required /></label><label>شماره تماس<input type="tel" value={newCustomer.phone} onChange={(event) => setNewCustomer({ ...newCustomer, phone: event.target.value })} required /></label></div>
+          )}
+        </section>
+        <section className="employee-card appointment-step">
+          <div className="appointment-step-title"><span>۲</span><div><h2>سرویس‌ها</h2><p>یک یا چند سرویس را برای این نوبت انتخاب کنید.</p></div></div>
+          <fieldset className="employee-service-list">
+            <legend>سرویس‌های من</legend>
           {services.loading ? (
             <Skeleton />
           ) : (
             services.data.map((service) => (
-              <label key={service.id}>
-                <input
-                  type="checkbox"
-                  checked={selectedServices.includes(service.id)}
-                  onChange={() => toggleService(service.id)}
-                />{" "}
-                {service.persian_name} · {service.duration} دقیقه
+              <label className={selectedServices.includes(service.id) ? "selected" : ""} key={service.id}>
+                <input type="checkbox" checked={selectedServices.includes(service.id)} onChange={() => toggleService(service.id)} />
+                <span><b>{service.persian_name}</b>{service.duration && <small>{service.duration} دقیقه</small>}</span>
               </label>
             ))
           )}
-        </fieldset>
-        <label>
-          تاریخ
-          <JalaliDatePicker
-            value={date}
-            onChange={(value) => {
-              setDate(value);
-              setTime("");
-            }}
-          />
-        </label>
-        {date && selectedServices.length ? (
-          <>
-            <span className="employee-kicker">زمان‌های آزاد</span>
-            <div className="slot-grid">
-              {slots.map((slot) => (
-                <button
-                  className={time === slot ? "selected" : ""}
-                  type="button"
-                  onClick={() => setTime(slot)}
-                  key={slot}
-                >
-                  {slot}
-                </button>
-              ))}
-            </div>
-            {!slots.length && (
-              <small>زمان آزادی برای این ترکیب سرویس‌ها وجود ندارد.</small>
-            )}
-          </>
-        ) : null}
-        <label>
-          توضیحات
-          <textarea
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-          />
-        </label>
-        <button
-          className="employee-action"
-          disabled={saving || !selectedServices.length || !time}
-        >
-          {saving ? "در حال ثبت..." : "ثبت نوبت"}
-        </button>
+          </fieldset>
+        </section>
+        <section className="employee-card appointment-step">
+          <div className="appointment-step-title"><span>۳</span><div><h2>زمان نوبت</h2><p>تاریخ و یکی از زمان‌های آزاد را انتخاب کنید.</p></div></div>
+          <label>تاریخ<JalaliDatePicker value={date} onChange={(value) => { setDate(value); setTime(""); }} /></label>
+          {date && selectedServices.length ? <><span className="available-slots-title">زمان‌های آزاد</span><div className="slot-grid">{slots.map((slot) => <button className={time === slot ? "selected" : ""} type="button" onClick={() => setTime(slot)} key={slot}>{slot}</button>)}</div>{!slots.length && <small className="slot-empty">زمان آزادی برای این ترکیب سرویس‌ها وجود ندارد.</small>}</> : <p className="appointment-hint">ابتدا حداقل یک سرویس را انتخاب کنید تا زمان‌های آزاد نمایش داده شوند.</p>}
+        </section>
+        <section className="employee-card appointment-step appointment-notes"><label>توضیحات برای پذیرش (اختیاری)<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="نکته یا درخواست مشتری را اینجا بنویسید" /></label></section>
+        <button className="employee-action appointment-submit" disabled={saving || !selectedServices.length || !time}>{saving ? "در حال ثبت..." : "ثبت نوبت"}</button>
         {message && <small className="schedule-message">{message}</small>}
       </form>
     </div>
