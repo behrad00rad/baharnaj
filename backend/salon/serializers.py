@@ -6,13 +6,14 @@ from django.conf import settings
 from django.contrib.auth import password_validation
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from rest_framework import serializers
 
 from .models import (
     AccountLogin, AdminActionLog, Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile,
     EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, ServiceImage,
-    BookingHold, BookingHoldItem, FirebaseDevice, Notification, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
+    BlogCategory, BlogMedia, BlogPost, BlogPostRevision, BlogTag, BookingHold, BookingHoldItem, FirebaseDevice,
+    Notification, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
 )
 from .validators import validate_no_employee_overlap
 from .security import validate_image_upload, validate_phone
@@ -319,6 +320,249 @@ class ServiceImageSerializer(serializers.ModelSerializer):
 
     def validate_image(self, value):
         return validate_image_upload(value)
+
+
+class BlogCategorySerializer(serializers.ModelSerializer):
+    post_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = BlogCategory
+        fields = ("id", "name", "slug", "description", "is_active", "post_count", "created_at", "updated_at")
+        read_only_fields = ("created_at", "updated_at")
+
+    def validate_name(self, value):
+        value = " ".join(value.split())
+        duplicate = BlogCategory.objects.filter(name__iexact=value)
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if not value or duplicate.exists():
+            raise serializers.ValidationError("این دسته‌بندی قبلاً ثبت شده یا نام آن خالی است.")
+        return value
+
+
+class BlogTagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BlogTag
+        fields = ("id", "name", "slug", "created_at")
+        read_only_fields = ("created_at",)
+
+    def validate_name(self, value):
+        value = " ".join(value.split())
+        normalized = BlogTag.normalize(value)
+        duplicate = BlogTag.objects.filter(normalized_name=normalized)
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if not value or duplicate.exists():
+            raise serializers.ValidationError("این برچسب قبلاً ثبت شده یا نام آن خالی است.")
+        return value
+
+
+class BlogMediaSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BlogMedia
+        fields = ("id", "post", "image", "image_url", "alt_text", "caption", "display_order", "created_at")
+        read_only_fields = ("created_at",)
+        extra_kwargs = {"image": {"write_only": True}}
+
+    def get_image_url(self, obj):
+        return absolute_media_url(self.context.get("request"), obj.image.url if obj.image else "")
+
+    def validate_image(self, value):
+        return validate_image_upload(value)
+
+    def validate_alt_text(self, value):
+        value = " ".join(value.split())
+        if not value:
+            raise serializers.ValidationError("متن جایگزین تصویر الزامی است.")
+        return value
+
+
+ALLOWED_BLOG_BLOCKS = {"heading", "paragraph", "list", "quote", "separator", "image", "callout", "service", "cta"}
+
+
+def validate_blog_content(value):
+    if not isinstance(value, list):
+        raise serializers.ValidationError("محتوای مقاله باید مجموعه‌ای از بلوک‌های مرتب باشد.")
+    if len(value) > 300:
+        raise serializers.ValidationError("تعداد بلوک‌های مقاله بیش از حد مجاز است.")
+    cleaned = []
+    for index, block in enumerate(value):
+        if not isinstance(block, dict) or block.get("type") not in ALLOWED_BLOG_BLOCKS:
+            raise serializers.ValidationError(f"بلوک شماره {index + 1} معتبر نیست.")
+        block_type = block["type"]
+        item = {"type": block_type}
+        if block_type in {"heading", "paragraph", "quote"}:
+            item["text"] = str(block.get("text", ""))[:10000]
+        if block_type == "heading":
+            item["level"] = int(block.get("level", 2)) if str(block.get("level", 2)).isdigit() else 2
+            item["level"] = min(3, max(2, item["level"]))
+        if block_type == "list":
+            raw_items = block.get("items", [])
+            if not isinstance(raw_items, list):
+                raise serializers.ValidationError(f"فهرست شماره {index + 1} معتبر نیست.")
+            item["style"] = "ordered" if block.get("style") == "ordered" else "bullet"
+            item["items"] = [str(text)[:1000] for text in raw_items[:100]]
+        if block_type == "image":
+            try:
+                item["media_id"] = int(block.get("media_id"))
+            except (TypeError, ValueError):
+                raise serializers.ValidationError(f"تصویر بلوک شماره {index + 1} معتبر نیست.")
+        if block_type == "callout":
+            item["title"] = str(block.get("title", ""))[:220]
+            item["text"] = str(block.get("text", ""))[:3000]
+            item["tone"] = block.get("tone") if block.get("tone") in {"tip", "note", "warning"} else "note"
+        if block_type == "service":
+            try:
+                item["service_id"] = int(block.get("service_id"))
+            except (TypeError, ValueError):
+                raise serializers.ValidationError(f"سرویس بلوک شماره {index + 1} معتبر نیست.")
+        if block_type == "cta":
+            item["title"] = str(block.get("title", ""))[:220]
+            item["text"] = str(block.get("text", ""))[:1000]
+            raw_ids = block.get("service_ids", [])
+            item["service_ids"] = [int(identifier) for identifier in raw_ids if str(identifier).isdigit()][:20]
+        cleaned.append(item)
+    return cleaned
+
+
+class BlogPostListSerializer(serializers.ModelSerializer):
+    cover_image_url = serializers.SerializerMethodField()
+    category = BlogCategorySerializer(read_only=True)
+    author_name = serializers.SerializerMethodField()
+    tags = BlogTagSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = BlogPost
+        fields = ("id", "title", "slug", "excerpt", "cover_image_url", "cover_alt_text", "category", "tags", "author_name", "published_at", "scheduled_publish_at", "updated_at", "is_featured")
+
+    def get_cover_image_url(self, obj):
+        return absolute_media_url(self.context.get("request"), obj.cover_image.url if obj.cover_image else "")
+
+    def get_author_name(self, obj):
+        return obj.author.get_full_name() or obj.author.username
+
+
+class BlogPostDetailSerializer(BlogPostListSerializer):
+    media = BlogMediaSerializer(many=True, read_only=True)
+    related_services = serializers.SerializerMethodField()
+    og_image_url = serializers.SerializerMethodField()
+    related_articles = serializers.SerializerMethodField()
+
+    class Meta(BlogPostListSerializer.Meta):
+        fields = BlogPostListSerializer.Meta.fields + ("content", "seo_title", "seo_description", "og_image_url", "media", "related_services", "related_articles", "created_at")
+
+    def get_og_image_url(self, obj):
+        return absolute_media_url(self.context.get("request"), obj.og_image.url if obj.og_image else "")
+
+    def get_related_services(self, obj):
+        block_ids = {
+            block.get("service_id") for block in obj.content if block.get("type") == "service"
+        }
+        block_ids.update(
+            identifier
+            for block in obj.content if block.get("type") == "cta"
+            for identifier in block.get("service_ids", [])
+        )
+        queryset = Service.objects.filter(Q(pk__in=block_ids) | Q(pk__in=obj.related_services.values("pk")), is_active=True).distinct()
+        return ServiceSerializer(queryset, many=True, context=self.context).data
+
+    def get_related_articles(self, obj):
+        related = self.context.get("related_articles", [])
+        return BlogPostListSerializer(related, many=True, context=self.context).data
+
+
+class AdminBlogPostListSerializer(BlogPostListSerializer):
+    category_detail = BlogCategorySerializer(source="category", read_only=True)
+
+    class Meta(BlogPostListSerializer.Meta):
+        fields = BlogPostListSerializer.Meta.fields + ("category_detail", "status")
+
+
+class AdminBlogPostSerializer(serializers.ModelSerializer):
+    cover_image_url = serializers.SerializerMethodField()
+    og_image_url = serializers.SerializerMethodField()
+    category_detail = BlogCategorySerializer(source="category", read_only=True)
+    tag_details = BlogTagSerializer(source="tags", many=True, read_only=True)
+    media = BlogMediaSerializer(many=True, read_only=True)
+    author_name = serializers.SerializerMethodField()
+    related_service_details = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BlogPost
+        fields = ("id", "title", "slug", "excerpt", "content", "cover_image", "cover_image_url", "cover_alt_text", "category", "category_detail", "tags", "tag_details", "status", "author", "author_name", "published_at", "scheduled_publish_at", "created_at", "updated_at", "seo_title", "seo_description", "og_image", "og_image_url", "is_featured", "related_services", "related_service_details", "media")
+        read_only_fields = ("author", "status", "published_at", "created_at", "updated_at")
+        extra_kwargs = {
+            "cover_image": {"write_only": True, "required": False},
+            "og_image": {"write_only": True, "required": False},
+        }
+
+    def get_cover_image_url(self, obj):
+        return absolute_media_url(self.context.get("request"), obj.cover_image.url if obj.cover_image else "")
+
+    def get_og_image_url(self, obj):
+        return absolute_media_url(self.context.get("request"), obj.og_image.url if obj.og_image else "")
+
+    def get_author_name(self, obj):
+        return obj.author.get_full_name() or obj.author.username
+
+    def get_related_service_details(self, obj):
+        return BlogPostDetailSerializer(context=self.context).get_related_services(obj)
+
+    def validate_cover_image(self, value):
+        return validate_image_upload(value)
+
+    def validate_og_image(self, value):
+        return validate_image_upload(value)
+
+    def validate_content(self, value):
+        return validate_blog_content(value)
+
+    def validate(self, attrs):
+        next_status = attrs.get("status", getattr(self.instance, "status", BlogPost.STATUS_DRAFT))
+        scheduled_at = attrs.get("scheduled_publish_at", getattr(self.instance, "scheduled_publish_at", None))
+        if next_status == BlogPost.STATUS_SCHEDULED and not scheduled_at:
+            raise serializers.ValidationError({"scheduled_publish_at": "زمان انتشار برای مقاله زمان‌بندی‌شده الزامی است."})
+        if next_status == BlogPost.STATUS_SCHEDULED and scheduled_at and scheduled_at <= timezone.now():
+            raise serializers.ValidationError({"scheduled_publish_at": "زمان انتشار باید در آینده باشد."})
+        content = attrs.get("content", getattr(self.instance, "content", []))
+        image_ids = {block.get("media_id") for block in content if block.get("type") == "image"}
+        if image_ids and self.instance:
+            owned_ids = set(self.instance.media.filter(pk__in=image_ids).values_list("pk", flat=True))
+            if image_ids != owned_ids:
+                raise serializers.ValidationError({"content": "یکی از تصاویر به این مقاله تعلق ندارد."})
+        service_ids = {
+            block.get("service_id") for block in content if block.get("type") == "service"
+        }
+        service_ids.update(
+            identifier
+            for block in content if block.get("type") == "cta"
+            for identifier in block.get("service_ids", [])
+        )
+        if service_ids and Service.objects.filter(pk__in=service_ids, is_active=True).count() != len(service_ids):
+            raise serializers.ValidationError({"content": "یکی از سرویس‌های داخل مقاله معتبر یا فعال نیست."})
+        return attrs
+
+    def create(self, validated_data):
+        validated_data["author"] = self.context["request"].user
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        BlogPostRevision.objects.create(
+            post=instance,
+            editor=self.context["request"].user,
+            snapshot={
+                "title": instance.title,
+                "slug": instance.slug,
+                "excerpt": instance.excerpt,
+                "content": instance.content,
+                "status": instance.status,
+                "seo_title": instance.seo_title,
+                "seo_description": instance.seo_description,
+            },
+        )
+        return super().update(instance, validated_data)
 
 
 class AppointmentItemSerializer(serializers.ModelSerializer):

@@ -213,6 +213,150 @@ class ServiceImage(models.Model):
     is_active = models.BooleanField(default=True)
 
 
+class BlogCategory(models.Model):
+    name = models.CharField(max_length=120, unique=True)
+    slug = models.SlugField(max_length=140, unique=True, allow_unicode=True, blank=True)
+    description = models.CharField(max_length=320, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("name",)
+        verbose_name_plural = "blog categories"
+
+    def save(self, *args, **kwargs):
+        self.name = " ".join(self.name.split())
+        if not self.slug:
+            base = slugify(self.name, allow_unicode=True) or f"category-{uuid.uuid4().hex[:8]}"
+            candidate = base
+            suffix = 2
+            while BlogCategory.objects.exclude(pk=self.pk).filter(slug=candidate).exists():
+                candidate = f"{base}-{suffix}"
+                suffix += 1
+            self.slug = candidate
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class BlogTag(models.Model):
+    name = models.CharField(max_length=80, unique=True)
+    normalized_name = models.CharField(max_length=80, unique=True, editable=False)
+    slug = models.SlugField(max_length=100, unique=True, allow_unicode=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("name",)
+
+    @staticmethod
+    def normalize(value):
+        return " ".join((value or "").split()).casefold().replace("ي", "ی").replace("ك", "ک")
+
+    def save(self, *args, **kwargs):
+        self.name = " ".join(self.name.split())
+        self.normalized_name = self.normalize(self.name)
+        if not self.slug:
+            base = slugify(self.name, allow_unicode=True) or f"tag-{uuid.uuid4().hex[:8]}"
+            candidate = base
+            suffix = 2
+            while BlogTag.objects.exclude(pk=self.pk).filter(slug=candidate).exists():
+                candidate = f"{base}-{suffix}"
+                suffix += 1
+            self.slug = candidate
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
+class BlogPost(models.Model):
+    STATUS_DRAFT = "draft"
+    STATUS_PUBLISHED = "published"
+    STATUS_SCHEDULED = "scheduled"
+    STATUS_ARCHIVED = "archived"
+    STATUS_CHOICES = (
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_PUBLISHED, "Published"),
+        (STATUS_SCHEDULED, "Scheduled"),
+        (STATUS_ARCHIVED, "Archived"),
+    )
+
+    title = models.CharField(max_length=220)
+    slug = models.SlugField(max_length=240, unique=True, allow_unicode=True, blank=True)
+    excerpt = models.CharField(max_length=500, blank=True)
+    content = models.JSONField(default=list, blank=True)
+    cover_image = models.ImageField(upload_to="blog/covers/", blank=True)
+    cover_alt_text = models.CharField(max_length=220, blank=True)
+    category = models.ForeignKey(BlogCategory, on_delete=models.PROTECT, related_name="posts", null=True, blank=True)
+    tags = models.ManyToManyField(BlogTag, related_name="posts", blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    author = models.ForeignKey(User, on_delete=models.PROTECT, related_name="blog_posts")
+    published_at = models.DateTimeField(null=True, blank=True)
+    scheduled_publish_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    seo_title = models.CharField(max_length=160, blank=True)
+    seo_description = models.CharField(max_length=320, blank=True)
+    og_image = models.ImageField(upload_to="blog/social/", blank=True)
+    is_featured = models.BooleanField(default=False)
+    related_services = models.ManyToManyField(Service, related_name="blog_posts", blank=True)
+
+    class Meta:
+        ordering = ("-published_at", "-created_at")
+        indexes = (
+            models.Index(fields=("status", "published_at"), name="blog_status_pub_idx"),
+            models.Index(fields=("status", "scheduled_publish_at"), name="blog_status_sched_idx"),
+        )
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            base = slugify(self.title, allow_unicode=True) or f"article-{uuid.uuid4().hex[:8]}"
+            candidate = base
+            suffix = 2
+            while BlogPost.objects.exclude(pk=self.pk).filter(slug=candidate).exists():
+                candidate = f"{base}-{suffix}"
+                suffix += 1
+            self.slug = candidate
+        if self.status == self.STATUS_PUBLISHED and not self.published_at:
+            self.published_at = timezone.now()
+        super().save(*args, **kwargs)
+
+    @property
+    def is_public(self):
+        return self.status == self.STATUS_PUBLISHED or (
+            self.status == self.STATUS_SCHEDULED
+            and self.scheduled_publish_at
+            and self.scheduled_publish_at <= timezone.now()
+        )
+
+    def __str__(self):
+        return self.title
+
+
+class BlogMedia(models.Model):
+    post = models.ForeignKey(BlogPost, on_delete=models.CASCADE, related_name="media")
+    image = models.ImageField(upload_to="blog/content/")
+    alt_text = models.CharField(max_length=220)
+    caption = models.CharField(max_length=320, blank=True)
+    display_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("display_order", "id")
+
+
+class BlogPostRevision(models.Model):
+    post = models.ForeignKey(BlogPost, on_delete=models.CASCADE, related_name="revisions")
+    editor = models.ForeignKey(User, on_delete=models.PROTECT, related_name="blog_revisions")
+    snapshot = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+
 class WorkingSchedule(models.Model):
     employee = models.ForeignKey(EmployeeProfile, on_delete=models.PROTECT, related_name="working_schedules")
     weekday = models.PositiveSmallIntegerField(choices=[(day, str(day)) for day in range(7)])

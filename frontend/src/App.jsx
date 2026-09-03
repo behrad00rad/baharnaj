@@ -15,6 +15,8 @@ import Contact from "./pages/Contact";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
+import Blog from "./pages/Blog";
+import BlogArticle from "./pages/BlogArticle";
 import "./App.css";
 import { api, applyRefreshSession } from "./shared/api";
 import { clearSessionState, markAuthReady, useAuth } from "./shared/auth";
@@ -71,6 +73,8 @@ export default function App() {
             </PublicLayout>
           }
         />
+        <Route path="/blog" element={<PublicLayout><Blog /></PublicLayout>} />
+        <Route path="/blog/:slug" element={<PublicLayout><BlogArticle /></PublicLayout>} />
         <Route
           path="/book"
           element={

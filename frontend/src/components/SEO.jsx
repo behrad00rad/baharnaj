@@ -18,7 +18,7 @@ function removeHeadElement(key) {
   document.head.querySelector(`[data-baharnaj-seo="${key}"]`)?.remove();
 }
 
-export function SEO({ title, description, canonicalPath = "/", image, noindex = false, structuredData }) {
+export function SEO({ title, description, canonicalPath = "/", image, noindex = false, structuredData, ogType = "website" }) {
   useEffect(() => {
     const canonical = siteUrl(canonicalPath);
     const socialImage = publicImageUrl(image);
@@ -30,7 +30,7 @@ export function SEO({ title, description, canonicalPath = "/", image, noindex = 
     [
       ["og-title", { property: "og:title", content: title }],
       ["og-description", { property: "og:description", content: description }],
-      ["og-type", { property: "og:type", content: "website" }],
+      ["og-type", { property: "og:type", content: ogType }],
       ["og-url", { property: "og:url", content: canonical }],
       ["og-site-name", { property: "og:site_name", content: siteConfig.name }],
       ["og-locale", { property: "og:locale", content: "fa_IR" }],
@@ -56,6 +56,6 @@ export function SEO({ title, description, canonicalPath = "/", image, noindex = 
     } else {
       removeHeadElement("structured-data");
     }
-  }, [title, description, canonicalPath, image, noindex, structuredData]);
+  }, [title, description, canonicalPath, image, noindex, structuredData, ogType]);
   return null;
 }

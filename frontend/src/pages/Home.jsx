@@ -10,12 +10,14 @@ import {
 import { usePublicList, useServices } from "../shared/hooks";
 import { SEO } from "../components/SEO";
 import { beautySalonSchema } from "../shared/siteConfig";
+import { BlogCard } from "../components/BlogCard";
 
 export default function Home() {
   const { services, state: serviceState } = useServices();
   const { items: gallery, state: galleryState } = usePublicList("gallery/");
   const { items: employees, state: employeeState } =
     usePublicList("employees/");
+  const { items: articles, state: articleState } = usePublicList("blog/posts/?page_size=3");
   const heroAsset = gallery[0];
 
   return (
@@ -174,6 +176,11 @@ export default function Home() {
             empty="در حال حاضر متخصص فعالی برای نمایش ثبت نشده است."
           />
         )}
+      </section>
+
+      <section className="home-blog container">
+        <SectionHeader eyebrow="BAHARNAJ EDITORIAL / 06" title="آخرین مطالب" text="راهنماها و ایده‌هایی برای انتخاب آگاهانه‌تر و مراقبت بهتر." action={<ArrowLink to="/blog">مشاهده همه مطالب</ArrowLink>} />
+        {articleState === "ready" && articles.length ? <div className="home-blog-grid">{articles.slice(0, 3).map((post) => <BlogCard key={post.id} post={post} compact />)}</div> : <PublicState state={articleState} empty="هنوز مقاله‌ای منتشر نشده است." />}
       </section>
 
       <section className="booking-callout">

@@ -1,4 +1,5 @@
 from base64 import urlsafe_b64decode
+import copy
 from datetime import date as date_type, datetime, time, timedelta
 import json
 
@@ -6,23 +7,250 @@ from django.conf import settings
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.db import transaction
-from django.db.models import Count, Prefetch, Q, Sum
+from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, When
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.utils import timezone
-from rest_framework import generics, status, viewsets
+from rest_framework import generics, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import AdminActionLog, Appointment, AppointmentItem, BookingHold, BookingHoldItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
+from .models import AdminActionLog, Appointment, AppointmentItem, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BookingHoldSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+
+
+def public_blog_posts():
+    now = timezone.now()
+    return BlogPost.objects.filter(
+        Q(status=BlogPost.STATUS_PUBLISHED)
+        | Q(status=BlogPost.STATUS_SCHEDULED, scheduled_publish_at__lte=now)
+    ).select_related("category", "author").prefetch_related("tags")
+
+
+class BlogPagination(PageNumberPagination):
+    page_size = 9
+    page_size_query_param = "page_size"
+    max_page_size = 30
+
+
+class BlogPostListView(generics.ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = BlogPostListSerializer
+    pagination_class = BlogPagination
+
+    def get_queryset(self):
+        queryset = public_blog_posts()
+        category = self.request.query_params.get("category")
+        tag = self.request.query_params.get("tag")
+        query = self.request.query_params.get("q", "").strip()
+        featured = self.request.query_params.get("featured")
+        service = self.request.query_params.get("service")
+        if category:
+            queryset = queryset.filter(category_id=category) if category.isdigit() else queryset.filter(category__slug=category)
+        if tag:
+            queryset = queryset.filter(tags__id=tag) if tag.isdigit() else queryset.filter(tags__slug=tag)
+        if query:
+            queryset = queryset.filter(Q(title__icontains=query) | Q(excerpt__icontains=query))
+        if featured in {"1", "true"}:
+            queryset = queryset.filter(is_featured=True)
+        if service:
+            queryset = queryset.filter(related_services__id=service) if service.isdigit() else queryset.none()
+        return queryset.distinct().order_by("-is_featured", "-published_at", "-scheduled_publish_at", "-created_at")
+
+
+class BlogPostDetailView(generics.RetrieveAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = BlogPostDetailSerializer
+    lookup_field = "slug"
+
+    def get_queryset(self):
+        return public_blog_posts().prefetch_related("media", "related_services__images", "related_services__category", "related_services__employee_links__employee__user")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if getattr(self, "kwargs", {}).get("slug"):
+            current = self.get_queryset().filter(slug=self.kwargs["slug"]).first()
+            if current:
+                tag_ids = list(current.tags.values_list("id", flat=True))
+                related = public_blog_posts().exclude(pk=current.pk)
+                if current.category_id or tag_ids:
+                    related = related.filter(Q(category_id=current.category_id) | Q(tags__id__in=tag_ids))
+                related = related.annotate(
+                    category_match=Case(When(category_id=current.category_id, then=1), default=0, output_field=IntegerField()),
+                    tag_matches=Count("tags", filter=Q(tags__id__in=tag_ids), distinct=True),
+                ).order_by("-category_match", "-tag_matches", "-published_at").distinct()[:3]
+                context["related_articles"] = list(related)
+        return context
+
+
+class BlogCategoryListView(generics.ListAPIView):
+    permission_classes = (AllowAny,)
+    serializer_class = BlogCategorySerializer
+
+    def get_queryset(self):
+        now = timezone.now()
+        return BlogCategory.objects.filter(is_active=True).annotate(
+            post_count=Count(
+                "posts",
+                filter=Q(posts__status=BlogPost.STATUS_PUBLISHED)
+                | Q(posts__status=BlogPost.STATUS_SCHEDULED, posts__scheduled_publish_at__lte=now),
+                distinct=True,
+            )
+        ).filter(post_count__gt=0)
+
+
+class AdminBlogPostViewSet(viewsets.ModelViewSet):
+    permission_classes = (IsAdmin,)
+    serializer_class = AdminBlogPostSerializer
+    pagination_class = BlogPagination
+
+    def get_serializer_class(self):
+        return AdminBlogPostListSerializer if self.action == "list" else AdminBlogPostSerializer
+
+    def get_queryset(self):
+        queryset = BlogPost.objects.select_related("category", "author").prefetch_related(
+            "tags", "media", "related_services__images", "related_services__category", "related_services__employee_links__employee__user"
+        )
+        status_value = self.request.query_params.get("status")
+        category = self.request.query_params.get("category")
+        tag = self.request.query_params.get("tag")
+        author = self.request.query_params.get("author")
+        query = self.request.query_params.get("q", "").strip()
+        date_from = self.request.query_params.get("date_from")
+        date_to = self.request.query_params.get("date_to")
+        if status_value:
+            queryset = queryset.filter(status=status_value)
+        if category:
+            queryset = queryset.filter(category_id=category)
+        if tag:
+            queryset = queryset.filter(tags__id=tag)
+        if author:
+            queryset = queryset.filter(author_id=author)
+        if query:
+            queryset = queryset.filter(Q(title__icontains=query) | Q(excerpt__icontains=query) | Q(slug__icontains=query))
+        if date_from:
+            queryset = queryset.filter(updated_at__date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(updated_at__date__lte=date_to)
+        return queryset.distinct().order_by("-updated_at")
+
+    def perform_create(self, serializer):
+        post = serializer.save()
+        AdminActionLog.objects.create(actor=self.request.user, action="create", model_name="BlogPost", object_id=str(post.pk), details={"title": post.title})
+
+    def perform_update(self, serializer):
+        post = serializer.save()
+        AdminActionLog.objects.create(actor=self.request.user, action="update", model_name="BlogPost", object_id=str(post.pk), details={"fields": list(serializer.validated_data)})
+
+    def destroy(self, request, *args, **kwargs):
+        post = self.get_object()
+        if post.status in {BlogPost.STATUS_PUBLISHED, BlogPost.STATUS_SCHEDULED}:
+            return Response({"detail": "مقاله منتشرشده را ابتدا آرشیو کنید."}, status=status.HTTP_409_CONFLICT)
+        return super().destroy(request, *args, **kwargs)
+
+    def _change_status(self, request, post, next_status):
+        if next_status == BlogPost.STATUS_SCHEDULED:
+            scheduled = request.data.get("scheduled_publish_at")
+            if not scheduled:
+                raise ValidationError({"scheduled_publish_at": "زمان انتشار الزامی است."})
+            post.scheduled_publish_at = serializers.DateTimeField().to_internal_value(scheduled)
+            if post.scheduled_publish_at <= timezone.now():
+                raise ValidationError({"scheduled_publish_at": "زمان انتشار باید در آینده باشد."})
+        if next_status == BlogPost.STATUS_PUBLISHED and not post.published_at:
+            post.published_at = timezone.now()
+        post.status = next_status
+        post.save()
+        AdminActionLog.objects.create(actor=request.user, action=next_status, model_name="BlogPost", object_id=str(post.pk), details={"title": post.title})
+        return Response(self.get_serializer(post).data)
+
+    @action(detail=True, methods=("post",))
+    def publish(self, request, pk=None):
+        return self._change_status(request, self.get_object(), BlogPost.STATUS_PUBLISHED)
+
+    @action(detail=True, methods=("post",))
+    def unpublish(self, request, pk=None):
+        return self._change_status(request, self.get_object(), BlogPost.STATUS_DRAFT)
+
+    @action(detail=True, methods=("post",))
+    def archive(self, request, pk=None):
+        return self._change_status(request, self.get_object(), BlogPost.STATUS_ARCHIVED)
+
+    @action(detail=True, methods=("post",))
+    def schedule(self, request, pk=None):
+        return self._change_status(request, self.get_object(), BlogPost.STATUS_SCHEDULED)
+
+    @action(detail=True, methods=("post",))
+    def duplicate(self, request, pk=None):
+        source = self.get_object()
+        duplicate = BlogPost.objects.create(
+            title=f"کپی {source.title}", excerpt=source.excerpt, content=[],
+            category=source.category, author=request.user, seo_title=source.seo_title,
+            seo_description=source.seo_description, cover_alt_text=source.cover_alt_text,
+            cover_image=source.cover_image, og_image=source.og_image,
+        )
+        duplicate.tags.set(source.tags.all())
+        duplicate.related_services.set(source.related_services.all())
+        media_map = {}
+        for source_media in source.media.all():
+            cloned = BlogMedia.objects.create(
+                post=duplicate, image=source_media.image, alt_text=source_media.alt_text,
+                caption=source_media.caption, display_order=source_media.display_order,
+            )
+            media_map[source_media.pk] = cloned.pk
+        duplicate.content = copy.deepcopy(source.content)
+        for block in duplicate.content:
+            if block.get("type") == "image" and block.get("media_id") in media_map:
+                block["media_id"] = media_map[block["media_id"]]
+        duplicate.save(update_fields=("content", "updated_at"))
+        AdminActionLog.objects.create(actor=request.user, action="duplicate", model_name="BlogPost", object_id=str(duplicate.pk), details={"source": source.pk})
+        return Response(self.get_serializer(duplicate).data, status=status.HTTP_201_CREATED)
+
+
+class AdminBlogMediaViewSet(viewsets.ModelViewSet):
+    permission_classes = (IsAdmin,)
+    serializer_class = BlogMediaSerializer
+
+    def get_queryset(self):
+        queryset = BlogMedia.objects.select_related("post")
+        post = self.request.query_params.get("post")
+        return queryset.filter(post_id=post) if post else queryset
+
+    def perform_destroy(self, instance):
+        post = instance.post
+        post.content = [
+            block for block in post.content
+            if block.get("type") != "image" or block.get("media_id") != instance.pk
+        ]
+        post.save(update_fields=("content", "updated_at"))
+        instance.delete()
+
+
+class AdminBlogCategoryViewSet(viewsets.ModelViewSet):
+    permission_classes = (IsAdmin,)
+    serializer_class = BlogCategorySerializer
+    queryset = BlogCategory.objects.annotate(post_count=Count("posts"))
+
+    def destroy(self, request, *args, **kwargs):
+        category = self.get_object()
+        if category.posts.exists():
+            category.is_active = False
+            category.save(update_fields=("is_active", "updated_at"))
+            return Response(self.get_serializer(category).data)
+        return super().destroy(request, *args, **kwargs)
+
+
+class AdminBlogTagViewSet(viewsets.ModelViewSet):
+    permission_classes = (IsAdmin,)
+    serializer_class = BlogTagSerializer
+    queryset = BlogTag.objects.all()
 
 
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):

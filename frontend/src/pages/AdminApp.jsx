@@ -4,6 +4,7 @@ import { toGregorian, toJalaali } from "jalaali-js";
 import { JalaliDatePicker } from "../components/DatePicker";
 import { api, toman } from "../shared/api";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { BlogEditor, BlogManagement, BlogPreview } from "./AdminBlog";
 
 const today = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Tehran",
@@ -2161,6 +2162,9 @@ function AdminRouter() {
       />
       <Route path="finance" element={<Finance />} />
       <Route path="content" element={<Content />} />
+      <Route path="blog" element={<BlogManagement />} />
+      <Route path="blog/:id/edit" element={<BlogEditor />} />
+      <Route path="blog/:id/preview" element={<BlogPreview />} />
       <Route path="*" element={<DashboardHome />} />
     </Routes>
   );

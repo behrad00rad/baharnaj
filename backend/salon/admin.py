@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from .models import (
-    AccountLogin, Appointment, AppointmentItem, AppointmentStatusHistory, CustomerProfile,
+    AccountLogin, Appointment, AppointmentItem, AppointmentStatusHistory, BlogCategory, BlogMedia, BlogPost, BlogPostRevision, BlogTag, CustomerProfile,
     EmployeeProfile, EmployeeService, GalleryAsset, GalleryCategory, HomepageSection, Payment, Promotion,
     Refund, SalonSettings, ScheduleException, Service, ServiceCategory, ServiceImage,
     TimeOff, Transaction, User, WorkingSchedule,
@@ -21,6 +21,16 @@ admin.site.register((WorkingSchedule, ScheduleException, TimeOff))
 admin.site.register((Appointment, AppointmentItem, AppointmentStatusHistory))
 admin.site.register((Payment, Transaction, Refund))
 admin.site.register((GalleryAsset, GalleryCategory, Promotion, HomepageSection, SalonSettings, AccountLogin))
+admin.site.register((BlogCategory, BlogTag, BlogMedia, BlogPostRevision))
+
+
+@admin.register(BlogPost)
+class BlogPostAdmin(admin.ModelAdmin):
+    list_display = ("title", "status", "category", "author", "published_at", "updated_at", "is_featured")
+    list_filter = ("status", "category", "is_featured", "tags")
+    search_fields = ("title", "slug", "excerpt", "seo_title")
+    filter_horizontal = ("tags", "related_services")
+    readonly_fields = ("created_at", "updated_at", "published_at")
 
 
 @admin.register(Service)

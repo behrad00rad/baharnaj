@@ -8,6 +8,7 @@ const publicLinks = [
   ["/", "خانه"],
   ["/services", "سرویس‌ها"],
   ["/gallery", "گالری"],
+  ["/blog", "مجله"],
   ["/team", "تیم"],
   ["/about", "درباره ما"],
   ["/contact", "تماس"],

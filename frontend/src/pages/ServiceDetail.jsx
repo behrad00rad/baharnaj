@@ -3,7 +3,8 @@ import { SEO } from "../components/SEO";
 import { MediaImage, PublicState } from "../components/PublicUI";
 import { toman } from "../shared/api";
 import { siteConfig, siteUrl } from "../shared/siteConfig";
-import { useService, useServices } from "../shared/hooks";
+import { usePublicList, useService, useServices } from "../shared/hooks";
+import { BlogCard } from "../components/BlogCard";
 
 const serviceName = (service) => service?.persian_name || service?.name || "سرویس بهارناژ";
 
@@ -11,6 +12,7 @@ export default function ServiceDetail() {
   const { slug } = useParams();
   const { service, state } = useService(slug);
   const { services } = useServices();
+  const { items: articles } = usePublicList(service?.id ? `blog/posts/?service=${service.id}&page_size=3` : "blog/posts/?service=none");
 
   if (state === "loading") {
     return <><SEO title="در حال دریافت سرویس | بهارناژ" description="جزئیات خدمات سالن بهارناژ در رشت." noindex /><section className="container detail-state"><PublicState state="loading" empty="" /></section></>;
@@ -57,5 +59,6 @@ export default function ServiceDetail() {
       {images.length > 1 && <section className="service-photo-gallery" aria-labelledby="service-gallery-title"><p className="eyebrow">SERVICE GALLERY</p><h2 id="service-gallery-title">تصاویر {name}</h2><div>{images.slice(1).map((image) => <MediaImage key={image.id} src={image.image_url} alt={image.alt_text || `تصویر ${name} در بهارناژ`} />)}</div></section>}
     </article>
     {related.length > 0 && <section className="related-services container" aria-labelledby="related-services-title"><p className="eyebrow">MORE IN {category}</p><h2 id="related-services-title">سرویس‌های مرتبط</h2><div>{related.map((item) => <Link key={item.id} to={`/services/${item.slug || item.id}`}>{serviceName(item)} <span>←</span></Link>)}</div></section>}
+    {articles.length > 0 && <section className="article-related container" aria-labelledby="service-articles-title"><p className="eyebrow">READ BEFORE YOU BOOK</p><h2 id="service-articles-title">مطالب مرتبط با {name}</h2><div>{articles.map((post) => <BlogCard key={post.id} post={post} compact />)}</div></section>}
   </>;
 }

@@ -1,13 +1,14 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from .views import (AdminAppointmentViewSet, AdminEmployeeViewSet, AdminGalleryCategoryView, AdminServiceViewSet,
+from .views import (AdminAppointmentViewSet, AdminBlogCategoryViewSet, AdminBlogMediaViewSet, AdminBlogPostViewSet, AdminBlogTagViewSet, AdminEmployeeViewSet, AdminGalleryCategoryView, AdminServiceViewSet,
 					AdminUserViewSet, AdminCustomerOptionsView, AdminEmployeeEligibleUsersView, AdminEmployeeFinanceView, AdminRevenueView, AdminServiceCategoryViewSet, AdminTransactionTypesView, BookingHoldDeleteView,
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView, BookingHoldView,
 										EmployeeAppointmentsView, EmployeeCustomerOptionsView, EmployeeListView, EmployeeSelfBookingView, EmployeeSelfServiceListView, EmployeeStatisticsView, GalleryCategoryListView,
 					ServiceDetailView, ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
 					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
 					PaymentViewSet, FirebaseDeviceViewSet, NotificationViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
-										EmployeeEarningsView, EmployeeAppointmentPaymentReportView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView)
+					EmployeeEarningsView, EmployeeAppointmentPaymentReportView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView,
+					BlogCategoryListView, BlogPostDetailView, BlogPostListView)
 
 router = DefaultRouter()
 router.register("admin/services", AdminServiceViewSet, basename="admin-service")
@@ -26,6 +27,10 @@ router.register("firebase-devices", FirebaseDeviceViewSet, basename="firebase-de
 router.register("admin/commissions", EmployeeCommissionViewSet, basename="commission")
 router.register("admin/service-images", ServiceImageViewSet, basename="service-image")
 router.register("admin/activity", AdminActionLogViewSet, basename="admin-activity")
+router.register("admin/blog/posts", AdminBlogPostViewSet, basename="admin-blog-post")
+router.register("admin/blog/media", AdminBlogMediaViewSet, basename="admin-blog-media")
+router.register("admin/blog/categories", AdminBlogCategoryViewSet, basename="admin-blog-category")
+router.register("admin/blog/tags", AdminBlogTagViewSet, basename="admin-blog-tag")
 router.register("employee/appointment-items", EmployeeAppointmentItemViewSet, basename="employee-appointment-item")
 router.register("employee/time-off", EmployeeTimeOffViewSet, basename="employee-time-off")
 router.register("employee/schedule", EmployeeWorkingScheduleViewSet, basename="employee-schedule")
@@ -35,6 +40,9 @@ urlpatterns = [
 	path("services/<str:slug>/", ServiceDetailView.as_view(), name="service-detail"),
 	path("gallery/", GalleryListView.as_view(), name="gallery-list"),
 	path("gallery/categories/", GalleryCategoryListView.as_view(), name="gallery-category-list"),
+	path("blog/posts/", BlogPostListView.as_view(), name="blog-post-list"),
+	path("blog/posts/<str:slug>/", BlogPostDetailView.as_view(), name="blog-post-detail"),
+	path("blog/categories/", BlogCategoryListView.as_view(), name="blog-category-list"),
 	path("employees/", EmployeeListView.as_view(), name="employee-list"),
 	path("availability/", AvailabilityView.as_view(), name="availability-list"),
 	path("appointments/", AppointmentCreateView.as_view(), name="appointment-create"),

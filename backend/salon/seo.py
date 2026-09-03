@@ -3,9 +3,11 @@
 from xml.sax.saxutils import escape
 
 from django.conf import settings
+from django.db.models import Q
 from django.http import HttpResponse
+from django.utils import timezone
 
-from .models import Service
+from .models import BlogPost, Service
 
 
 def _absolute(path):
@@ -29,12 +31,21 @@ def robots_txt(request):
 
 
 def sitemap_xml(request):
-    public_paths = ("/", "/services", "/gallery", "/about", "/team", "/contact", "/privacy", "/terms")
+    public_paths = ("/", "/services", "/gallery", "/blog", "/about", "/team", "/contact", "/privacy", "/terms")
     locations = [_absolute(path) for path in public_paths]
     locations.extend(
         _absolute(f"/services/{service.slug}")
         for service in Service.objects.filter(is_active=True, is_bookable=True).exclude(slug="")
     )
     body = "".join(f"<url><loc>{escape(location)}</loc></url>" for location in locations)
+    now = timezone.now()
+    posts = BlogPost.objects.filter(
+        Q(status=BlogPost.STATUS_PUBLISHED)
+        | Q(status=BlogPost.STATUS_SCHEDULED, scheduled_publish_at__lte=now)
+    ).exclude(slug="")
+    body += "".join(
+        f"<url><loc>{escape(_absolute(f'/blog/{post.slug}'))}</loc><lastmod>{post.updated_at.date().isoformat()}</lastmod></url>"
+        for post in posts
+    )
     xml = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{body}</urlset>'
     return HttpResponse(xml, content_type="application/xml; charset=utf-8")

@@ -18,6 +18,7 @@ const links = [
   ["/customers", "مشتریان", "◌"],
   ["/finance", "مالی", "₺"],
   ["/content", "محتوا", "▧"],
+  ["/blog", "مقالات / وبلاگ", "¶"],
 ];
 
 export default function AdminLayout() {

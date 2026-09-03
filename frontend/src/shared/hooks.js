@@ -18,6 +18,18 @@ export function usePublicList(endpoint) {
   return { items, state }
 }
 
+export function usePublicDetail(endpoint) {
+  const [item, setItem] = useState(null)
+  const [state, setState] = useState('loading')
+  useEffect(() => {
+    let active = true
+    setState('loading')
+    api.get(endpoint).then(({ data }) => { if (active) { setItem(data); setState('ready') } }).catch((error) => { if (active) { setItem(null); setState(error.response?.status === 404 ? 'not-found' : 'error') } })
+    return () => { active = false }
+  }, [endpoint])
+  return { item, state }
+}
+
 export function useServices() {
   const [services, setServices] = useState([])
   const [state, setState] = useState('loading')
