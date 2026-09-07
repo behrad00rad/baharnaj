@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, Route, Routes, useNavigate } from "react-router-dom";
+import { Link, Route, Routes, useNavigate, useLocation } from "react-router-dom";
 import { api, clearSession, toman } from "../shared/api";
 import { JalaliDatePicker } from "../components/DatePicker";
 import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
@@ -409,6 +409,7 @@ function Calendar() {
   );
 }
 function CalendarWorkspace() {
+  const location = useLocation();
   const [selectedDate, setSelectedDate] = useState(() => isoDate(new Date()));
   const [mode, setMode] = useState("day");
   const [selected, setSelected] = useState(null);
@@ -421,6 +422,19 @@ function CalendarWorkspace() {
       ? `employee/appointments/?start=${weekStart}&end=${weekDays[6]}`
       : `employee/appointments/?date=${selectedDate}`;
   const appointments = useData(endpoint);
+  useEffect(() => {
+    const id = new URLSearchParams(location.search).get("appointment");
+    if (!/^\d+$/.test(id || "")) return;
+    let active = true;
+    api.get(`employee/appointments/?appointment=${id}`).then(({ data }) => {
+      const appointment = (data.results || data)[0];
+      if (!active || !appointment) return;
+      setSelected(appointment);
+      const date = appointment.items?.[0]?.date;
+      if (date) setSelectedDate(date);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [location.search]);
   const step = mode === "week" ? 7 : 1;
   const displayDays = mode === "week" ? weekDays : [selectedDate];
 
@@ -962,7 +976,7 @@ function Earnings() {
       <section className="employee-card employee-finance-chart">
         <div className="employee-finance-chart-head"><div><span className="employee-kicker">روند مالی</span><h2>{employeeFinanceMetrics[metric]}</h2></div><label>شاخص<select value={metric} onChange={(event) => setMetric(event.target.value)}>{Object.entries(employeeFinanceMetrics).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
         <div className="calendar-toggle">{Object.entries(employeeFinanceGroups).map(([value,label]) => <button key={value} className={grouping === value ? "active" : ""} onClick={() => setGrouping(value)}>{label}</button>)}</div>
-        {resource.data.series?.length ? <ResponsiveContainer width="100%" height={270}><BarChart data={resource.data.series}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={(value) => ["commission","revenue"].includes(metric) ? toman(value) : new Intl.NumberFormat("fa-IR").format(value)} /><Bar name={employeeFinanceMetrics[metric]} dataKey={metric} fill="#226b61" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer> : <Empty title="در این بازه داده‌ای برای نمودار نیست" />}
+        {resource.data.series?.length ? <ResponsiveContainer width="100%" height={270}><BarChart data={resource.data.series}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><YAxis tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><Tooltip formatter={(value) => ["commission","revenue"].includes(metric) ? toman(value) : new Intl.NumberFormat("fa-IR").format(value)} /><Bar name={employeeFinanceMetrics[metric]} dataKey={metric} fill="var(--color-chart-1)" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer> : <Empty title="در این بازه داده‌ای برای نمودار نیست" />}
       </section>
       <section className="employee-card employee-service-performance"><div className="day-label"><h2>عملکرد سرویس‌های من</h2><span>بر اساس پرداخت تأییدشده</span></div>{resource.data.services?.length ? resource.data.services.slice(0,8).map((service) => <div key={service.id}><span><b>{service.name}</b><small>{service.paid_services} اجرای پرداخت‌شده</small></span><i><b style={{ width: `${service.share}%` }} /></i><strong>{toman(service.revenue)}</strong></div>) : <Empty title="سرویس پرداخت‌شده‌ای نیست" />}</section>
       <div className="day-label">
@@ -1117,7 +1131,7 @@ function Profile() {
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
   const logout = async () => {
-    await disableCurrentFirebaseDevice();
+    await disableCurrentFirebaseDevice().catch(() => {});
     clearSession();
     navigate("/login", { replace: true });
   };

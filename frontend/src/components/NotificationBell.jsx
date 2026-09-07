@@ -1,25 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../shared/api";
-import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
+import { disableCurrentFirebaseDevice, enableFirebaseDevice, syncFirebaseDevice } from "../shared/firebasePush";
 import {
   listenForForegroundMessages,
-  registerFirebaseDevice,
 } from "../shared/firebase";
 import "./Notifications.css";
 
-function PushPermissionButton({ onNotificationSent }) {
+function PushPermissionButton({ onNotificationSent, enabled, onEnabled }) {
   const supported = "serviceWorker" in navigator && "Notification" in window;
   const [state, setState] = useState(
     supported ? Notification.permission : "unsupported",
   );
   const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    if (!supported || Notification.permission !== "granted") return;
-    // Permission is never requested here; only the explicit button below does that.
-    setState("granted");
-  }, [supported]);
 
   const enable = async () => {
     setMessage("");
@@ -34,8 +27,8 @@ function PushPermissionButton({ onNotificationSent }) {
         );
         return;
       }
-      const device = await registerFirebaseDevice();
-      await api.post("firebase-devices/", device);
+      await enableFirebaseDevice();
+      onEnabled(true);
       setState("enabled");
       setMessage("اعلان‌های این دستگاه فعال شد.");
     } catch (error) {
@@ -44,9 +37,12 @@ function PushPermissionButton({ onNotificationSent }) {
   };
 
   const disable = async () => {
-    await disableCurrentFirebaseDevice();
-    setState("granted");
-    setMessage("اعلان‌های این دستگاه غیرفعال شد.");
+    try {
+      await disableCurrentFirebaseDevice({ explicit: true });
+      onEnabled(false);
+      setState("granted");
+      setMessage("اعلان‌های این دستگاه غیرفعال شد.");
+    } catch { setMessage("غیرفعال‌سازی کامل نشد؛ دوباره تلاش کنید."); }
   };
 
   const test = async () => {
@@ -54,7 +50,7 @@ function PushPermissionButton({ onNotificationSent }) {
     try {
       await api.post("firebase-devices/test/");
       setMessage(
-        "اعلان آزمایشی ارسال شد؛ زنگ اعلان و اعلان سیستم را بررسی کنید.",
+        "اعلان آزمایشی در پنل ثبت شد. دریافت اعلان مرورگر را هم بررسی کنید.",
       );
       onNotificationSent();
     } catch {
@@ -73,16 +69,16 @@ function PushPermissionButton({ onNotificationSent }) {
     (state === "denied" ? "اجازه اعلان در تنظیمات مرورگر مسدود شده است." : "");
   return (
     <div className="push-setting">
-      <span>اعلان‌های مرورگر: {state === "enabled" ? "فعال" : "غیرفعال"}</span>
+      <span>اعلان‌های مرورگر: {enabled ? "فعال" : "غیرفعال"}</span>
       <div className="push-actions">
         <button
           type="button"
-          onClick={state === "enabled" ? disable : enable}
+          onClick={enabled ? disable : enable}
           disabled={state === "denied"}
         >
-          {state === "enabled" ? "غیرفعال‌سازی" : "فعال‌سازی اعلان‌ها"}
+          {enabled ? "غیرفعال‌سازی" : "فعال‌سازی اعلان‌ها"}
         </button>
-        {state === "enabled" && (
+        {enabled && (
           <button type="button" onClick={test}>
             ارسال آزمایشی
           </button>
@@ -101,6 +97,16 @@ export default function NotificationBell() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const root = useRef(null);
+  const [enabled, setEnabled] = useState(false);
+  const [foreground, setForeground] = useState(null);
+  useEffect(() => {
+    let active = true;
+    const sync = () => syncFirebaseDevice().then(value => { if (active) setEnabled(value); }).catch(() => { if (active) setEnabled(false); });
+    sync();
+    window.addEventListener("focus", sync);
+    const timer = window.setInterval(sync, 60 * 60 * 1000);
+    return () => { active = false; window.removeEventListener("focus", sync); window.clearInterval(timer); };
+  }, []);
 
   const refreshCount = useCallback(
     () =>
@@ -131,7 +137,8 @@ export default function NotificationBell() {
   useEffect(() => {
     let active = true;
     let unsubscribe = () => {};
-    listenForForegroundMessages(() => {
+    listenForForegroundMessages((payload) => {
+      setForeground(payload.data || null);
       refreshCount();
       if (open) refreshList();
     })
@@ -158,11 +165,13 @@ export default function NotificationBell() {
 
   const select = async (notification) => {
     if (!notification.is_read) {
-      await api.post(`notifications/${notification.id}/read/`).catch(() => {});
-      setUnread((value) => Math.max(0, value - 1));
+      try {
+        await api.post(`notifications/${notification.id}/read/`);
+        refreshCount();
+      } catch { setError("به‌روزرسانی اعلان ممکن نیست؛ دوباره تلاش کنید."); return; }
     }
     setOpen(false);
-    if (notification.target_url?.startsWith("/"))
+    if (notification.target_url?.startsWith("/") && !notification.target_url.startsWith("//") && !notification.target_url.includes("\\"))
       navigate(notification.target_url);
   };
   const readAll = async () => {
@@ -205,6 +214,7 @@ export default function NotificationBell() {
           <b>{unread > 99 ? "۹۹+" : unread.toLocaleString("fa-IR")}</b>
         )}
       </button>
+      {foreground && <div className="notification-toast" role="status"><button onClick={() => { setOpen(true); refreshList(); setForeground(null); }}>{foreground.title}<span>{foreground.body}</span></button><button aria-label="بستن اعلان" onClick={() => setForeground(null)}>×</button></div>}
       {open && (
         <section className="notification-panel">
           <header>
@@ -234,7 +244,7 @@ export default function NotificationBell() {
               </button>
             ))}
           </div>
-          <PushPermissionButton onNotificationSent={notificationSent} />
+          <PushPermissionButton onNotificationSent={notificationSent} enabled={enabled} onEnabled={setEnabled} />
         </section>
       )}
     </div>

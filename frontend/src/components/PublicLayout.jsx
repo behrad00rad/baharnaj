@@ -1,3 +1,4 @@
+import TextSizeControl from "./TextSizeControl";
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../shared/auth";
@@ -150,6 +151,7 @@ export function PublicLayout({ children }) {
           </div>
         </div>
         <div className="container footer-bottom">
+          <TextSizeControl />
           <span>
             ©{" "}
             {new Intl.NumberFormat("fa-IR", { useGrouping: false }).format(

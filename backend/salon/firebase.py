@@ -31,7 +31,7 @@ def _firebase_app():
         options = {"projectId": settings.FIREBASE_PROJECT_ID} if settings.FIREBASE_PROJECT_ID else None
         return firebase_admin.initialize_app(credential, options)
     except Exception:
-        logger.exception("FCM delivery skipped: Firebase Admin could not be initialized")
+        logger.warning("FCM delivery skipped: Firebase Admin could not be initialized")
         return None
 
 
@@ -53,4 +53,4 @@ def send_fcm_notification(notification):
             FirebaseDevice.objects.filter(pk=device.pk).update(is_active=False)
             logger.info("Disabled invalid FCM registration", extra={"notification_id": notification.pk, "device_id": device.pk})
         except Exception:
-            logger.exception("FCM delivery failed", extra={"notification_id": notification.pk, "device_id": device.pk})
+            logger.warning("FCM delivery failed", extra={"notification_id": notification.pk, "device_id": device.pk})

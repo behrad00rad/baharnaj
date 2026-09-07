@@ -162,7 +162,11 @@ MAILERS = {
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@baharnaj.local")
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "")
 FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
-FIREBASE_SERVICE_ACCOUNT_FILE = os.getenv("FIREBASE_SERVICE_ACCOUNT_FILE", "")
+# Local credentials stay outside frontend builds; production can override this path.
+_local_firebase_credentials = BASE_DIR / "baharnaj-firebase-adminsdk.json"
+FIREBASE_SERVICE_ACCOUNT_FILE = os.getenv("FIREBASE_SERVICE_ACCOUNT_FILE", "") or (str(_local_firebase_credentials) if _local_firebase_credentials.is_file() else "")
+if FIREBASE_SERVICE_ACCOUNT_FILE and not Path(FIREBASE_SERVICE_ACCOUNT_FILE).is_absolute():
+    FIREBASE_SERVICE_ACCOUNT_FILE = str(BASE_DIR / FIREBASE_SERVICE_ACCOUNT_FILE)
 FIREBASE_SERVICE_ACCOUNT_CONFIGURED = bool(FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_FILE or FIREBASE_PROJECT_ID)
 
 REST_FRAMEWORK = {

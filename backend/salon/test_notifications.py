@@ -94,3 +94,80 @@ class NotificationTests(TestCase):
         client.force_authenticate(self.admin)
         self.assertEqual(client.post(f"/api/v1/admin/payments/{rejected.data['id']}/reject/").status_code, 200)
         self.assertTrue(Notification.objects.filter(recipient=self.employee_users[0], type="payment_rejected", payment_id=rejected.data["id"]).exists())
+
+    def test_cancellation_notifies_admin_and_other_employees_once(self):
+        from .notifications import notify_appointment_cancelled
+        for _ in range(2):
+            notify_appointment_cancelled(self.appointment, actor=self.employee_users[0])
+        self.assertEqual(Notification.objects.filter(recipient=self.admin, type="appointment_cancelled").count(), 1)
+        self.assertEqual(Notification.objects.filter(recipient=self.employee_users[1], type="appointment_cancelled").count(), 1)
+        self.assertFalse(Notification.objects.filter(recipient=self.employee_users[0]).exists())
+
+    def test_guest_reschedule_notifies_admin(self):
+        from django.contrib.auth.models import AnonymousUser
+        from .notifications import notify_appointment_rescheduled
+        notify_appointment_rescheduled(self.appointment, actor=AnonymousUser())
+        self.assertTrue(Notification.objects.filter(recipient=self.admin, type="appointment_rescheduled").exists())
+
+    def test_multiple_devices_read_all_and_scoped_disable(self):
+        from .models import FirebaseDevice
+        client = APIClient()
+        client.force_authenticate(self.employee_users[0])
+        for token in ['first-device', 'second-device']:
+            self.assertEqual(client.post('/api/v1/firebase-devices/', {'token': token}).status_code, 201)
+        self.assertEqual(FirebaseDevice.objects.filter(user=self.employee_users[0], is_active=True).count(), 2)
+        client.force_authenticate(self.employee_users[1])
+        client.post('/api/v1/firebase-devices/disable/', {'token': 'first-device'})
+        self.assertTrue(FirebaseDevice.objects.get(token='first-device').is_active)
+        mine = notify_users([self.employee_users[1]], type='appointment_updated', title='Mine', message='Mine')[0]
+        other = notify_users([self.employee_users[0]], type='appointment_updated', title='Other', message='Other')[0]
+        self.assertEqual(client.post('/api/v1/notifications/read-all/').status_code, 200)
+        mine.refresh_from_db(); other.refresh_from_db()
+        self.assertTrue(mine.is_read)
+        self.assertFalse(other.is_read)
+
+    def test_invalid_device_is_disabled_and_other_device_receives_push(self):
+        from firebase_admin import messaging
+        from .firebase import send_fcm_notification
+        from .models import FirebaseDevice
+        notification = notify_users([self.employee_users[0]], type='appointment_updated', title='Saved', message='Saved')[0]
+        first = FirebaseDevice.objects.create(user=self.employee_users[0], token='first')
+        second = FirebaseDevice.objects.create(user=self.employee_users[0], token='second')
+        with patch('salon.firebase._firebase_app', return_value=object()), patch('firebase_admin.messaging.send', side_effect=[messaging.UnregisteredError('expired'), 'ok']) as send:
+            send_fcm_notification(notification)
+        self.assertEqual(send.call_count, 2)
+        self.assertEqual(FirebaseDevice.objects.filter(pk__in=[first.pk, second.pk], is_active=True).count(), 1)
+
+    def test_partial_employee_cancellation_reaches_admin_without_notifying_unaffected_employee(self):
+        from .notifications import notify_appointment_cancelled
+        item = self.appointment.items.first()
+        for _ in range(2):
+            notify_appointment_cancelled(self.appointment, actor=self.employee_users[0], item=item)
+        self.assertEqual(Notification.objects.filter(recipient=self.admin, type='appointment_cancelled').count(), 1)
+        self.assertFalse(Notification.objects.filter(recipient=self.employee_users[1]).exists())
+
+    def test_notification_appointment_link_is_scoped_to_employee(self):
+        client = APIClient()
+        client.force_authenticate(self.employee_users[0])
+        response = client.get(f'/api/v1/employee/appointments/?appointment={self.appointment.pk}')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item['id'] for item in response.data], [self.appointment.pk])
+        self.assertEqual(client.get('/api/v1/employee/appointments/?appointment=9999999').data, [])
+        self.assertEqual(client.get('/api/v1/employee/appointments/?appointment=bad').status_code, 400)
+
+    def test_employee_cancel_endpoint_persists_admin_notification(self):
+        client = APIClient()
+        client.force_authenticate(self.employee_users[0])
+        item = self.appointment.items.get(employee=self.employees[0])
+        response = client.post(f'/api/v1/employee/appointment-items/{item.pk}/action/', {'status': 'cancel', 'reason': 'عدم امکان حضور'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Notification.objects.filter(recipient=self.admin, type='appointment_cancelled').count(), 1)
+        self.assertFalse(Notification.objects.filter(recipient=self.employee_users[1]).exists())
+
+    def test_admin_partial_cancellation_notifies_only_affected_employee(self):
+        from .notifications import notify_appointment_cancelled
+        item = self.appointment.items.get(employee=self.employees[0])
+        notify_appointment_cancelled(self.appointment, actor=self.admin, item=item)
+        self.assertTrue(Notification.objects.filter(recipient=self.employee_users[0], type='appointment_cancelled').exists())
+        self.assertFalse(Notification.objects.filter(recipient=self.admin).exists())
+        self.assertFalse(Notification.objects.filter(recipient=self.employee_users[1]).exists())

@@ -6,7 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>
       (() => {
-        const saved = localStorage.getItem("baharnaj-theme");
+        let saved, size;
+        try { saved = localStorage.getItem("baharnaj-theme"); size = localStorage.getItem("baharnaj-text-size"); } catch {}
+        document.documentElement.dataset.textSize = ["compact", "normal", "large"].includes(size) ? size : "normal";
         const theme = saved === "light" || saved === "dark"
           ? saved
           : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";

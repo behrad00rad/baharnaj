@@ -32,13 +32,12 @@ export default function Home() {
         <div className="hero-copy">
           <p className="eyebrow">BAHARNAJ BEAUTY STUDIO</p>
           <h1>
-            سالن زیبایی بهارناژ در رشت؛ زیبایی را
+            زیبایی را
             <br />
             <em>خودت تعریف کن.</em>
           </h1>
           <p className="lead">
-            سرویس، متخصص و زمان مناسب را انتخاب کن؛ تجربه تو از همین‌جا شروع
-            می‌شود.
+            استایل بعدی‌ات را انتخاب کن؛ زمانش را آنلاین رزرو کن.
           </p>
           <div className="hero-actions">
             <Link className="button" to="/book">
@@ -48,7 +47,7 @@ export default function Home() {
           </div>
           <div className="hero-index">
             <span>استودیو زیبایی بهارناژ</span>
-            <span>انتخاب آگاهانه · تجربه شخصی</span>
+            <span>Hair · Nail · Makeup</span>
           </div>
         </div>
         <div className="hero-visual">
@@ -73,8 +72,7 @@ export default function Home() {
       <section className="manifesto container">
         <span className="manifesto-number">۰۱</span>
         <p>
-          بهارناژ جایی برای انتخاب‌های شخصی توست؛ بدون نسخه‌های تکراری، با تمرکز
-          روی چیزی که واقعاً می‌خواهی.
+          از یک تغییر کوچک تا یک استایل تازه؛ به سبک خودت.
         </p>
       </section>
 
@@ -83,7 +81,7 @@ export default function Home() {
           <SectionHeader
             eyebrow="SERVICES / 02"
             title="سرویس‌هایی برای حالِ تازه."
-            text="قیمت، مدت و جزئیات هر سرویس شفاف است؛ انتخاب از تو، اجرای دقیق از ما."
+            text="سرویس‌ها، قیمت‌ها و زمان هر کدام را ببین."
             action={<ArrowLink to="/services">همه سرویس‌ها</ArrowLink>}
           />
           <ServiceGrid services={services.slice(0, 6)} state={serviceState} />
@@ -160,8 +158,8 @@ export default function Home() {
       <section className="home-team container">
         <SectionHeader
           eyebrow="THE TEAM / 05"
-          title="آدم‌های پشت تجربه"
-          text="متخصصان فعال بهارناژ؛ همان‌هایی که هنگام رزرو انتخاب می‌کنی."
+          title="تیم بهارناژ"
+          text="با تیم بهارناژ آشنا شو."
           action={<ArrowLink to="/team">دیدن تیم</ArrowLink>}
         />
         {employeeState === "ready" && employees.length ? (

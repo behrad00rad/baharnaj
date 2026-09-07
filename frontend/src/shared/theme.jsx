@@ -1,11 +1,14 @@
 import { createContext, useContext, useMemo, useState } from "react";
 
 export const THEME_STORAGE_KEY = "baharnaj-theme";
+export const TEXT_SIZE_STORAGE_KEY = "baharnaj-text-size";
+function readPreference(key) { try { return window.localStorage.getItem(key); } catch { return null; } }
+function savePreference(key, value) { try { window.localStorage.setItem(key, value); } catch { /* Preferences still work for this session. */ } }
 const ThemeContext = createContext(null);
 
 function preferredTheme() {
   if (typeof window === "undefined") return "light";
-  const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+  const saved = readPreference(THEME_STORAGE_KEY);
   if (saved === "light" || saved === "dark") return saved;
   return window.matchMedia?.("(prefers-color-scheme: dark)").matches
     ? "dark"
@@ -24,23 +27,36 @@ export function ThemeProvider({ children }) {
     return initial;
   });
 
+  const [textSize, setTextSizeState] = useState(() => {
+    const saved = readPreference(TEXT_SIZE_STORAGE_KEY);
+    const size = ["compact", "normal", "large"].includes(saved) ? saved : "normal";
+    document.documentElement.dataset.textSize = size;
+    return size;
+  });
   const value = useMemo(
     () => ({
       theme,
+      textSize,
+      setTextSize(size) {
+        if (!["compact", "normal", "large"].includes(size)) return;
+        savePreference(TEXT_SIZE_STORAGE_KEY, size);
+        document.documentElement.dataset.textSize = size;
+        setTextSizeState(size);
+      },
       setTheme(nextTheme) {
         if (nextTheme !== "light" && nextTheme !== "dark") return;
-        window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+        savePreference(THEME_STORAGE_KEY, nextTheme);
         applyTheme(nextTheme);
         setThemeState(nextTheme);
       },
       toggleTheme() {
         const nextTheme = theme === "dark" ? "light" : "dark";
-        window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+        savePreference(THEME_STORAGE_KEY, nextTheme);
         applyTheme(nextTheme);
         setThemeState(nextTheme);
       },
     }),
-    [theme],
+    [theme, textSize],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

@@ -30,7 +30,7 @@ export async function registerFirebaseDevice() {
   const messaging = await getFirebaseMessaging()
   if (!messaging) {
     const missing = missingEnvironment()
-    throw new Error(missing.length ? `تنظیمات Firebase ناقص است: ${missing.join(', ')}` : 'مرورگر شما از اعلان‌های مرورگر پشتیبانی نمی‌کند.')
+    throw new Error(missing.length ? 'اعلان‌های مرورگر هنوز آماده نیست. اعلان‌ها در پنل در دسترس‌اند.' : 'مرورگر شما از اعلان‌های مرورگر پشتیبانی نمی‌کند.')
   }
   const workerUrl = new URL('/firebase-messaging-sw.js', window.location.origin)
   workerUrl.search = new URLSearchParams(Object.entries(config).filter(([, value]) => value)).toString()
@@ -45,10 +45,8 @@ export async function listenForForegroundMessages(onNotification) {
   return messaging ? onMessage(messaging, onNotification) : () => {}
 }
 
-export async function unregisterFirebaseDevice(registration) {
+export async function unregisterFirebaseDevice() {
   const messaging = await getFirebaseMessaging()
   if (!messaging) return null
-  const token = await getToken(messaging, { serviceWorkerRegistration: registration })
   await deleteToken(messaging)
-  return token
 }

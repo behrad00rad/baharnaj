@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, Route, Routes, useNavigate } from "react-router-dom";
+import { Link, Route, Routes, useNavigate, useLocation } from "react-router-dom";
 import { toGregorian, toJalaali } from "jalaali-js";
 import { JalaliDatePicker } from "../components/DatePicker";
 import { api, toman } from "../shared/api";
@@ -298,6 +298,7 @@ function AppointmentRow({ item, onClick }) {
 }
 
 function Appointments() {
+  const location = useLocation();
   const employees = useResource("admin/employees/");
   const services = useResource("services/");
   const [selected, setSelected] = useState(null);
@@ -318,6 +319,18 @@ function Appointments() {
     ...(service && { service }),
   });
   const resource = useResource(`admin/appointments/?${query}`);
+  useEffect(() => {
+    const id = new URLSearchParams(location.search).get("appointment");
+    if (!/^\d+$/.test(id || "")) return;
+    let active = true;
+    api.get(`admin/appointments/${id}/`).then(({ data }) => {
+      if (!active) return;
+      setSelected(data);
+      const date = data.items?.[0]?.date;
+      if (date) { setSelectedDate(date); setVisibleMonth(`${date.slice(0, 7)}-01`); }
+    }).catch(() => { if (active) setToast("این نوبت در دسترس نیست."); });
+    return () => { active = false; };
+  }, [location.search]);
   const selectedAppointments = resource.data.filter((item) =>
     item.items?.some((line) => line.date === selectedDate),
   );
@@ -1961,7 +1974,7 @@ const paymentLabels = { pending: "در انتظار تأیید", paid: "تأیی
 const appointmentPaymentLabels = { unpaid: "پرداخت‌نشده", partially_paid: "پرداخت جزئی", paid: "تسویه‌شده", partially_refunded: "بازپرداخت جزئی", refunded: "بازپرداخت‌شده" };
 const methodLabels = { cash: "نقدی", card: "کارت", bank_transfer: "انتقال بانکی", online: "آنلاین", other: "سایر" };
 const transactionLabels = { payment: "پرداخت", refund: "بازپرداخت", commission: "کمیسیون", expense: "هزینه" };
-const chartColors = ["#2d7d70", "#d5a26d", "#7c9b91", "#b75d55", "#8c72a6"];
+const chartColors = Array.from({ length: 5 }, (_, index) => `var(--color-chart-${index + 1})`);
 const financeGroups = { daily: "روزانه", weekly: "هفتگی", monthly: "ماهانه" };
 const adminChartMetrics = { revenue: "درآمد خالص", payments: "تعداد پرداخت‌ها", appointments: "نوبت‌های تکمیل‌شده", commission: "کمیسیون", average_payment: "میانگین پرداخت" };
 const employeeChartMetrics = { revenue: "درآمد خالص", payments: "تعداد پرداخت‌ها", appointments: "نوبت‌های تکمیل‌شده", commission: "کمیسیون", services: "سرویس‌های تکمیل‌شده" };
@@ -1998,7 +2011,7 @@ function FinanceChartControls({ grouping, onGrouping, metric, onMetric, metrics 
 function FinanceSeriesChart({ data, metric, metrics = adminChartMetrics, height = 300 }) {
   const monetary = ["revenue", "commission", "average_payment"].includes(metric);
   if (!data?.length) return <Empty title="داده‌ای برای نمودار نیست" />;
-  return <ResponsiveContainer width="100%" height={height}><BarChart data={data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: 11 }} /><YAxis tick={{ fontSize: 11 }} /><Tooltip formatter={(value) => monetary ? toman(value) : new Intl.NumberFormat("fa-IR").format(value)} /><Bar name={metrics[metric]} dataKey={metric} fill="#2d7d70" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer>;
+  return <ResponsiveContainer width="100%" height={height}><BarChart data={data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><YAxis tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><Tooltip formatter={(value) => monetary ? toman(value) : new Intl.NumberFormat("fa-IR").format(value)} /><Bar name={metrics[metric]} dataKey={metric} fill="var(--color-chart-1)" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer>;
 }
 
 function FinancePresetFilter({ preset, setPreset, customStart, setCustomStart, customEnd, setCustomEnd }) {

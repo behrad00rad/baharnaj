@@ -1,3 +1,4 @@
+import TextSizeControl from "./TextSizeControl";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../shared/auth";
 import NotificationBell from "./NotificationBell";
@@ -41,6 +42,7 @@ export default function EmployeeLayout() {
       <main>
         <Outlet />
       </main>
+      <footer className="panel-preferences"><TextSizeControl /></footer>
       <nav className="employee-nav">
         {links.map(([path, label, icon]) => (
           <NavLink end={path === "/"} key={path} to={`/employee${path}`}>

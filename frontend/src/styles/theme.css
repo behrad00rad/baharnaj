@@ -13,17 +13,17 @@
   --color-surface-subtle: #ebe6da;
   --color-surface-raised: #ffffff;
   --color-text-primary: #171715;
-  --color-text-secondary: #716e66;
-  --color-text-tertiary: #89877f;
+  --color-text-secondary: #646159;
+  --color-text-tertiary: #6e6b63;
   --color-border: #cbc6ba;
   --color-border-strong: #9b978e;
 
   /* Brand */
-  --color-brand-primary: #bf5b3d;
+  --color-brand-primary: #a64b32;
   --color-brand-primary-hover: #9f452f;
   --color-brand-accent: #c9ff4a;
   --color-brand-accent-text: #171715;
-  --color-focus: #86b51e;
+  --color-focus: #526e17;
 
   /* Navigation and footer */
   --color-navbar-bg: #f4f1e9;
@@ -43,18 +43,18 @@
   --color-home-services-border: #494844;
   --color-home-services-hover: #22221f;
   --color-home-gallery-bg: #f4f1e9;
-  --color-home-about-bg: #bf5b3d;
+  --color-home-about-bg: #9c472f;
   --color-home-about-text: #ffffff;
-  --color-home-about-muted: rgba(255, 255, 255, 0.76);
+  --color-home-about-muted: #fff4ef;
   --color-home-about-border: rgba(255, 255, 255, 0.3);
   --color-home-team-bg: #f4f1e9;
-  --color-home-cta-bg: #c9ff4a;
+  --color-home-cta-bg: #0997aa;
   --color-home-cta-text: #171715;
 
   /* Forms and buttons */
   --color-field-bg: #fffdf8;
   --color-field-text: #171715;
-  --color-field-placeholder: #89877f;
+  --color-field-placeholder: #6e6b63;
   --color-field-border: #cbc6ba;
   --color-field-disabled: #e7e3da;
   --color-button-primary-bg: #1d6b62;
@@ -105,9 +105,9 @@
 
   --color-brand-primary: #e27c5e;
   --color-brand-primary-hover: #f19072;
-  --color-brand-accent: #d3ff64;
+  --color-brand-accent: #44ffff;
   --color-brand-accent-text: #121311;
-  --color-focus: #d3ff64;
+  --color-focus: #0cc2c2;
 
   --color-navbar-bg: #121311;
   --color-navbar-text: #f1eee6;
@@ -138,15 +138,15 @@
   --color-field-placeholder: #918e86;
   --color-field-border: #4a4c43;
   --color-field-disabled: #292b26;
-  --color-button-primary-bg: #3b8b7e;
+  --color-button-primary-bg: #286e62;
   --color-button-primary-text: #ffffff;
-  --color-button-primary-hover: #4aa294;
+  --color-button-primary-hover: #327b6d;
   --color-button-secondary-bg: #223a35;
   --color-button-secondary-text: #a8dbcf;
   --color-button-ghost-text: #c4c8c1;
-  --color-button-danger-bg: #b75d55;
+  --color-button-danger-bg: #974b45;
   --color-button-danger-text: #ffffff;
-  --color-button-success-bg: #38846d;
+  --color-button-success-bg: #286c55;
   --color-button-success-text: #ffffff;
 
   --color-success-bg: #18382d;
@@ -167,4 +167,54 @@
   --color-modal-overlay: rgba(0, 0, 0, 0.78);
   --shadow-raised: 0 18px 50px rgba(0, 0, 0, 0.28);
   --shadow-modal: 0 30px 90px rgba(0, 0, 0, 0.5);
+}
+
+/* Readability scale: typography changes independently of layout dimensions. */
+:root {
+  --text-scale: 1;
+  --text-caption: calc(.875rem * var(--text-scale));
+  --text-small: calc(.9375rem * var(--text-scale));
+  --text-body: calc(1rem * var(--text-scale));
+  --text-lead: calc(1.25rem * var(--text-scale));
+}
+:root[data-text-size="compact"] { --text-scale: .9375; }
+:root[data-text-size="large"] { --text-scale: 1.125; }
+body { font-size: var(--text-body); line-height: 1.75; }
+
+/* Paired accents: text links, filled actions and data series have separate roles. */
+:root {
+  --color-link: #1d6b62;
+  --color-brand-contrast: #ffffff;
+  --color-brand-fill: #a74c32;
+  --color-brand-fill-hover: #8b3c29;
+  --color-accent-muted: #3e4c22;
+  --color-button-secondary-hover: #c9e2d7;
+  --color-highlight-bg: #1d6b62;
+  --color-highlight-text: #ffffff;
+  --color-highlight-muted: #d5ece5;
+  --color-chart-1: #28786b;
+  --color-chart-2: #98672e;
+  --color-chart-3: #5b7770;
+  --color-chart-4: #a44f49;
+  --color-chart-5: #85609d;
+  --color-sidebar-bg: #172a27;
+  --color-sidebar-text: #eaf2ed;
+  --color-sidebar-muted: #b1c6bd;
+  --color-sidebar-active: #26443e;
+  --color-sidebar-border: #466158;
+}
+:root[data-theme="dark"] {
+  --color-link: #a8dbcf;
+  --color-brand-contrast: #171715;
+  --color-brand-fill: #e27c5e;
+  --color-brand-fill-hover: #f19072;
+  --color-button-secondary-hover: #2c4b43;
+  --color-highlight-bg: #214b40;
+  --color-highlight-text: #f1fff8;
+  --color-highlight-muted: #bce1d1;
+  --color-chart-1: #82c8b7;
+  --color-chart-2: #dfb574;
+  --color-chart-3: #a0b9ab;
+  --color-chart-4: #e4948c;
+  --color-chart-5: #c0a0d8;
 }

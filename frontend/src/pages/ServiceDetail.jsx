@@ -46,7 +46,7 @@ export default function ServiceDetail() {
         <div className="detail-media"><MediaImage src={hero?.image_url} alt={hero?.alt_text || `${name} در سالن بهارناژ`} eager /><span>BAHARNAJ / SERVICE</span></div>
         <div className="detail-content">
           <p className="eyebrow">{category}</p>
-          <h1>{name} در سالن بهارناژ رشت</h1>
+          <h1>{name}</h1>
           {service.short_description && <p className="service-intro">{service.short_description}</p>}
           <div className="detail-facts"><div><span>زمان</span><strong>{new Intl.NumberFormat("fa-IR").format(service.duration)} دقیقه</strong></div><div><span>هزینه</span><strong>{toman(service.price)}</strong></div></div>
           <div className="detail-actions"><Link className="button" to={`/book?service=${service.id}`}>رزرو این سرویس <span>←</span></Link><Link className="text-link" to="/services">همه سرویس‌ها</Link></div>

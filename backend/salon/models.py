@@ -77,7 +77,10 @@ class Notification(models.Model):
 
 
 class PushSubscription(models.Model):
-    """Deprecated raw Web Push registrations retained until the FCM rollout is complete."""
+    """Deprecated storage only. All delivery and registration now use FirebaseDevice.
+
+    Retained to avoid destroying historical subscriptions during the FCM rollout.
+    """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="push_subscriptions")
     endpoint = models.URLField(max_length=1000, unique=True)
     p256dh = models.CharField(max_length=255)

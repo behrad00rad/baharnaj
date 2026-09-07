@@ -13,3 +13,6 @@ backend/db.sqlite3
 **/*.pyc
 .env
 **/.env
+
+**/*firebase-adminsdk*.json
+**/*service-account*.json

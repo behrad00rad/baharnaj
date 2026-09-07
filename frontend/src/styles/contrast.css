@@ -1,0 +1,69 @@
+/* Shared component color pairs. Layout and typography stay in their existing files. */
+.public-site .button:hover,.public-site .nav-book:hover {background:var(--color-brand-fill);color:var(--color-brand-contrast)}
+.public-site .button-light,.public-site .button-light:hover {background:var(--color-brand-accent);color:var(--color-brand-accent-text)}
+.public-site .hero-visual>p,.public-site .wizard-steps .current b {background:var(--color-brand-fill);color:var(--color-brand-contrast)}
+.public-site :is(.service-choice-grid,.employee-choice-grid) button.selected {background:var(--color-brand-accent);color:var(--color-brand-accent-text);border-color:var(--color-brand-accent)}
+.public-site :is(.service-choice-grid,.employee-choice-grid) button.selected :is(span,strong,p) {color:var(--color-brand-accent-text)}
+.public-site :is(.service-choice-grid,.employee-choice-grid) button.selected small {color:var(--color-accent-muted)}
+.public-site .booking-callout em {color:var(--color-home-cta-text)}
+.public-site .selected-tray span {color:inherit}
+.public-site .brand-story .eyebrow,.public-site .brand-principles span {color:var(--color-home-about-text)}
+.public-site .site-footer .button-light {color:var(--color-brand-accent-text)}
+
+/* Filled actions never use the link token for their background. */
+:is(.admin-app,.employee-app) :is(.admin-primary,.employee-action,.slot-grid button.selected,.calendar-toggle button.active,.segmented button.selected) {background:var(--color-button-primary-bg);color:var(--color-button-primary-text);border-color:var(--color-button-primary-bg)}
+:is(.admin-primary,.employee-action):hover {background:var(--color-button-primary-hover);color:var(--color-button-primary-text)}
+:is(.admin-secondary,.employee-secondary) {background:var(--color-button-secondary-bg);color:var(--color-button-secondary-text);border-color:var(--color-border-strong)}
+:is(.admin-secondary,.employee-secondary):hover {background:var(--color-button-secondary-hover);color:var(--color-button-secondary-text)}
+:is(.admin-danger,.employee-danger) {background:var(--color-button-danger-bg);border-color:var(--color-button-danger-bg);color:var(--color-button-danger-text)}
+:is(.admin-danger,.employee-danger):hover {background:var(--color-error-bg);border-color:var(--color-error-text);color:var(--color-error-text)}
+.admin-success,.drawer-actions button:nth-child(2) {background:var(--color-button-success-bg);color:var(--color-button-success-text);border-color:var(--color-button-success-bg)}
+.drawer-actions .danger,.finance-review-actions .admin-secondary,.detail-buttons button.danger {background:var(--color-error-bg);color:var(--color-error-text);border-color:var(--color-error-text)}
+.admin-stat.accent,.employee-card.next-card {background:var(--color-highlight-bg);color:var(--color-highlight-text);border-color:var(--color-highlight-bg)}
+.admin-stat.accent :is(span,small),.employee-card.next-card :is(.employee-kicker,p,small) {color:var(--color-highlight-muted)}
+.next-actions button,.next-actions button:first-child {background:var(--color-button-secondary-bg);color:var(--color-button-secondary-text)}
+.employee-brand>span {background:var(--color-button-primary-bg);color:var(--color-button-primary-text)}
+
+/* Status semantics shared by appointments, payments and service details. */
+:is(.status,.employee-status,.payment-badge,.finance-badge) {background:var(--color-info-bg);color:var(--color-info-text)}
+:is(.status,.employee-status,.payment-badge,.finance-badge):is(.confirmed,.paid,.completed) {background:var(--color-success-bg);color:var(--color-success-text)}
+:is(.status,.employee-status,.payment-badge,.finance-badge):is(.pending,.partial,.partially_paid,.partially-paid,.unpaid,.in_progress) {background:var(--color-warning-bg);color:var(--color-warning-text)}
+:is(.status,.employee-status,.payment-badge,.finance-badge):is(.rejected,.cancelled,.partially-cancelled,.failed) {background:var(--color-error-bg);color:var(--color-error-text)}
+:is(.status,.employee-status,.payment-badge,.finance-badge):is(.refunded,.partially_refunded) {background:var(--color-info-bg);color:var(--color-info-text)}
+.calendar-day-badges small {background:var(--color-info-bg);color:var(--color-info-text)}
+.appointment-row:hover {background:var(--color-surface-subtle)}
+
+/* Native form controls, including browser-rendered option menus. */
+:is(input,select,textarea)::placeholder {color:var(--color-field-placeholder);opacity:1}
+select option {background:var(--color-field-bg);color:var(--color-field-text)}
+input:is([type=checkbox],[type=radio]) {accent-color:var(--color-button-primary-bg)}
+:is(.public-site,.admin-app,.employee-app) :is(input,textarea,select):disabled,
+:is(.admin-app,.employee-app) input[readonly] {background:var(--color-field-disabled);color:var(--color-text-secondary);opacity:1}
+:is(.public-site,.admin-app,.employee-app) :is(button,a,input,select,textarea):focus-visible {outline:2px solid var(--color-focus);outline-offset:3px}
+:is(.admin-app,.employee-app) input[type=file]::file-selector-button {background:var(--color-button-secondary-bg);color:var(--color-button-secondary-text)}
+.modal-backdrop,.admin-modal-backdrop,.drawer-backdrop,.employee-overlay {background:var(--color-modal-overlay)}
+.admin-skeletons span {background:linear-gradient(90deg,var(--color-surface-subtle),var(--color-surface-raised),var(--color-surface-subtle))}
+
+/* The datepicker exposes its own token map; bind it to the application theme. */
+html jdp-container {
+ --jdp-color-0:var(--color-surface-raised);--jdp-color-1:var(--color-surface-subtle);--jdp-color-2:var(--color-border);--jdp-color-3:var(--color-border-strong);--jdp-color-4:var(--color-text-secondary);--jdp-color-5:var(--color-text-primary);--jdp-primary:var(--color-button-primary-bg);--jdp-red:var(--color-error-text);
+ color:var(--color-text-primary);box-shadow:var(--shadow-modal);font-family:var(--public-interface);
+}
+html jdp-container .jdp-day.selected {color:var(--color-button-primary-text)!important}
+html jdp-container :is(.jdp-btn-today,.jdp-btn-empty,.jdp-btn-close) {color:var(--color-button-primary-text)}
+html jdp-container .jdp-day.disabled-day {opacity:.5}
+html jdp-overlay {background:var(--color-modal-overlay)}
+
+/* SVG and HTML chart layers share their colors, including portal-like tooltips. */
+:is(.finance-chart,.employee-finance-chart) .recharts-text {fill:var(--color-text-secondary)}
+:is(.finance-chart,.employee-finance-chart) .recharts-cartesian-grid line {stroke:var(--color-border)}
+:is(.finance-chart,.employee-finance-chart) .recharts-cartesian-axis-line,
+:is(.finance-chart,.employee-finance-chart) .recharts-cartesian-axis-tick-line {stroke:var(--color-border-strong)}
+:is(.finance-chart,.employee-finance-chart) .recharts-default-tooltip {background:var(--color-surface-raised)!important;border-color:var(--color-border-strong)!important;color:var(--color-text-primary)!important;box-shadow:var(--shadow-raised);border-radius:8px}
+:is(.finance-chart,.employee-finance-chart) .recharts-default-tooltip :is(p,li,span) {color:var(--color-text-primary)!important}
+:is(.finance-chart,.employee-finance-chart) .recharts-tooltip-cursor {fill:var(--color-surface-subtle)}
+.recharts-pie-sector path {stroke:var(--color-surface);stroke-width:2px}
+.notification-bell {background:var(--color-button-secondary-bg);color:var(--color-button-secondary-text)}
+.notification-bell b {background:var(--color-button-danger-bg);color:var(--color-button-danger-text)}
+.notification-panel>header button,.push-setting button {color:var(--color-link);border-color:var(--color-border-strong)}
+.notification-list .notification-error {color:var(--color-error-text)}

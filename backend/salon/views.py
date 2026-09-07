@@ -421,6 +421,11 @@ class EmployeeAppointmentsView(generics.ListAPIView):
         end_date = self.request.query_params.get("end")
         item_filters = {"employee__user": self.request.user}
         appointment_filters = {"items__employee__user": self.request.user}
+        notification_appointment = self.request.query_params.get("appointment")
+        if notification_appointment:
+            if not notification_appointment.isdigit():
+                raise ValidationError({"appointment": "شناسه نوبت نامعتبر است."})
+            appointment_filters["pk"] = notification_appointment
         if selected_date:
             item_filters["date"] = selected_date
             appointment_filters["items__date"] = selected_date
@@ -603,7 +608,7 @@ class CustomerBookingView(generics.GenericAPIView):
             item.full_clean()
             item.save(update_fields=("date", "start_time", "end_time", "updated_at"))
             from .notifications import notify_appointment_rescheduled
-            notify_appointment_rescheduled(appointment)
+            notify_appointment_rescheduled(appointment, actor=request.user)
         if request.data.get("cancel"):
             appointment.set_status("cancelled", reason=request.data.get("reason", "لغو توسط مشتری"))
             from .notifications import notify_appointment_cancelled
@@ -743,7 +748,7 @@ class AppointmentItemViewSet(AdminModelViewSet):
         item = serializer.save(updated_by=self.request.user)
         if old_schedule != (item.date, item.start_time, item.end_time):
             from .notifications import notify_appointment_rescheduled
-            notify_appointment_rescheduled(item.appointment)
+            notify_appointment_rescheduled(item.appointment, actor=self.request.user)
 
     @action(detail=True, methods=("post",))
     @transaction.atomic
@@ -762,9 +767,9 @@ class AppointmentItemViewSet(AdminModelViewSet):
             item.save(update_fields=("notes", "updated_by", "updated_at"))
         item.set_completion_status(status_map[requested_action], changed_by=request.user, reason=reason)
         item.appointment.refresh_from_db()
-        if requested_action == "cancel" and item.appointment.status == "cancelled":
+        if requested_action == "cancel":
             from .notifications import notify_appointment_cancelled
-            notify_appointment_cancelled(item.appointment, actor=request.user)
+            notify_appointment_cancelled(item.appointment, actor=request.user, item=item)
         return Response(AppointmentItemSerializer(item, context={"request": request}).data)
 
 
@@ -1319,6 +1324,10 @@ class EmployeeAppointmentItemViewSet(viewsets.ModelViewSet):
             item.updated_by = request.user
             item.save(update_fields=("notes", "updated_by", "updated_at"))
         item.set_completion_status(status_map[next_status], changed_by=request.user, reason=reason)
+        if next_status == "cancel":
+            item.appointment.refresh_from_db()
+            from .notifications import notify_appointment_cancelled
+            notify_appointment_cancelled(item.appointment, actor=request.user, item=item)
         return Response(AppointmentItemSerializer(item, context={"request": request}).data)
 
 class EmployeeProfileView(generics.RetrieveUpdateAPIView):

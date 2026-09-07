@@ -1,3 +1,4 @@
+import TextSizeControl from "./TextSizeControl";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearSession } from "../shared/api";
@@ -33,7 +34,7 @@ export default function AdminLayout() {
     };
   }, [menuOpen]);
   const logout = async () => {
-    await disableCurrentFirebaseDevice();
+    await disableCurrentFirebaseDevice().catch(() => {});
     clearSession();
     navigate("/login", { replace: true });
   };
@@ -128,6 +129,7 @@ export default function AdminLayout() {
           </div>
         </header>
         <Outlet />
+        <footer className="panel-preferences"><TextSizeControl /></footer>
       </main>
     </div>
     </>

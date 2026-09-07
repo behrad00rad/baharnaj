@@ -20,3 +20,10 @@ coverage/
 backend/private_key.pem
 backend/public_key.pem
 backend/source/*
+# Firebase Admin credentials are server-only secrets.
+**/*firebase-adminsdk*.json
+**/*service-account*.json
+
+# Local browser verification artifacts
+test-results/
+playwright-report/

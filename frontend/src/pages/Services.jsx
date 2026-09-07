@@ -38,7 +38,7 @@ export default function Services() {
             <em>سرویس‌ها.</em>
           </>
         }
-        text="سرویس مناسب را بر اساس زمان، قیمت و چیزی که برایت مهم است پیدا کن. منوی خدمات بهارناژ در رشت از همین‌جا به رزرو آنلاین وصل می‌شود."
+        text="سرویس‌ها را ببین، قیمت و زمان را مقایسه کن و نوبتت را رزرو کن."
         aside={
           <span className="page-index">
             ۰۱ — {new Intl.NumberFormat("fa-IR").format(services.length)} سرویس
