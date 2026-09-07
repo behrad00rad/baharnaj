@@ -1,3 +1,5 @@
+import { formatServicePrice } from "../shared/pricing";
+import ItemPricing from "../components/ItemPricing";
 import { useEffect, useState } from "react";
 import { Link, Route, Routes, useNavigate, useLocation } from "react-router-dom";
 import { api, clearSession, toman } from "../shared/api";
@@ -274,7 +276,7 @@ function NewAppointment() {
             services.data.map((service) => (
               <label className={selectedServices.includes(service.id) ? "selected" : ""} key={service.id}>
                 <input type="checkbox" checked={selectedServices.includes(service.id)} onChange={() => toggleService(service.id)} />
-                <span><b>{service.persian_name}</b>{service.duration && <small>{service.duration} دقیقه</small>}</span>
+                <span><b>{service.persian_name}</b><small>{formatServicePrice(service)}</small>{service.duration && <small>{service.duration} دقیقه</small>}</span>
               </label>
             ))
           )}
@@ -688,11 +690,11 @@ function PaymentReport({ appointmentId }) {
             </div>
             <div>
               <span>مانده قابل پرداخت</span>
-              <b>{toman(history.data.remaining_total)}</b>
+              <b>{history.data.has_unresolved_prices ? "نیازمند تعیین قیمت نهایی" : toman(history.data.remaining_total)}</b>
             </div>
             {pendingTotal > 0 && <div><span>گزارش در انتظار تأیید</span><b>{toman(pendingTotal)}</b></div>}
           </div>
-          {reportableTotal > 0 ? <form className="employee-form" onSubmit={submit}>
+          {history.data.has_unresolved_prices ? <p className="pricing-warning">پیش از ثبت پرداخت، قیمت نهایی همه سرویس‌ها را مشخص کنید.</p> : reportableTotal > 0 ? <form className="employee-form" onSubmit={submit}>
             <label>
               مبلغ
               <input
@@ -843,7 +845,7 @@ function AppointmentDetail({ item, close, onSaved }) {
         </div>
         <div>
           <span>مبلغ</span>
-          <b>{toman(line.price_snapshot)}</b>
+          <ItemPricing key={line.id} item={line} role="employee" onSaved={onSaved} />
         </div>
         <div>
           <span>وضعیت پرداخت</span>

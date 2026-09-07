@@ -18,7 +18,13 @@ class UserAdmin(DjangoUserAdmin):
 
 admin.site.register((CustomerProfile, EmployeeProfile, EmployeeService, ServiceCategory, ServiceImage))
 admin.site.register((WorkingSchedule, ScheduleException, TimeOff))
-admin.site.register((Appointment, AppointmentItem, AppointmentStatusHistory))
+admin.site.register((Appointment, AppointmentStatusHistory))
+
+
+@admin.register(AppointmentItem)
+class AppointmentItemAdmin(admin.ModelAdmin):
+    # Price finalization belongs to the audited, payment-aware panel action.
+    readonly_fields = ("price_snapshot", "catalog_pricing_snapshot", "final_price")
 admin.site.register((Payment, Transaction, Refund))
 admin.site.register((GalleryAsset, GalleryCategory, Promotion, HomepageSection, SalonSettings, AccountLogin))
 admin.site.register((BlogCategory, BlogTag, BlogMedia, BlogPostRevision))
@@ -38,4 +44,4 @@ class ServiceAdmin(admin.ModelAdmin):
     list_display = ("persian_name", "name", "slug", "category", "price", "duration", "is_active", "is_bookable", "is_deleted")
     list_filter = ("category", "is_active", "is_bookable", "is_deleted")
     search_fields = ("name", "persian_name", "description", "slug", "seo_title")
-    fields = ("category", "name", "persian_name", "short_description", "description", "slug", "seo_title", "seo_description", "price", "duration", "is_active", "is_bookable", "is_featured", "is_deleted")
+    fields = ("category", "name", "persian_name", "short_description", "description", "slug", "seo_title", "seo_description", "pricing_type", "price", "minimum_price", "maximum_price", "pricing_note", "duration", "is_active", "is_bookable", "is_featured", "is_deleted")

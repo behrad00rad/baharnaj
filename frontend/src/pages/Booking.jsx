@@ -1,7 +1,8 @@
+import { formatServicePrice, bookingPriceSummary } from "../shared/pricing";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DateModal } from "../components/DatePicker";
-import { api, toman } from "../shared/api";
+import { api } from "../shared/api";
 import { useServices } from "../shared/hooks";
 import { SEO } from "../components/SEO";
 const steps = ["سرویس‌ها", "متخصص", "زمان", "اطلاعات", "تأیید"];
@@ -89,10 +90,6 @@ export default function Booking() {
         )
         .filter(Boolean),
     [selected, services],
-  );
-  const total = chosenServices.reduce(
-    (sum, service) => sum + Number(service.price || 0),
-    0,
   );
   const totalDuration = chosenServices.reduce(
     (sum, service) => sum + Number(service.duration || 0),
@@ -288,7 +285,6 @@ export default function Booking() {
               setContact={setContact}
               chosenServices={chosenServices}
               selectedEmployees={selectedEmployees}
-              total={total}
               date={date}
               time={time}
               hold={hold}
@@ -304,7 +300,6 @@ export default function Booking() {
               contact={contact}
               chosenServices={chosenServices}
               selectedEmployees={selectedEmployees}
-              total={total}
               date={date}
               time={time}
               onBack={() => setStep(3)}
@@ -319,7 +314,7 @@ export default function Booking() {
             {new Intl.NumberFormat("fa-IR").format(chosenServices.length)} سرویس
           </strong>
           <p>{new Intl.NumberFormat("fa-IR").format(totalDuration)} دقیقه</p>
-          <b>{toman(total)}</b>
+          <b>{bookingPriceSummary(chosenServices)}</b>
           {chosenServices.length ? (
             <ul>
               {chosenServices.map((service) => (
@@ -382,7 +377,7 @@ function ServiceStep({ services, servicesState, selected, toggle, onNext }) {
                   <strong>{service.persian_name || service.name}</strong>
                   <small>
                     {new Intl.NumberFormat("fa-IR").format(service.duration)}{" "}
-                    دقیقه · {toman(service.price)}
+                    دقیقه · {formatServicePrice(service)}
                   </small>
                 </button>
               ))}
@@ -546,7 +541,6 @@ function TimeStep({
 function BookingSummary({
   chosenServices,
   selectedEmployees,
-  total,
   date,
   time,
   contact,
@@ -580,7 +574,7 @@ function BookingSummary({
           <i>{time}</i>
         </span>
       </div>
-      <strong>{toman(total)}</strong>
+      <strong>{bookingPriceSummary(chosenServices)}</strong>
     </div>
   );
 }
@@ -589,7 +583,6 @@ function ContactStep({
   setContact,
   chosenServices,
   selectedEmployees,
-  total,
   date,
   time,
   hold,
@@ -610,7 +603,6 @@ function ContactStep({
       <BookingSummary
         chosenServices={chosenServices}
         selectedEmployees={selectedEmployees}
-        total={total}
         date={date}
         time={time}
       />
@@ -660,7 +652,6 @@ function ReviewStep({
   contact,
   chosenServices,
   selectedEmployees,
-  total,
   date,
   time,
   onBack,
@@ -672,7 +663,6 @@ function ReviewStep({
       <BookingSummary
         chosenServices={chosenServices}
         selectedEmployees={selectedEmployees}
-        total={total}
         date={date}
         time={time}
         contact={contact}

@@ -726,6 +726,8 @@ class AdminAppointmentViewSet(AdminModelViewSet):
         appointment = self.get_object()
         status_value = serializer.validated_data["status"]
         if status_value == "completed":
+            if appointment.has_unresolved_prices:
+                raise ValidationError("ابتدا قیمت نهایی همه سرویس‌های نوبت را مشخص کنید.")
             for item in appointment.items.exclude(completion_status="completed"):
                 item.set_completion_status("completed", changed_by=self.request.user)
         else:
@@ -738,7 +740,30 @@ class AdminAppointmentViewSet(AdminModelViewSet):
         AdminActionLog.objects.create(actor=self.request.user, action="update", model_name="Appointment", object_id=str(appointment.pk), details={"fields": ["status"]})
 
 
-class AppointmentItemViewSet(AdminModelViewSet):
+class FinalPriceActionMixin:
+    @action(detail=True, methods=("post",), url_path="final-price")
+    @transaction.atomic
+    def final_price(self, request, pk=None):
+        authorized = self.get_object()  # Existing viewset enforces admin / own-item access.
+        appointment = Appointment.objects.select_for_update().get(pk=authorized.appointment_id)
+        item = AppointmentItem.objects.select_for_update().select_related("employee", "service").get(pk=authorized.pk)
+        if item.pricing_type == "FIXED":
+            raise ValidationError("قیمت این سرویس ثابت و در زمان رزرو ثبت شده است.")
+        if appointment.status == "cancelled" or item.completion_status in {"cancelled", "completed"}:
+            raise ValidationError("قیمت سرویس نهایی‌شده یا لغوشده قابل تغییر نیست.")
+        if appointment.payments.filter(status__in=("pending", "paid", "refunded")).exists() or item.commissions.exists():
+            raise ValidationError("پس از ثبت گزارش پرداخت یا تسویه، قیمت قابل تغییر نیست.")
+        field = serializers.IntegerField(min_value=0, max_value=2147483647)
+        value = field.run_validation(request.data.get("final_price"))
+        previous = item.final_price
+        item.final_price = value
+        item.updated_by = request.user
+        item.save(update_fields=("final_price", "updated_by", "updated_at"))
+        AdminActionLog.objects.create(actor=request.user, action="update", model_name="AppointmentItem", object_id=str(item.pk), details={"final_price_before": previous, "final_price_after": value})
+        return Response(AppointmentItemSerializer(item, context={"request": request}).data)
+
+
+class AppointmentItemViewSet(FinalPriceActionMixin, AdminModelViewSet):
     queryset = AppointmentItem.objects.select_related("appointment", "service", "employee__user")
     serializer_class = AppointmentItemSerializer
 
@@ -765,6 +790,8 @@ class AppointmentItemViewSet(AdminModelViewSet):
             item.notes = request.data.get("notes", "").strip()
             item.updated_by = request.user
             item.save(update_fields=("notes", "updated_by", "updated_at"))
+        if requested_action == "complete" and not item.is_price_final:
+            raise ValidationError("ابتدا قیمت نهایی این سرویس را مشخص کنید.")
         item.set_completion_status(status_map[requested_action], changed_by=request.user, reason=reason)
         item.appointment.refresh_from_db()
         if requested_action == "cancel":
@@ -843,6 +870,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
         if payment.status != "pending":
             return Response({"detail": "فقط پرداخت گزارش‌شده قابل تأیید است."}, status=status.HTTP_400_BAD_REQUEST)
         appointment = Appointment.objects.select_for_update().get(pk=payment.appointment_id)
+        if appointment.has_unresolved_prices:
+            raise ValidationError("ابتدا قیمت نهایی همه سرویس‌های نوبت را مشخص کنید.")
         if payment.amount > appointment.remaining_total:
             return Response({"detail": "مبلغ پرداخت از مانده نوبت بیشتر است."}, status=status.HTTP_400_BAD_REQUEST)
         payment.mark_paid(changed_by=request.user)
@@ -951,13 +980,13 @@ def _allocate_amount(items, amount):
     items = list(items)
     if not items:
         return {}
-    total = sum(item.price_snapshot for item in items)
+    total = sum(item.effective_price for item in items)
     if not total:
         base, remainder = divmod(amount, len(items))
         return {item.id: base + int(index < remainder) for index, item in enumerate(items)}
     allocations, allocated = {}, 0
     for index, item in enumerate(items):
-        value = amount - allocated if index == len(items) - 1 else amount * item.price_snapshot // total
+        value = amount - allocated if index == len(items) - 1 else amount * item.effective_price // total
         allocations[item.id] = value
         allocated += value
     return allocations
@@ -1124,7 +1153,7 @@ def _finance_analytics(request, start, end, grouping="daily", employee=None, inc
         "refunded": selected_employee.get("refunds", 0) if employee else refunded,
         "net_revenue": selected_employee.get("net_revenue", 0) if employee else received - refunded,
         "pending_reports": pending_total, "outstanding": outstanding,
-        "service_revenue": sum(item.price_snapshot for item in completed_items),
+        "service_revenue": sum(item.effective_price for item in completed_items),
         "commission_total": commission_total, "completed_services": len(completed_items),
         "completed_appointments": len({item.appointment_id for item in completed_items}),
         "payments_count": confirmed_count,
@@ -1140,7 +1169,7 @@ def _finance_analytics(request, start, end, grouping="daily", employee=None, inc
             "payments": sorted(payment_details + pending_details, key=lambda row: row["date"], reverse=True)[:200],
             "transactions": [{"id": entry.id, "date": entry.created_at, "type": entry.type, "amount": entry.amount, "employee_amount": sum(_allocate_amount(entry.appointment.items.all(), entry.amount).get(item.id, 0) for item in entry.appointment.items.all() if item.employee_id == employee.id) if entry.appointment else 0, "customer": (entry.appointment.customer.user.get_full_name() or entry.appointment.customer.user.username) if entry.appointment else "—", "appointment": entry.appointment_id, "services": [item.service.persian_name for item in entry.appointment.items.all() if item.employee_id == employee.id] if entry.appointment else [], "payment_status": entry.payment.status if entry.payment else "—"} for entry in transaction_queryset],
             "appointments": sorted(appointment_details, key=lambda row: row["date"] or start, reverse=True)[:200],
-            "services_performed": [{"id": item.id, "date": item.date, "customer": item.appointment.customer.user.get_full_name() or item.appointment.customer.user.username, "appointment": item.appointment_id, "service": item.service.persian_name, "amount": item.price_snapshot, "status": item.completion_status, "appointment_status": item.appointment.status, "payment_status": item.appointment.payment_status, "commission": commission_by_item[item.id].commission_amount if item.id in commission_by_item else 0} for item in list(dated_items.order_by("-date", "-start_time")[:200])],
+            "services_performed": [{"id": item.id, "date": item.date, "customer": item.appointment.customer.user.get_full_name() or item.appointment.customer.user.username, "appointment": item.appointment_id, "service": item.service.persian_name, "amount": item.effective_price, "status": item.completion_status, "appointment_status": item.appointment.status, "payment_status": item.appointment.payment_status, "commission": commission_by_item[item.id].commission_amount if item.id in commission_by_item else 0} for item in list(dated_items.order_by("-date", "-start_time")[:200])],
         })
     return payload
 
@@ -1296,7 +1325,7 @@ class PasswordResetConfirmView(generics.GenericAPIView):
         return Response({"detail": "رمز عبور تغییر کرد."})
 
 
-class EmployeeAppointmentItemViewSet(viewsets.ModelViewSet):
+class EmployeeAppointmentItemViewSet(FinalPriceActionMixin, viewsets.ModelViewSet):
     permission_classes = (IsOwnEmployeeObject,)
     serializer_class = AppointmentItemSerializer
 
@@ -1323,6 +1352,8 @@ class EmployeeAppointmentItemViewSet(viewsets.ModelViewSet):
             item.notes = request.data.get("notes", "").strip()
             item.updated_by = request.user
             item.save(update_fields=("notes", "updated_by", "updated_at"))
+        if next_status == "complete" and not item.is_price_final:
+            raise ValidationError("ابتدا قیمت نهایی این سرویس را مشخص کنید.")
         item.set_completion_status(status_map[next_status], changed_by=request.user, reason=reason)
         if next_status == "cancel":
             item.appointment.refresh_from_db()
@@ -1369,6 +1400,7 @@ class EmployeeAppointmentPaymentReportView(generics.GenericAPIView):
         pending_total = payments.filter(status="pending").aggregate(total=Sum("amount"))["total"] or 0
         return Response({
             "appointment_total": appointment.appointment_total,
+            "has_unresolved_prices": appointment.has_unresolved_prices,
             "paid_total": appointment.net_paid,
             "remaining_total": appointment.remaining_total,
             "pending_total": pending_total,
@@ -1380,6 +1412,8 @@ class EmployeeAppointmentPaymentReportView(generics.GenericAPIView):
     def post(self, request, appointment_id):
         authorized = self.get_appointment(request, appointment_id)
         appointment = Appointment.objects.select_for_update().get(pk=authorized.pk)
+        if appointment.has_unresolved_prices:
+            raise ValidationError("ابتدا قیمت نهایی همه سرویس‌های نوبت را مشخص کنید.")
         if appointment.status == "cancelled":
             return Response({"detail": "ثبت پرداخت برای نوبت لغوشده ممکن نیست."}, status=status.HTTP_400_BAD_REQUEST)
         report_serializer = EmployeePaymentReportSerializer(data=request.data)

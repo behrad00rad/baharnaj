@@ -1,7 +1,8 @@
+import "../components/Pricing.css";
+import { formatServicePrice } from "../shared/pricing";
 import { Link, useParams } from "react-router-dom";
 import { SEO } from "../components/SEO";
 import { MediaImage, PublicState } from "../components/PublicUI";
-import { toman } from "../shared/api";
 import { siteConfig, siteUrl } from "../shared/siteConfig";
 import { usePublicList, useService, useServices } from "../shared/hooks";
 import { BlogCard } from "../components/BlogCard";
@@ -48,7 +49,8 @@ export default function ServiceDetail() {
           <p className="eyebrow">{category}</p>
           <h1>{name}</h1>
           {service.short_description && <p className="service-intro">{service.short_description}</p>}
-          <div className="detail-facts"><div><span>زمان</span><strong>{new Intl.NumberFormat("fa-IR").format(service.duration)} دقیقه</strong></div><div><span>هزینه</span><strong>{toman(service.price)}</strong></div></div>
+          <div className="detail-facts"><div><span>زمان</span><strong>{new Intl.NumberFormat("fa-IR").format(service.duration)} دقیقه</strong></div><div><span>هزینه</span><strong>{formatServicePrice(service)}</strong></div></div>
+          {service.pricing_type && service.pricing_type !== 'FIXED' && <aside className="pricing-note"><p>قیمت این سرویس بسته به شرایط و انتخاب شما تعیین می‌شود.</p>{service.pricing_note && <p>{service.pricing_note}</p>}</aside>}
           <div className="detail-actions"><Link className="button" to={`/book?service=${service.id}`}>رزرو این سرویس <span>←</span></Link><Link className="text-link" to="/services">همه سرویس‌ها</Link></div>
         </div>
       </header>
@@ -58,7 +60,7 @@ export default function ServiceDetail() {
       </div>}
       {images.length > 1 && <section className="service-photo-gallery" aria-labelledby="service-gallery-title"><p className="eyebrow">SERVICE GALLERY</p><h2 id="service-gallery-title">تصاویر {name}</h2><div>{images.slice(1).map((image) => <MediaImage key={image.id} src={image.image_url} alt={image.alt_text || `تصویر ${name} در بهارناژ`} />)}</div></section>}
     </article>
-    {related.length > 0 && <section className="related-services container" aria-labelledby="related-services-title"><p className="eyebrow">MORE IN {category}</p><h2 id="related-services-title">سرویس‌های مرتبط</h2><div>{related.map((item) => <Link key={item.id} to={`/services/${item.slug || item.id}`}>{serviceName(item)} <span>←</span></Link>)}</div></section>}
+    {related.length > 0 && <section className="related-services container" aria-labelledby="related-services-title"><p className="eyebrow">MORE IN {category}</p><h2 id="related-services-title">سرویس‌های مرتبط</h2><div>{related.map((item) => <Link key={item.id} to={`/services/${item.slug || item.id}`}>{serviceName(item)} <span>{formatServicePrice(item)} · ←</span></Link>)}</div></section>}
     {articles.length > 0 && <section className="article-related container" aria-labelledby="service-articles-title"><p className="eyebrow">READ BEFORE YOU BOOK</p><h2 id="service-articles-title">مطالب مرتبط با {name}</h2><div>{articles.map((post) => <BlogCard key={post.id} post={post} compact />)}</div></section>}
   </>;
 }

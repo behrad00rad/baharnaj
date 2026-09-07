@@ -157,6 +157,12 @@ class ServiceCategory(models.Model):
 
 
 class Service(models.Model):
+    PRICING_CHOICES = [(value, value) for value in ("FIXED", "STARTING_FROM", "RANGE", "CONSULTATION", "VARIABLE")]
+    pricing_type = models.CharField(max_length=20, choices=PRICING_CHOICES, default="FIXED")
+    minimum_price = models.PositiveIntegerField(null=True, blank=True)
+    maximum_price = models.PositiveIntegerField(null=True, blank=True)
+    pricing_note = models.TextField(blank=True)
+
     category = models.ForeignKey(ServiceCategory, on_delete=models.PROTECT, related_name="services")
     name = models.CharField(max_length=120)
     persian_name = models.CharField(max_length=120)
@@ -167,7 +173,7 @@ class Service(models.Model):
     slug = models.SlugField(max_length=160, unique=True, blank=True)
     seo_title = models.CharField(max_length=160, blank=True)
     seo_description = models.TextField(blank=True)
-    price = models.PositiveIntegerField()
+    price = models.PositiveIntegerField(default=0)
     duration = models.PositiveIntegerField(help_text="Duration in minutes")
     is_active = models.BooleanField(default=True)
     is_bookable = models.BooleanField(default=True)
@@ -178,6 +184,31 @@ class Service(models.Model):
 
     class Meta:
         ordering = ("name",)
+
+    def clean(self):
+        errors = {}
+        if self.pricing_type not in dict(self.PRICING_CHOICES):
+            errors["pricing_type"] = "نوع قیمت معتبر نیست."
+        if self.pricing_type == "FIXED" and (self.price is None or self.price < 0):
+            errors["price"] = "قیمت ثابت باید صفر یا بیشتر باشد."
+        if self.pricing_type in {"STARTING_FROM", "RANGE"} and self.minimum_price is None:
+            errors["minimum_price"] = "حداقل قیمت را وارد کنید."
+        if self.minimum_price is not None and self.minimum_price < 0:
+            errors["minimum_price"] = "قیمت نمی‌تواند منفی باشد."
+        if self.pricing_type == "RANGE" and (self.maximum_price is None or (self.minimum_price is not None and self.maximum_price < self.minimum_price)):
+            errors["maximum_price"] = "حداکثر قیمت باید حداقل برابر قیمت شروع باشد."
+        if self.pricing_type == "VARIABLE" and not self.pricing_note.strip():
+            errors["pricing_note"] = "نحوه تعیین قیمت را توضیح دهید."
+        if errors:
+            raise ValidationError(errors)
+
+    def appointment_price_fields(self):
+        """Freeze catalog information once, including for bulk-created bookings."""
+        catalog = {"pricing_type": self.pricing_type, "price": self.price if self.pricing_type == "FIXED" else None,
+                   "minimum_price": self.minimum_price if self.pricing_type in {"STARTING_FROM", "RANGE", "VARIABLE"} else None,
+                   "maximum_price": self.maximum_price if self.pricing_type == "RANGE" else None, "pricing_note": self.pricing_note}
+        return {"price_snapshot": self.price if self.pricing_type == "FIXED" else (catalog["minimum_price"] or 0),
+                "catalog_pricing_snapshot": catalog, "duration_snapshot": self.duration}
 
     def delete(self, using=None, keep_parents=False):
         self.is_deleted = True
@@ -424,7 +455,16 @@ class Appointment(SoftDeleteModel):
 
     @property
     def appointment_total(self):
-        return sum(item.price_snapshot for item in self.items.all())
+        # The known agreed subtotal; never substitute a catalog estimate.
+        return sum(item.effective_price for item in self.items.all())
+
+    @property
+    def has_unresolved_prices(self):
+        return any(not item.is_price_final for item in self.items.all())
+
+    def require_final_prices(self):
+        if self.has_unresolved_prices:
+            raise ValidationError("ابتدا قیمت نهایی همه سرویس‌های نوبت را مشخص کنید.")
 
     @property
     def paid_total(self):
@@ -450,7 +490,7 @@ class Appointment(SoftDeleteModel):
             return "partially_refunded"
         if self.net_paid == 0:
             return "unpaid"
-        return "paid" if self.remaining_total == 0 else "partially_paid"
+        return "paid" if self.remaining_total == 0 and not self.has_unresolved_prices else "partially_paid"
 
 
 class AppointmentItem(models.Model):
@@ -462,6 +502,8 @@ class AppointmentItem(models.Model):
     start_time = models.TimeField()
     end_time = models.TimeField()
     price_snapshot = models.PositiveIntegerField()
+    catalog_pricing_snapshot = models.JSONField(default=dict, blank=True)
+    final_price = models.PositiveIntegerField(null=True, blank=True)
     duration_snapshot = models.PositiveIntegerField()
     notes = models.TextField(blank=True)
     completion_status = models.CharField(max_length=20, choices=COMPLETION_CHOICES, default="pending")
@@ -475,9 +517,38 @@ class AppointmentItem(models.Model):
 
     def save(self, *args, **kwargs):
         if self._state.adding:
-            self.price_snapshot = self.service.price
-            self.duration_snapshot = self.service.duration
+            for field, value in self.service.appointment_price_fields().items():
+                setattr(self, field, value)
         return super().save(*args, **kwargs)
+
+    @property
+    def pricing_type(self):
+        # Empty JSON means a historical fixed snapshot, regardless of today's catalog.
+        return self.catalog_pricing_snapshot.get("pricing_type", "FIXED")
+
+    @property
+    def is_price_final(self):
+        return self.pricing_type == "FIXED" or self.final_price is not None
+
+    @property
+    def effective_price(self):
+        return self.price_snapshot if self.pricing_type == "FIXED" else (self.final_price or 0)
+
+    @property
+    def price_status(self):
+        return "final" if self.is_price_final else ("estimated" if self.catalog_pricing_snapshot.get("minimum_price") is not None else "unresolved")
+
+    def ensure_commission(self, actor=None):
+        if self.completion_status != "completed" or not self.is_price_final:
+            return
+        # Keep fixed-service behavior. Variable commissions wait for confirmed settlement.
+        if self.pricing_type != "FIXED" and (self.appointment.has_unresolved_prices or self.appointment.remaining_total > 0 or self.appointment.net_paid <= 0):
+            return
+        EmployeeCommission.objects.get_or_create(appointment_item=self, defaults={
+            "base_amount": self.effective_price, "commission_rate_snapshot": self.employee.commission_rate,
+            "commission_amount": int(Decimal(self.effective_price) * self.employee.commission_rate / Decimal("100")),
+            "created_by": actor, "updated_by": actor,
+        })
 
     def set_completion_status(self, status, changed_by=None, reason=""):
         if status not in dict(self.COMPLETION_CHOICES):
@@ -485,20 +556,14 @@ class AppointmentItem(models.Model):
         from django.db import transaction
         with transaction.atomic():
             appointment = Appointment.objects.select_for_update().get(pk=self.appointment_id)
+            self.refresh_from_db(fields=("price_snapshot", "catalog_pricing_snapshot", "final_price"))
+            if status == "completed" and not self.is_price_final:
+                raise ValidationError("ابتدا قیمت نهایی این سرویس را مشخص کنید.")
             self.completion_status = status
             self.updated_by = changed_by
             self.save(update_fields=("completion_status", "updated_by", "updated_at"))
             if status == "completed":
-                EmployeeCommission.objects.get_or_create(
-                    appointment_item=self,
-                    defaults={
-                        "base_amount": self.price_snapshot,
-                        "commission_rate_snapshot": self.employee.commission_rate,
-                        "commission_amount": int(Decimal(self.price_snapshot) * self.employee.commission_rate / Decimal("100")),
-                        "created_by": changed_by,
-                        "updated_by": changed_by,
-                    },
-                )
+                self.ensure_commission(changed_by)
             sibling_statuses = appointment.items.exclude(pk=self.pk).values_list("completion_status", flat=True)
             if status == "completed":
                 appointment_status = "completed" if all(value == "completed" for value in sibling_statuses) else "confirmed"
@@ -591,12 +656,15 @@ class Payment(AuditedModel):
     def mark_paid(self, changed_by=None):
         if self.status not in {"pending", "failed"}:
             raise ValidationError("Payment cannot transition to paid from this state.")
+        self.appointment.require_final_prices()
         self.status = "paid"
         self.paid_at = timezone.now()
         self.updated_by = changed_by
         self.reviewed_by = changed_by
         self.reviewed_at = timezone.now()
         self.save(update_fields=("status", "paid_at", "updated_by", "reviewed_by", "reviewed_at", "updated_at"))
+        for item in self.appointment.items.select_related("service", "employee"):
+            item.ensure_commission(changed_by)
 
     def refund(self, changed_by=None):
         if self.status != "paid":

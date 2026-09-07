@@ -55,6 +55,36 @@ class ServiceSerializer(serializers.ModelSerializer):
         model = Service
         fields = "__all__"
 
+    def to_internal_value(self, data):
+        data = data.copy()
+        mode = data.get("pricing_type", self.instance.pricing_type if self.instance else "FIXED")
+        if mode not in {"STARTING_FROM", "RANGE", "VARIABLE"}:
+            data.pop("minimum_price", None)
+        if mode != "RANGE":
+            data.pop("maximum_price", None)
+        if mode != "FIXED" and data.get("price") in ("", None):
+            data.pop("price", None)
+        if mode == "VARIABLE" and data.get("minimum_price") == "":
+            data["minimum_price"] = None
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        from django.core.exceptions import ValidationError as ModelValidationError
+        mode = attrs.get("pricing_type", self.instance.pricing_type if self.instance else "FIXED")
+        if mode == "FIXED" and not self.instance and "price" not in attrs:
+            raise serializers.ValidationError({"price": "قیمت ثابت را وارد کنید."})
+        if mode not in {"STARTING_FROM", "RANGE", "VARIABLE"}:
+            attrs["minimum_price"] = None
+        if mode != "RANGE":
+            attrs["maximum_price"] = None
+        values = {field: attrs.get(field, getattr(self.instance, field, default)) for field, default in
+                  [("pricing_type", "FIXED"), ("price", 0), ("minimum_price", None), ("maximum_price", None), ("pricing_note", "")]}
+        try:
+            Service(**values).clean()
+        except ModelValidationError as error:
+            raise serializers.ValidationError(error.message_dict)
+        return attrs
+
     def get_employees(self, obj):
         return [{"id": link.employee_id, "name": link.employee.user.get_full_name(), "specialty": link.employee.specialty}
                 for link in obj.employee_links.all()
@@ -568,6 +598,10 @@ class AdminBlogPostSerializer(serializers.ModelSerializer):
 class AppointmentItemSerializer(serializers.ModelSerializer):
     service_name = serializers.CharField(source="service.persian_name", read_only=True)
     employee_name = serializers.SerializerMethodField()
+    pricing_type = serializers.CharField(read_only=True)
+    price_status = serializers.CharField(read_only=True)
+    is_price_final = serializers.BooleanField(read_only=True)
+    effective_price = serializers.IntegerField(read_only=True)
     status = serializers.CharField(source="completion_status", read_only=True)
 
     def get_employee_name(self, obj):
@@ -575,8 +609,8 @@ class AppointmentItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AppointmentItem
-        fields = ("id", "service", "service_name", "employee", "employee_name", "date", "start_time", "end_time", "price_snapshot", "duration_snapshot", "notes", "completion_status", "status")
-        read_only_fields = ("id", "price_snapshot", "duration_snapshot", "completion_status", "status")
+        fields = ("id", "service", "service_name", "employee", "employee_name", "date", "start_time", "end_time", "price_snapshot", "catalog_pricing_snapshot", "final_price", "pricing_type", "price_status", "is_price_final", "effective_price", "duration_snapshot", "notes", "completion_status", "status")
+        read_only_fields = ("id", "price_snapshot", "catalog_pricing_snapshot", "final_price", "duration_snapshot", "completion_status", "status")
 
     def validate(self, attrs):
         service = attrs.get("service", self.instance.service if self.instance else None)
@@ -607,6 +641,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
     hold_token = serializers.UUIDField(write_only=True, required=False)
     create_account = serializers.BooleanField(write_only=True, required=False, default=False)
     account_password = serializers.CharField(write_only=True, required=False, min_length=8)
+    has_unresolved_prices = serializers.BooleanField(read_only=True)
     appointment_total = serializers.IntegerField(read_only=True)
     paid_total = serializers.IntegerField(read_only=True)
     refunded_total = serializers.IntegerField(read_only=True)
@@ -618,7 +653,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Appointment
-        fields = ("id", "customer", "items", "status", "notes", "created_by", "updated_by", "created_at", "updated_at", "confirmation_code", "customer_name", "customer_phone", "hold_token", "create_account", "account_password", "appointment_total", "paid_total", "refunded_total", "net_paid", "remaining_total", "payment_status", "payments", "status_history")
+        fields = ("id", "customer", "items", "status", "notes", "created_by", "updated_by", "created_at", "updated_at", "confirmation_code", "customer_name", "customer_phone", "hold_token", "create_account", "account_password", "appointment_total", "has_unresolved_prices", "paid_total", "refunded_total", "net_paid", "remaining_total", "payment_status", "payments", "status_history")
         read_only_fields = ("id", "customer", "created_by", "updated_by", "created_at", "updated_at")
 
     def get_customer_name(self, obj):
@@ -708,8 +743,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 appointment=appointment,
                 created_by=customer,
                 updated_by=customer,
-                price_snapshot=item["service"].price,
-                duration_snapshot=item["service"].duration,
+                **item["service"].appointment_price_fields(),
                 **item,
             )
             for item in item_data
@@ -794,7 +828,7 @@ class EmployeeSelfBookingSerializer(serializers.Serializer):
             customer, _ = CustomerProfile.objects.get_or_create(user=user)
         appointment = Appointment.objects.create(customer=customer, created_by=request.user, updated_by=request.user, **validated_data)
         AppointmentItem.objects.bulk_create([
-            AppointmentItem(appointment=appointment, created_by=request.user, updated_by=request.user, price_snapshot=item["service"].price, duration_snapshot=item["service"].duration, **item)
+            AppointmentItem(appointment=appointment, created_by=request.user, updated_by=request.user, **item["service"].appointment_price_fields(), **item)
             for item in item_data
         ])
         return appointment
@@ -843,7 +877,7 @@ class AdminAppointmentCreateSerializer(serializers.ModelSerializer):
                 user.save(update_fields=("first_name", "phone"))
             customer, _ = CustomerProfile.objects.get_or_create(user=user)
         appointment = Appointment.objects.create(customer=customer, created_by=actor, updated_by=actor, **validated_data)
-        AppointmentItem.objects.bulk_create([AppointmentItem(appointment=appointment, created_by=actor, updated_by=actor, price_snapshot=item["service"].price, duration_snapshot=item["service"].duration, **item) for item in items])
+        AppointmentItem.objects.bulk_create([AppointmentItem(appointment=appointment, created_by=actor, updated_by=actor, **item["service"].appointment_price_fields(), **item) for item in items])
         return appointment
 
     def to_representation(self, instance):
@@ -891,6 +925,7 @@ class TransactionSerializer(serializers.ModelSerializer):
 
 
 class PaymentSerializer(serializers.ModelSerializer):
+    has_unresolved_prices = serializers.BooleanField(source="appointment.has_unresolved_prices", read_only=True)
     refunded_total = serializers.SerializerMethodField()
     refundable_total = serializers.SerializerMethodField()
     reporter_name = serializers.CharField(source="created_by.get_full_name", read_only=True)
@@ -920,7 +955,9 @@ class PaymentSerializer(serializers.ModelSerializer):
         return [{"id": refund.id, "amount": refund.amount, "reason": refund.reason, "status": refund.status, "created_at": refund.created_at} for refund in obj.refunds.all()]
 
     def validate(self, attrs):
-        appointment = attrs.get("appointment")
+        appointment = attrs.get("appointment", self.instance.appointment if self.instance else None)
+        if appointment and appointment.has_unresolved_prices:
+            raise serializers.ValidationError("ابتدا قیمت نهایی همه سرویس‌های نوبت را مشخص کنید.")
         amount = attrs.get("amount", 0)
         if amount <= 0:
             raise serializers.ValidationError({"amount": "مبلغ پرداخت باید بیشتر از صفر باشد."})
@@ -932,11 +969,15 @@ class PaymentSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         actor = self.context["request"].user
         appointment = Appointment.objects.select_for_update().get(pk=validated_data["appointment"].pk)
+        if appointment.has_unresolved_prices:
+            raise serializers.ValidationError("ابتدا قیمت نهایی همه سرویس‌های نوبت را مشخص کنید.")
         if validated_data["amount"] > appointment.remaining_total:
             raise serializers.ValidationError({"amount": "مبلغ پرداخت از مانده نوبت بیشتر است."})
         validated_data["appointment"] = appointment
         payment = Payment.objects.create(status="paid", paid_at=timezone.now(), created_by=actor, updated_by=actor, **validated_data)
         Transaction.objects.create(type="payment", amount=payment.amount, appointment=payment.appointment, payment=payment, description=payment.notes, created_by=actor, updated_by=actor)
+        for item in appointment.items.select_related("service", "employee"):
+            item.ensure_commission(actor)
         return payment
 
 

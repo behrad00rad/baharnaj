@@ -1,5 +1,5 @@
+import { formatServicePrice } from "../shared/pricing";
 import { Link } from "react-router-dom";
-import { toman } from "../shared/api";
 import { MediaImage, PublicState } from "./PublicUI";
 
 export function ServiceCard({ service, index = 0 }) {
@@ -23,7 +23,7 @@ export function ServiceCard({ service, index = 0 }) {
         {(service.short_description || service.description) && <p>{service.short_description || service.description}</p>}
       </div>
       <div className="service-meta">
-        <span>{toman(service.price)}</span>
+        <span>{formatServicePrice(service)}</span>
         <span>
           {new Intl.NumberFormat("fa-IR").format(service.duration || 0)} دقیقه
         </span>
