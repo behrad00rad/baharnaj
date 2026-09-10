@@ -27,5 +27,19 @@ services:
     depends_on:
       - backend
 
+  sms-worker:
+    profiles: [sms]
+    build:
+      context: ./backend
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      SQLITE_PATH: /data/db.sqlite3
+    volumes:
+      - backend_data:/data
+    command: python manage.py process_sms --loop --interval 60
+    restart: unless-stopped
+
 volumes:
   backend_data:

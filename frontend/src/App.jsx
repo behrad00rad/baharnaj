@@ -13,6 +13,7 @@ import About from "./pages/About";
 import Team from "./pages/Team";
 import Contact from "./pages/Contact";
 import Privacy from "./pages/Privacy";
+import SMSPreferences from './pages/SMSPreferences';
 import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
 import Blog from "./pages/Blog";
@@ -41,6 +42,7 @@ export default function App() {
     <ThemeProvider>
       <BrowserRouter>
       <Routes>
+        <Route path="/sms/preferences" element={<PublicLayout><SMSPreferences /></PublicLayout>} />
         <Route
           path="/"
           element={

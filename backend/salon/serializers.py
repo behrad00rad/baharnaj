@@ -17,6 +17,7 @@ from .models import (
 )
 from .validators import validate_no_employee_overlap
 from .security import validate_image_upload, validate_phone
+from .sms.phone import phone_variants
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -328,6 +329,26 @@ class AdminCustomerOptionSerializer(serializers.ModelSerializer):
 
 
 class UserAdminSerializer(serializers.ModelSerializer):
+    @transaction.atomic
+    def create(self, validated_data):
+        user = super().create(validated_data)
+        if user.role == 'customer':
+            CustomerProfile.objects.get_or_create(user=user)
+        return user
+
+    def validate_phone(self, value):
+        if not value:
+            return value
+        phone = validate_phone(value)
+        if self.initial_data.get('role', getattr(self.instance, 'role', 'customer')) != 'customer':
+            return phone
+        existing = User.objects.filter(phone__in=phone_variants(phone), role='customer')
+        if self.instance:
+            existing = existing.exclude(pk=self.instance.pk)
+        if existing.exists():
+            raise serializers.ValidationError('این شماره قبلاً ثبت شده است؛ مشتری موجود را انتخاب کنید.')
+        return phone
+
     class Meta:
         model = User
         fields = ("id", "username", "first_name", "last_name", "email", "phone", "role", "account_status", "is_active", "is_staff")
@@ -722,11 +743,15 @@ class AppointmentSerializer(serializers.ModelSerializer):
         create_account = validated_data.pop("create_account", False)
         account_password = validated_data.pop("account_password", None)
         name = self.initial_data.get("customer_name", "مشتری آنلاین")
-        phone = self.initial_data.get("customer_phone", "")
         request = self.context.get("request")
         customer = request.user if request and request.user.is_authenticated else None
+        phone = validate_phone(self.initial_data.get('customer_phone') or (customer.phone if customer else ''))
         if customer is None:
-            customer = User.objects.create_user(username=f"guest_{phone or 'online'}_{uuid4().hex[:10]}", first_name=name, phone=phone)
+            customer = User.objects.filter(phone__in=phone_variants(phone), role='customer').first()
+            if customer and create_account:
+                raise serializers.ValidationError('این شماره قبلاً ثبت شده است؛ برای تغییر حساب وارد شوید.')
+            if customer is None:
+                customer = User.objects.create_user(username=f"guest_{phone}_{uuid4().hex[:10]}", first_name=name, phone=phone)
         if create_account and account_password:
             customer.username = phone
             customer.set_password(account_password)
@@ -819,7 +844,7 @@ class EmployeeSelfBookingSerializer(serializers.Serializer):
         item_data = validated_data.pop("items")
         if customer is None:
             phone = validate_phone(phone)
-            user = User.objects.filter(phone=phone, role="customer").first()
+            user = User.objects.filter(phone__in=phone_variants(phone), role="customer").first()
             if user is None:
                 user = User.objects.create_user(username=f"employee_guest_{phone}_{uuid4().hex[:8]}", first_name=name, phone=phone, role="customer")
             elif name and user.get_full_name() != name:
@@ -870,7 +895,10 @@ class AdminAppointmentCreateSerializer(serializers.ModelSerializer):
         actor = self.context["request"].user
         if customer is None:
             phone = validate_phone(customer_phone)
-            user, created = User.objects.get_or_create(username=f"admin_guest_{phone}", defaults={"first_name": customer_name, "phone": phone, "role": "customer"})
+            user = User.objects.filter(phone__in=phone_variants(phone), role='customer').first()
+            created = user is None
+            if created:
+                user = User.objects.create_user(username=f'admin_guest_{phone}_{uuid4().hex[:8]}', first_name=customer_name, phone=phone, role='customer')
             if not created:
                 user.first_name = customer_name
                 user.phone = phone

@@ -588,7 +588,12 @@ class CustomerBookingView(generics.GenericAPIView):
     permission_classes = (AllowAny,)
 
     def find(self, request):
-        return Appointment.objects.filter(customer__user__phone=request.data.get("phone"), confirmation_code=request.data.get("confirmation_code")).first()
+        from .sms.phone import phone_variants
+        try:
+            phones = phone_variants(request.data.get('phone'))
+        except ValueError:
+            return None
+        return Appointment.objects.filter(customer__user__phone__in=phones, confirmation_code=request.data.get("confirmation_code")).first()
 
     def post(self, request):
         appointment = self.find(request)
@@ -735,6 +740,9 @@ class AdminAppointmentViewSet(AdminModelViewSet):
         if status_value == "cancelled":
             from .notifications import notify_appointment_cancelled
             notify_appointment_cancelled(appointment, actor=self.request.user)
+        if status_value == 'confirmed':
+            from .sms.events import schedule_event
+            schedule_event(appointment, 'appointment_confirmed')
         appointment.refresh_from_db()
         serializer.instance = appointment
         AdminActionLog.objects.create(actor=self.request.user, action="update", model_name="Appointment", object_id=str(appointment.pk), details={"fields": ["status"]})

@@ -1,4 +1,23 @@
 /* Shared component color pairs. Layout and typography stay in their existing files. */
+:is(.admin-app,.employee-app) { --ink:var(--color-text-primary); --muted:var(--color-text-secondary); --line:var(--color-border); --paper:var(--color-page-bg); --white:var(--color-surface); --teal:var(--color-brand-primary); --mint:var(--color-button-secondary-bg); --gold:var(--color-brand-accent); --red:var(--color-error-text); }
+.public-site { --ink:var(--color-text-primary); --paper:var(--color-page-bg); --paper-2:var(--color-surface-subtle); --acid:var(--color-brand-accent); --clay:var(--color-brand-primary); --muted:var(--color-text-secondary); --line:var(--color-border); }
+:is(.public-site,.admin-app,.employee-app) :is(.admin-stat.accent,.employee-card.next-card) { background:var(--color-highlight-bg); border-color:var(--color-highlight-bg); }
+.admin-app .admin-denied,.employee-app .employee-denied { background:var(--color-page-bg); }
+.employee-app .warning { background:var(--color-warning-bg); border-color:var(--color-border-strong); color:var(--color-warning-text); }
+.employee-app .detail-notes { background:var(--color-warning-bg); color:var(--color-warning-text); }
+.employee-app .customer-avatar { background:var(--color-button-secondary-bg); }
+.employee-app .employee-denied button { background:var(--color-button-primary-bg); }
+.public-site .hero-visual>p { color:var(--color-on-image); }
+.admin-app :is(.admin-inline-option button,.entity-list article>button,.panel-title a,.time,.drawer-item em,.quick-actions a,.entity-avatar) { color:var(--color-link); }
+.admin-app :is(.admin-inline-option button,.quick-actions a,.entity-avatar) { background:var(--color-button-secondary-bg); }
+.admin-app .admin-stat.accent { color:var(--color-highlight-text); }
+.notification-bell { color:var(--color-button-secondary-text); }
+.notification-bell b { background:var(--color-button-danger-bg); }
+.notification-panel>header button,.push-setting button { color:var(--color-link); }
+.notification-list>button.unread { border-right-color:var(--color-link); }
+.admin-app .fake-ring { border-color:var(--color-surface-subtle); border-top-color:var(--color-chart-2); border-right-color:var(--color-chart-1); }
+.admin-app .green { background:var(--color-chart-1); }
+.admin-app .admin-toast.error { background:var(--color-button-danger-bg); }
 .public-site .button:hover,.public-site .nav-book:hover {background:var(--color-brand-fill);color:var(--color-brand-contrast)}
 .public-site .button-light,.public-site .button-light:hover {background:var(--color-brand-accent);color:var(--color-brand-accent-text)}
 .public-site .hero-visual>p,.public-site .wizard-steps .current b {background:var(--color-brand-fill);color:var(--color-brand-contrast)}

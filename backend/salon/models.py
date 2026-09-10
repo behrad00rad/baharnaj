@@ -114,6 +114,9 @@ class CustomerProfile(SoftDeleteModel):
     tags = models.TextField(blank=True)
     no_show_count = models.PositiveIntegerField(default=0)
     last_visit = models.DateField(null=True, blank=True)
+    marketing_sms_allowed = models.BooleanField(default=False)
+    marketing_opted_out_at = models.DateTimeField(null=True, blank=True)
+    birth_date = models.DateField(null=True, blank=True)
 
     def clean(self):
         if self.user_id and self.user.role != "customer":
@@ -789,3 +792,6 @@ class SalonSettings(models.Model):
     @classmethod
     def get_solo(cls):
         return cls.objects.get_or_create(singleton_id=1)[0]
+
+
+from .sms.models import SMSCampaign, SMSAutomation, SMSSettings, SMSDelivery, SMSAttempt, SMSConsentEvent  # noqa: E402,F401

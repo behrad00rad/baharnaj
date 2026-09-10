@@ -208,3 +208,10 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
 }
 AUTH_USER_MODEL = "salon.User"
+
+# Dotted SMSProvider adapter class; blank deliberately disables external SMS.
+SMS_PROVIDER = os.getenv('SMS_PROVIDER', '')
+SMS_API_KEY = os.getenv('SMS_API_KEY', '')
+SMS_SENDER_NUMBER = os.getenv('SMS_SENDER_NUMBER', '')
+SMS_PUBLIC_BASE_URL = os.getenv('SMS_PUBLIC_BASE_URL', '')
+SMS_ALLOW_TEST_PROVIDER = DEBUG and os.getenv('SMS_ALLOW_TEST_PROVIDER', '') == '1'

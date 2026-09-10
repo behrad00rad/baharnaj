@@ -46,6 +46,8 @@ def appointment_employee_users(appointment):
 
 
 def notify_appointment_created(appointment, actor=None):
+    from .sms.events import schedule_event
+    schedule_event(appointment, 'appointment_created')
     first_item = appointment.items.order_by("date", "start_time").first()
     when = f"{first_item.date} ساعت {first_item.start_time.strftime('%H:%M')}" if first_item else ""
     employees = list(appointment_employee_users(appointment))
@@ -57,6 +59,8 @@ def notify_appointment_created(appointment, actor=None):
 
 
 def notify_appointment_rescheduled(appointment, actor=None):
+    from .sms.events import schedule_event
+    schedule_event(appointment, 'appointment_changed')
     first_item = appointment.items.order_by("date", "start_time").first()
     when = f"{first_item.date} ساعت {first_item.start_time.strftime('%H:%M')}" if first_item else "زمان جدید"
     notify_users(appointment_employee_users(appointment), type="appointment_rescheduled", title="تغییر زمان نوبت", message=f"زمان نوبت به {when} تغییر کرد.", target_url=f"/employee/calendar?appointment={appointment.pk}", appointment=appointment)
@@ -66,6 +70,8 @@ def notify_appointment_rescheduled(appointment, actor=None):
 
 
 def notify_appointment_cancelled(appointment, actor=None, item=None):
+    from .sms.events import schedule_event
+    schedule_event(appointment, 'appointment_changed' if item and appointment.status != 'cancelled' else 'appointment_cancelled')
     if item and appointment.status != "cancelled":
         # A single service cancellation must reach admins even if the booking continues.
         if not actor or getattr(actor, "role", None) != "admin":

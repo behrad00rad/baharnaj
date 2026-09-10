@@ -1,0 +1,40 @@
+import {test,expect} from '@playwright/test';
+const report={total:2,pending:2,sent:0,delivered:0,failed:0,unknown:0,success_rate:0};
+const campaign={id:1,name:'یادآوری مراجعه مشتریان رنگ مو',message:'سلام {{first_name}}، برای نوبت بعدی در {{salon_name}} منتظرتان هستیم.',segment:{inactive_days:90},status:'draft',report,service:null,booking_link:'',discount_code:''};
+for(const [width,theme,size] of [[390,'light','compact'],[390,'dark','large'],[768,'light','large'],[768,'dark','normal'],[1366,'light','normal'],[1366,'dark','compact']]) test(`SMS CRM ${width} ${theme} ${size}`,async({page})=>{
+  await page.setViewportSize({width,height:950});
+  await page.addInitScript(({theme,size})=>{localStorage.setItem('baharnaj-theme',theme);localStorage.setItem('baharnaj-text-size',size);},{theme,size});
+  let confirmed=false;
+  await page.route('**/api/v1/**',route=>{
+    const path=new URL(route.request().url()).pathname;let data=[];
+    if(path.includes('auth/token/refresh')) data={access:'test',role:'admin'};
+    else if(path.endsWith('/sms/settings/'))data={settings:{salon_name:'بهارناژ',booking_link:'',manager_phone:'',daily_summary_enabled:false,daily_summary_hour:21,campaign_summary_enabled:false,failure_alert_enabled:false,batch_size:50,last_worker_at:null},provider:{configured:true,development:true,message:'حالت آزمایشی؛ ارسال واقعی انجام نمی‌شود.'}};
+    else if(path.endsWith('/sms/campaigns/'))data=[campaign];
+    else if(path.endsWith('/preview/'))data={recipient_count:2,total_parts:6,audience:[{customer:1,name:'مینا',phone:'09111111111',message:'سلام مینا، برای نوبت بعدی در بهارناژ منتظرتان هستیم.\nلغو پیامک: https://example.test/sms/preferences?token=test',parts:3}],confirmation_token:'preview'};
+    else if(path.endsWith('/confirm/')){confirmed=true;data={...campaign,status:'queued'};}
+    else if(path.endsWith('/services/'))data=[{id:1,persian_name:'رنگ مو'}];
+    else if(path.endsWith('/service-categories/'))data=[{id:1,name:'خدمات مو'}];
+    else if(path.endsWith('/sms/customers/'))data={count:1,results:[{id:1,name:'مینا',phone:'09111111111',last_visit:'2026-05-01',completed_appointments:4,total_confirmed_spend:3200000,marketing_sms_allowed:true}]};
+    else if(path.endsWith('/unread-count/'))data={count:0};
+    return route.fulfill({json:data});
+  });
+  await page.goto('/admin/sms');
+  await expect(page.getByRole('heading',{name:'پیامک و ارتباط با مشتریان'})).toBeVisible();
+  await page.getByRole('button',{name:'بررسی و ارسال'}).click();
+  await expect(page.getByRole('dialog')).toContainText('2 مخاطب');
+  await page.screenshot({path:`/tmp/sms-confirm-${width}-${theme}.png`,fullPage:true});
+  await page.getByRole('button',{name:'تأیید و ارسال'}).click();
+  await expect.poll(()=>confirmed).toBe(true);
+  await page.getByRole('button',{name:'کمپین جدید'}).click();
+  await page.getByLabel('نام کمپین').fill('بازگشت مشتریان');
+  await page.getByLabel('متن پیام').fill('سلام {{first_name}}');
+  await page.getByLabel('عدم مراجعه بیش از (روز)').fill('90');
+  await page.getByLabel('سرویس انجام‌شده').selectOption('1');
+  await page.getByLabel('عدم مراجعه بیش از (روز)').scrollIntoViewIfNeeded();
+  await page.screenshot({path:`/tmp/sms-editor-${width}-${theme}.png`,fullPage:true});
+  await expect(page.locator('.sms-modal')).toHaveJSProperty('scrollWidth',await page.locator('.sms-modal').evaluate(el=>el.clientWidth));
+  await page.getByRole('button',{name:'بستن',exact:true}).click();
+  await page.getByRole('button',{name:'مخاطبان و وفاداری',exact:true}).click();
+  await expect(page.getByRole('button',{name:'پرونده مشتری'})).toBeVisible();
+  await expect(page.locator('body')).toHaveJSProperty('scrollWidth',await page.locator('body').evaluate(el=>el.clientWidth));
+});

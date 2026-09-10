@@ -12,10 +12,11 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 def validate_phone(value):
-    compact = re.sub(r"[\s-]", "", value or "")
-    if not PHONE_RE.fullmatch(compact):
-        raise serializers.ValidationError("شماره تلفن معتبر نیست.")
-    return compact
+    from .sms.phone import normalize_phone
+    try:
+        return normalize_phone(value)
+    except ValueError as exc:
+        raise serializers.ValidationError(str(exc)) from exc
 
 
 def validate_image_upload(upload):

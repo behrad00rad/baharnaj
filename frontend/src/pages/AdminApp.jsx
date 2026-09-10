@@ -1,4 +1,5 @@
 import ServicePricingFields from "../components/ServicePricingFields";
+import AdminSMS from './AdminSMS';
 import ItemPricing from "../components/ItemPricing";
 import { formatServicePrice, servicePricingPayload } from "../shared/pricing";
 import { useEffect, useMemo, useState } from "react";
@@ -2156,6 +2157,8 @@ function AdminRouter() {
     <Routes>
       <Route index element={<DashboardHome />} />
       <Route path="appointments" element={<Appointments />} />
+      <Route path="sms" element={<AdminSMS />} />
+      <Route path="sms/customers" element={<AdminSMS initialTab="customers" />} />
       <Route path="employees" element={<EmployeeManagement />} />
       <Route
         path="services"
@@ -2164,6 +2167,8 @@ function AdminRouter() {
       <Route
         path="customers"
         element={
+          <>
+          <div className="admin-page"><Link to="/admin/sms/customers">پرونده مشتریان، سوابق پیامک و وفاداری ←</Link></div>
           <CrudPage
             type="مشتری"
             endpoint="admin/users/"
@@ -2175,6 +2180,7 @@ function AdminRouter() {
               { name: "phone", label: "شماره تماس" },
             ]}
           />
+          </>
         }
       />
       <Route path="finance" element={<Finance />} />

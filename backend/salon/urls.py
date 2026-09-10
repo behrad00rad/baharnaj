@@ -11,6 +11,11 @@ from .views import (AdminAppointmentViewSet, AdminBlogCategoryViewSet, AdminBlog
 					BlogCategoryListView, BlogPostDetailView, BlogPostListView)
 
 router = DefaultRouter()
+from .sms.api import (CampaignViewSet, AutomationViewSet, DeliveryViewSet, SettingsView,
+                      AudienceView, CustomerCRMView, OptOutView, OwnPreferencesView)
+router.register('admin/sms/campaigns', CampaignViewSet, basename='sms-campaign')
+router.register('admin/sms/automations', AutomationViewSet, basename='sms-automation')
+router.register('admin/sms/deliveries', DeliveryViewSet, basename='sms-delivery')
 router.register("admin/services", AdminServiceViewSet, basename="admin-service")
 router.register("admin/gallery", AdminGalleryViewSet, basename="admin-gallery")
 router.register("admin/employees", AdminEmployeeViewSet, basename="admin-employee")
@@ -36,6 +41,12 @@ router.register("employee/time-off", EmployeeTimeOffViewSet, basename="employee-
 router.register("employee/schedule", EmployeeWorkingScheduleViewSet, basename="employee-schedule")
 
 urlpatterns = [
+    path('admin/sms/settings/', SettingsView.as_view()),
+    path('admin/sms/audience/', AudienceView.as_view()),
+    path('admin/sms/customers/', CustomerCRMView.as_view()),
+    path('admin/sms/customers/<int:pk>/', CustomerCRMView.as_view()),
+    path('sms/opt-out/', OptOutView.as_view()),
+    path('customer/sms-preferences/', OwnPreferencesView.as_view()),
 	path("services/", ServiceListView.as_view(), name="service-list"),
 	path("services/<str:slug>/", ServiceDetailView.as_view(), name="service-detail"),
 	path("gallery/", GalleryListView.as_view(), name="gallery-list"),
