@@ -1898,17 +1898,44 @@ function EmployeeManagement() {
 function ServiceManagement() {
   const services = useResource("admin/services/");
   const categories = useResource("admin/service-categories/");
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  const [categoryDraft, setCategoryDraft] = useState("");
+  const [categorySaving, setCategorySaving] = useState(false);
+  const [categoryError, setCategoryError] = useState("");
   const [form, setForm] = useState(null);
   const [files, setFiles] = useState([]);
   const [imageAlt, setImageAlt] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  useEffect(() => setCategoryOptions(categories.data), [categories.data]);
   const update = (name, value) => setForm((current) => ({ ...current, [name]: value }));
   const openNew = () => {
     setForm({ category: "", name: "", persian_name: "", short_description: "", description: "", price: "", pricing_type: "FIXED", minimum_price: "", maximum_price: "", pricing_note: "", duration: "", slug: "", seo_title: "", seo_description: "", is_active: true, is_bookable: true, is_featured: false });
     setFiles([]);
     setImageAlt("");
+    setCategoryDraft("");
+    setCategoryError("");
     setMessage("");
+  };
+  const createCategory = async () => {
+    const name = categoryDraft.trim();
+    if (!name) {
+      setCategoryError("نام دسته‌بندی را وارد کنید");
+      return;
+    }
+    setCategorySaving(true);
+    setCategoryError("");
+    try {
+      const { data } = await api.post("admin/service-categories/", { name });
+      setCategoryOptions((current) => [...current, data]);
+      update("category", data.id);
+      setCategoryDraft("");
+      categories.reload();
+    } catch (error) {
+      setCategoryError(firstError(error, "ثبت دسته‌بندی انجام نشد"));
+    } finally {
+      setCategorySaving(false);
+    }
   };
   const uploadImages = async (serviceId) => {
     for (const [index, file] of files.entries()) {
@@ -1952,7 +1979,7 @@ function ServiceManagement() {
         <div className="service-admin-thumb">{service.images?.[0]?.image_url ? <img src={service.images[0].image_url} alt="" /> : (service.persian_name || "س")[0]}</div>
         <div><b>{service.persian_name || service.name}</b><span>{formatServicePrice(service)}</span><small>{service.short_description || service.description || "محتوای صفحه هنوز کامل نشده است."}</small></div>
         <span className={`finance-badge ${service.is_active ? "paid" : "failed"}`}>{service.is_active ? "منتشرشده" : "غیرفعال"}</span>
-        <button className="admin-secondary" onClick={() => { setForm(service); setFiles([]); setImageAlt(""); setMessage(""); }}>ویرایش صفحه</button>
+        <button className="admin-secondary" onClick={() => { setForm(service); setFiles([]); setImageAlt(""); setCategoryDraft(""); setCategoryError(""); setMessage(""); }}>ویرایش صفحه</button>
       </article>)}</div>}
     </section>
     {form && <div className="modal-backdrop" onMouseDown={() => setForm(null)}><form className="admin-modal service-editor" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
@@ -1961,7 +1988,7 @@ function ServiceManagement() {
       <fieldset><legend>اطلاعات اصلی</legend><div className="service-editor-grid">
         <label>نام فارسی<input required value={form.persian_name || ""} onChange={(event) => update("persian_name", event.target.value)} /></label>
         <label>نام داخلی<input required value={form.name || ""} onChange={(event) => update("name", event.target.value)} /></label>
-        <label>دسته‌بندی<select required value={form.category || ""} onChange={(event) => update("category", event.target.value)}><option value="">انتخاب کنید</option>{categories.data.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+        <label>دسته‌بندی<select required value={form.category || ""} onChange={(event) => update("category", event.target.value)}><option value="">انتخاب کنید</option>{categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><span className="admin-inline-option"><input aria-label="نام دسته‌بندی جدید سرویس" placeholder="نام دسته‌بندی جدید" value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} /><button type="button" disabled={categorySaving} onClick={createCategory}>{categorySaving ? "در حال ذخیره..." : "+ افزودن دسته‌بندی جدید"}</button>{categoryError && <small className="admin-field-error">{categoryError}</small>}</span></label>
         <label>آدرس سرویس (slug)<input dir="ltr" value={form.slug || ""} onChange={(event) => update("slug", event.target.value)} /><small>تغییر این مقدار، آدرس عمومی سرویس را تغییر می‌دهد.</small></label>
       </div></fieldset>
       <fieldset><legend>محتوای صفحه سرویس</legend><label>معرفی کوتاه<textarea maxLength="320" value={form.short_description || ""} onChange={(event) => update("short_description", event.target.value)} /></label><label>متن کامل مقاله<textarea className="service-article-input" value={form.description || ""} onChange={(event) => update("description", event.target.value)} /></label></fieldset>
@@ -2021,7 +2048,7 @@ function FinanceSeriesChart({ data, metric, metrics = adminChartMetrics, height 
 function FinancePresetFilter({ preset, setPreset, customStart, setCustomStart, customEnd, setCustomEnd }) {
   return <div className="finance-modal-range">
     <div className="segmented">{[["day","امروز"],["week","این هفته"],["month","این ماه"],["last-month","ماه قبل"],["custom","بازه دلخواه"]].map(([value,label]) => <button type="button" key={value} className={preset === value ? "selected" : ""} onClick={() => setPreset(value)}>{label}</button>)}</div>
-    {preset === "custom" && <div className="finance-custom-range"><label>از<input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label>تا<input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></div>}
+    {preset === "custom" && <div className="finance-custom-range"><label>از<JalaliDatePicker value={customStart} onChange={setCustomStart} /></label><label>تا<JalaliDatePicker value={customEnd} onChange={setCustomEnd} /></label></div>}
   </div>;
 }
 
@@ -2102,7 +2129,7 @@ function Finance() {
     <Header eyebrow="گزارش‌های قابل حسابرسی" title="مالی و پرداخت‌ها" action="ثبت پرداخت دستی" onAction={() => setManualOpen(true)} />
     <div className="finance-filters">
       <div className="segmented">{[["day","امروز"],["week","این هفته"],["month","این ماه"],["last-month","ماه قبل"],["custom","بازه دلخواه"]].map(([value,label]) => <button key={value} className={preset === value ? "selected" : ""} onClick={() => setPreset(value)}>{label}</button>)}</div>
-      {preset === "custom" && <div className="finance-custom-range"><label>از<input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label>تا<input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></div>}
+      {preset === "custom" && <div className="finance-custom-range"><label>از<JalaliDatePicker value={customStart} onChange={setCustomStart} /></label><label>تا<JalaliDatePicker value={customEnd} onChange={setCustomEnd} /></label></div>}
       <select value={employee} onChange={(event) => setEmployee(event.target.value)}><option value="">همه کارکنان</option>{employees.data.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
     </div>
     {overview.error && <div className="finance-message error">دریافت آمار مالی انجام نشد.</div>}

@@ -296,6 +296,12 @@ function NewAppointment() {
 }
 const isoDate = (value) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(value);
+const jalaliDateLabel = (value) =>
+  new Intl.DateTimeFormat("fa-IR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(new Date(`${value}T12:00:00`));
 const addDays = (value, amount) => {
   const next = new Date(`${value}T12:00:00`);
   next.setDate(next.getDate() + amount);
@@ -315,11 +321,7 @@ function Calendar() {
   const workingHours = schedule.data.find(
     (item) => item.weekday === weekdayNumber(selectedDate) && item.is_active,
   );
-  const selectedLabel = new Intl.DateTimeFormat("fa-IR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }).format(new Date(`${selectedDate}T12:00:00`));
+  const selectedLabel = jalaliDateLabel(selectedDate);
   return (
     <div className="employee-page">
       <Heading kicker="برنامه‌ریزی" title="تقویم" />
@@ -359,7 +361,7 @@ function Calendar() {
           {days.map((day) => (
             <button
               type="button"
-              aria-label={`انتخاب ${day}`}
+              aria-label={`انتخاب ${jalaliDateLabel(day)}`}
               className={day === selectedDate ? "active" : ""}
               onClick={() => setSelectedDate(day)}
               key={day}
@@ -467,12 +469,8 @@ function CalendarWorkspace() {
         </button>
         <strong>
           {mode === "week"
-            ? `${weekStart} تا ${weekDays[6]}`
-            : new Intl.DateTimeFormat("fa-IR", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              }).format(new Date(`${selectedDate}T12:00:00`))}
+            ? `${jalaliDateLabel(weekStart)} تا ${jalaliDateLabel(weekDays[6])}`
+            : jalaliDateLabel(selectedDate)}
         </strong>
         <button
           type="button"
@@ -491,11 +489,7 @@ function CalendarWorkspace() {
           const dayAppointments = appointments.data.filter((appointment) =>
             appointment.items?.some((item) => item.date === day),
           );
-          const label = new Intl.DateTimeFormat("fa-IR", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-          }).format(new Date(`${day}T12:00:00`));
+          const label = jalaliDateLabel(day);
           return (
             <section className="calendar-day" key={day}>
               <div className="day-label">
@@ -542,6 +536,14 @@ function Availability() {
   const [saving, setSaving] = useState(false);
   const submit = async (event) => {
     event.preventDefault();
+    if (!form.start_date || !form.end_date) {
+      setMessage("تاریخ شروع و پایان را انتخاب کنید.");
+      return;
+    }
+    if (form.end_date < form.start_date) {
+      setMessage("تاریخ پایان نمی‌تواند قبل از تاریخ شروع باشد.");
+      return;
+    }
     setSaving(true);
     setMessage("");
     try {
@@ -565,25 +567,16 @@ function Availability() {
         <form className="employee-form" onSubmit={submit}>
           <label>
             از
-            <input
-              type="date"
+            <JalaliDatePicker
               value={form.start_date}
-              onChange={(event) =>
-                setForm({ ...form, start_date: event.target.value })
-              }
-              required
+              onChange={(value) => setForm({ ...form, start_date: value })}
             />
           </label>
           <label>
             تا
-            <input
-              type="date"
-              min={form.start_date}
+            <JalaliDatePicker
               value={form.end_date}
-              onChange={(event) =>
-                setForm({ ...form, end_date: event.target.value })
-              }
-              required
+              onChange={(value) => setForm({ ...form, end_date: value })}
             />
           </label>
           <label>
@@ -963,7 +956,7 @@ function Earnings() {
             {label}
           </button>
         ))}</div>
-        {preset === "custom" && <div className="employee-custom-range"><label>از<input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label>تا<input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></div>}
+        {preset === "custom" && <div className="employee-custom-range"><label>از<JalaliDatePicker value={customStart} onChange={setCustomStart} /></label><label>تا<JalaliDatePicker value={customEnd} onChange={setCustomEnd} /></label></div>}
       </div>
       {resource.loading && <Skeleton />}
       {resource.error && <div className="warning">{resource.error}</div>}
