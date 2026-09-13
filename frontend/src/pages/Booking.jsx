@@ -520,6 +520,7 @@ function TimeStep({
               {slots.map((slot) => (
                 <button
                   type="button"
+                  aria-pressed={time === slot}
                   className={time === slot ? "selected" : ""}
                   onClick={() => setTime(slot)}
                   key={slot}

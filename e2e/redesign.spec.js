@@ -41,7 +41,7 @@ for(const theme of ['light','dark']) {
   await page.keyboard.press('Escape')
   await expect(menu).toBeFocused()
   expect(await page.evaluate(()=>document.body.style.overflow)).toBe('')
-  await menu.click();await page.locator('#mobile-navigation').getByRole('link',{name:/نمونه‌کارها/}).click()
+  await menu.click();await page.locator('#mobile-navigation a[href="/gallery"]').click()
   await expect(page).toHaveURL(/gallery/)
   await expect(menu).toHaveAttribute('aria-expanded','false')
   await page.getByRole('button',{name:'ناخن',exact:true}).click()
@@ -110,7 +110,7 @@ test('measured text, action and interactive-boundary contrast in both themes', a
     ['button-primary-text','button-primary-bg',4.5],['button-primary-text','button-primary-hover',4.5],
     ['brand-accent-text','brand-accent',4.5],['accent-muted','brand-accent',4.5],['home-about-text','home-about-bg',4.5],
     ['home-cta-text','home-cta-bg',4.5],['footer-muted','footer-bg',4.5],['focus','page-bg',3],
-    ['error-text','error-bg',4.5],['warning-text','warning-bg',4.5],['success-text','success-bg',4.5],
+    ['sidebar-text','sidebar-active',4.5],['sidebar-text','sidebar-bg',4.5],['error-text','error-bg',4.5],['warning-text','warning-bg',4.5],['success-text','success-bg',4.5],
    ].map(([fg,bg,target])=>{const a=luminance(rgb(fg)),b=luminance(rgb(bg));return{fg,bg,target,ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)}})
   })
   report[theme]=pairs
