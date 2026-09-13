@@ -1185,6 +1185,7 @@ function CrudPage({
   eyebrow,
   fields = [],
   uploads = false,
+  deletable = false,
 }) {
   const resource = useResource(endpoint);
   const [options, setOptions] = useState({});
@@ -1278,6 +1279,16 @@ function CrudPage({
       setSaving(false);
     }
   };
+  const remove = async (item) => {
+    if (!window.confirm("این محتوا حذف شود؟")) return;
+    try {
+      await api.delete(`${endpoint}${item.id}/`);
+      resource.reload();
+      setToast("محتوا حذف شد");
+    } catch (error) {
+      setToast(firstError(error, "حذف محتوا انجام نشد"));
+    }
+  };
   return (
     <div className="admin-page">
       <Header
@@ -1317,6 +1328,7 @@ function CrudPage({
                       : "فعال"}
                 </span>
                 <button
+                  type="button"
                   onClick={() => {
                     setForm(item);
                     setOpen(true);
@@ -1324,6 +1336,7 @@ function CrudPage({
                 >
                   ویرایش
                 </button>
+                {deletable && <button type="button" className="admin-danger" onClick={() => remove(item)}>حذف</button>}
               </article>
             ))}
           </div>
@@ -2162,6 +2175,7 @@ function Content() {
       title="محتوا و گالری"
       eyebrow="انتشارات"
       uploads
+      deletable
       fields={[
         ["title", "عنوان"],
         {

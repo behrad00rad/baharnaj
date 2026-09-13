@@ -9,7 +9,7 @@ import { siteConfig } from "../shared/siteConfig";
 const publicLinks = [
   ["/", "خانه"],
   ["/services", "خدمات"],
-  ["/gallery", "نمونه‌کارها"],
+  ["/gallery", "گالری"],
   ["/blog", "مجله"],
   ["/team", "تیم"],
   ["/about", "دربارهٔ ما"],
