@@ -1,5 +1,5 @@
 import { formatServicePrice, bookingPriceSummary } from "../shared/pricing";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DateModal } from "../components/DatePicker";
 import { api } from "../shared/api";
@@ -82,6 +82,7 @@ export default function Booking() {
   const [confirmation, setConfirmation] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const submitting = useRef(false);
   const chosenServices = useMemo(
     () =>
       selected
@@ -189,6 +190,8 @@ export default function Booking() {
   };
   const submit = async (event) => {
     event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setError("");
     setLoading(true);
     try {
@@ -210,11 +213,12 @@ export default function Booking() {
           "ثبت رزرو انجام نشد. زمان دیگری را امتحان کنید.",
       );
     } finally {
+      submitting.current = false;
       setLoading(false);
     }
   };
   if (confirmation)
-    return <><SEO title="رزرو ثبت شد | بهارناژ" description="رزرو شما در بهارناژ ثبت شد." canonicalPath="/book" noindex /><Confirmation appointment={confirmation} navigate={navigate} /></>;
+    return <><SEO title={confirmation.status === "confirmed" ? "نوبت تأیید شد | بهارناژ" : "درخواست نوبت ثبت شد | بهارناژ"} description="اطلاعات درخواست نوبت شما در بهارناژ." canonicalPath="/book" noindex /><Confirmation appointment={confirmation} navigate={navigate} /></>;
   return (
     <>
     <SEO title="رزرو آنلاین سالن بهارناژ در رشت" description="سرویس، متخصص و زمان مناسب خود را در سالن زیبایی بهارناژ رشت به‌صورت آنلاین انتخاب و رزرو کنید." canonicalPath="/book" />
@@ -236,11 +240,11 @@ export default function Booking() {
                       : "تأیید نهایی"}
             </h1>
             <p>
-              می‌توانی چند سرویس را در یک نوبت انتخاب کنی؛ ساعت‌ها بر اساس
+              می‌توانید چند خدمت را در یک نوبت انتخاب کنید؛ ساعت‌ها بر اساس
               برنامه واقعی سالن نمایش داده می‌شوند.
             </p>
           </div>
-          {error && <p className="error wizard-error">{error}</p>}
+          {error && <p role="alert" className="error wizard-error">{error}</p>}
           {step === 0 && (
             <ServiceStep
               services={services}
@@ -668,7 +672,7 @@ function ReviewStep({
         contact={contact}
       />
       <p className="wizard-empty">
-        اطلاعات رزرو را بررسی کن. با ثبت نهایی، درخواست برای سالن ارسال می‌شود.
+        اطلاعات رزرو را بررسی کنید. با ثبت نهایی، درخواست برای سالن ارسال می‌شود.
       </p>
       <div className="wizard-footer">
         <Back onClick={onBack} />
@@ -682,8 +686,9 @@ function ReviewStep({
 function Confirmation({ appointment, navigate }) {
   return (
     <section className="booking-confirmation container">
-      <p className="eyebrow">رزرو با موفقیت ثبت شد</p>
-      <h1>منتظرت هستیم.</h1>
+      <p className="eyebrow">درخواست شما ثبت شد</p>
+      <h1>{appointment.status === "confirmed" ? "نوبت شما تأیید شد." : "درخواست نوبت دریافت شد."}</h1>
+      {appointment.status !== "confirmed" && <p>ثبت درخواست به معنی تأیید نهایی نوبت نیست. برای هماهنگی، با سالن در تماس باشید.</p>}
       <p>
         کد پیگیری شما: <strong>{appointment.confirmation_code}</strong>
       </p>

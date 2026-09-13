@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { brandCopy } from "../shared/brandCopy";
+import { siteConfig } from "../shared/siteConfig";
 import { ServiceGrid } from "../components/ServiceGrid";
 import {
   ArrowLink,
@@ -23,34 +25,28 @@ export default function Home() {
   return (
     <>
       <SEO
-        title="سالن زیبایی بهارناژ در رشت | Baharnaj"
-        description="سالن زیبایی بهارناژ در رشت؛ سرویس‌های Hair، Nail و Makeup را ببینید، متخصص مناسب را انتخاب کنید و نوبت خود را آنلاین رزرو کنید."
+        title={brandCopy.title}
+        description={brandCopy.intro}
         image={heroAsset?.image_url}
         structuredData={beautySalonSchema()}
       />
-      <section className="hero container">
+      <section className={`hero container ${heroAsset?.image_url ? "" : "hero-no-media"}`}>
         <div className="hero-copy">
-          <p className="eyebrow">BAHARNAJ BEAUTY STUDIO</p>
-          <h1>
-            زیبایی را
-            <br />
-            <em>خودت تعریف کن.</em>
-          </h1>
-          <p className="lead">
-            استایل بعدی‌ات را انتخاب کن؛ زمانش را آنلاین رزرو کن.
-          </p>
+          <p className="eyebrow">{brandCopy.descriptor}</p>
+          <h1>زیبایی،<br /><em>به سلیقهٔ تو.</em></h1>
+          <p className="lead">{brandCopy.intro}</p>
           <div className="hero-actions">
             <Link className="button" to="/book">
-              رزرو آنلاین <span>←</span>
+              رزرو نوبت <span>←</span>
             </Link>
             <ArrowLink to="/gallery">دیدن نمونه‌کارها</ArrowLink>
           </div>
           <div className="hero-index">
-            <span>استودیو زیبایی بهارناژ</span>
-            <span>Hair · Nail · Makeup</span>
+            <span>رشت، ضیابری</span>
+            <span>بهارناژ / BAHARNAJ</span>
           </div>
         </div>
-        <div className="hero-visual">
+        {heroAsset?.image_url && <div className="hero-visual">
           <div className="hero-image">
             <MediaImage
               src={heroAsset?.image_url}
@@ -58,46 +54,32 @@ export default function Home() {
               eager
             />
           </div>
-          <span className="hero-stamp">
-            BEAUTY
-            <br />
-            ON YOUR
-            <br />
-            TERMS
-          </span>
           <p>{heroAsset?.title || "بهارناژ، به سبک تو"}</p>
-        </div>
-      </section>
-
-      <section className="manifesto container">
-        <span className="manifesto-number">۰۱</span>
-        <p>
-          از یک تغییر کوچک تا یک استایل تازه؛ به سبک خودت.
-        </p>
+        </div>}
       </section>
 
       <section className="home-services section-dark">
         <div className="container">
           <SectionHeader
-            eyebrow="SERVICES / 02"
-            title="سرویس‌هایی برای حالِ تازه."
-            text="سرویس‌ها، قیمت‌ها و زمان هر کدام را ببین."
-            action={<ArrowLink to="/services">همه سرویس‌ها</ArrowLink>}
+            eyebrow="انتخاب شما"
+            title="خدمات بهارناژ"
+            text="خدمات و جزئیات هزینه را ببین و با توجه به سلیقه‌ات انتخاب کن."
+            action={<ArrowLink to="/services">همهٔ خدمات</ArrowLink>}
           />
-          <ServiceGrid services={services.slice(0, 6)} state={serviceState} />
+          <ServiceGrid services={services.slice(0, 3)} state={serviceState} />
         </div>
       </section>
 
-      <section className="home-work container">
+      {(gallery.length > 0 || galleryState !== "ready") && <section className="home-work container">
         <SectionHeader
-          eyebrow="SELECTED WORK / 03"
-          title="کارهای منتخب"
+          eyebrow="نمونه‌کارها"
+          title="از نزدیک ببین"
           text="تصاویر واقعی ثبت‌شده در گالری بهارناژ."
           action={<ArrowLink to="/gallery">گالری کامل</ArrowLink>}
         />
         {galleryState === "ready" && gallery.length ? (
           <div className="home-work-grid">
-            {gallery.slice(0, 5).map((item, index) => (
+            {gallery.slice(0, 3).map((item, index) => (
               <Link
                 className={`work-item work-item-${index + 1}`}
                 to="/gallery"
@@ -121,45 +103,20 @@ export default function Home() {
             error="گالری در حال حاضر در دسترس نیست؛ سایر بخش‌ها همچنان قابل استفاده‌اند."
           />
         )}
-      </section>
+      </section>}
 
       <section className="brand-story">
         <div className="container brand-story-grid">
-          <div>
-            <p className="eyebrow">WHY BAHARNAJ / 04</p>
-            <h2>
-              یک تجربه،
-              <br />
-              نه فقط یک نوبت.
-            </h2>
-          </div>
-          <div className="brand-principles">
-            <article>
-              <span>۰۱</span>
-              <h3>انتخاب روشن</h3>
-              <p>
-                سرویس، متخصص و زمان را قبل از ثبت نهایی می‌بینی و انتخاب می‌کنی.
-              </p>
-            </article>
-            <article>
-              <span>۰۲</span>
-              <h3>هماهنگ با تو</h3>
-              <p>رزرو چند سرویس در یک مسیر ساده، با برنامه زمانی واقعی سالن.</p>
-            </article>
-            <article>
-              <span>۰۳</span>
-              <h3>جزئیات دقیق</h3>
-              <p>هر سرویس با زمان و قیمت ثبت‌شده خودش نمایش داده می‌شود.</p>
-            </article>
-          </div>
+          <div><p className="eyebrow">دربارهٔ بهارناژ</p><h2>{brandCopy.aboutHeading}</h2></div>
+          <div className="story-copy"><p>{brandCopy.about}</p><ArrowLink to="/about">بیشتر با ما آشنا شو</ArrowLink></div>
         </div>
       </section>
 
-      <section className="home-team container">
+      {employees.length > 0 && <section className="home-team container">
         <SectionHeader
-          eyebrow="THE TEAM / 05"
-          title="تیم بهارناژ"
-          text="با تیم بهارناژ آشنا شو."
+          eyebrow="آدم‌های بهارناژ"
+          title="با تیم بهارناژ آشنا شو"
+          text="تخصص‌ها و نمونه‌کارها را ببین؛ انتخاب را از همین‌جا شروع کن."
           action={<ArrowLink to="/team">دیدن تیم</ArrowLink>}
         />
         {employeeState === "ready" && employees.length ? (
@@ -174,25 +131,21 @@ export default function Home() {
             empty="در حال حاضر متخصص فعالی برای نمایش ثبت نشده است."
           />
         )}
-      </section>
+      </section>}
 
-      <section className="home-blog container">
-        <SectionHeader eyebrow="BAHARNAJ EDITORIAL / 06" title="آخرین مطالب" text="راهنماها و ایده‌هایی برای انتخاب آگاهانه‌تر و مراقبت بهتر." action={<ArrowLink to="/blog">مشاهده همه مطالب</ArrowLink>} />
+      {articles.length > 0 && <section className="home-blog container">
+        <SectionHeader eyebrow="مجلهٔ بهارناژ" title="آخرین مطالب" text="راهنماها و ایده‌هایی برای انتخاب آگاهانه‌تر و مراقبت بهتر." action={<ArrowLink to="/blog">مشاهده همه مطالب</ArrowLink>} />
         {articleState === "ready" && articles.length ? <div className="home-blog-grid">{articles.slice(0, 3).map((post) => <BlogCard key={post.id} post={post} compact />)}</div> : <PublicState state={articleState} empty="هنوز مقاله‌ای منتشر نشده است." />}
-      </section>
+      </section>}
 
       <section className="booking-callout">
-        <div className="container">
-          <p className="eyebrow">YOUR NEXT LOOK</p>
-          <h2>
-            برای تغییر بعدی
-            <br />
-            <em>آماده‌ای؟</em>
-          </h2>
-          <p>چند دقیقه تا انتخاب سرویس، متخصص و زمان مناسب فاصله داری.</p>
-          <Link className="button button-light" to="/book">
-            شروع رزرو <span>←</span>
-          </Link>
+        <div className="container visit-grid">
+          <div><p className="eyebrow">قرار ما در رشت</p><h2>برای دیدنت آماده‌ایم</h2></div>
+          <div>
+            <address>{siteConfig.city}، {siteConfig.area}<br />{siteConfig.hoursLabel}<br /><a href={`tel:${siteConfig.mobileInternational}`}><bdi>{siteConfig.mobile}</bdi></a></address>
+            <Link className="button" to="/book">رزرو نوبت <span>←</span></Link>
+            <p><Link className="text-link" to="/contact">اطلاعات تماس و مراجعه</Link></p>
+          </div>
         </div>
       </section>
     </>

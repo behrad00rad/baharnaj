@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useFocusScope } from "../shared/useFocusScope";
 import { PageIntro } from "../components/PublicLayout";
 import { MediaImage, PublicState } from "../components/PublicUI";
 import { api } from "../shared/api";
@@ -7,6 +8,7 @@ import { SEO } from "../components/SEO";
 const unwrap = (data) => data?.results || data || [];
 
 export default function Gallery() {
+  const dialogRef = useRef(null);
   const [items, setItems] = useState([]);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [category, setCategory] = useState("همه");
@@ -37,6 +39,7 @@ export default function Gallery() {
   );
   const activeIndex = visibleItems.findIndex((item) => item.id === activeId);
   const activeItem = activeIndex >= 0 ? visibleItems[activeIndex] : null;
+  useFocusScope(Boolean(activeItem), dialogRef, () => setActiveId(null));
   const move = useCallback(
     (direction) =>
       setActiveId(
@@ -48,7 +51,7 @@ export default function Gallery() {
   );
   useEffect(() => {
     if (!activeItem) return undefined;
-    document.body.style.overflow = "hidden";
+
     const keyboard = (event) => {
       if (event.key === "Escape") setActiveId(null);
       if (event.key === "ArrowLeft") move(1);
@@ -56,7 +59,7 @@ export default function Gallery() {
     };
     document.addEventListener("keydown", keyboard);
     return () => {
-      document.body.style.overflow = "";
+
       document.removeEventListener("keydown", keyboard);
     };
   }, [activeItem, move]);
@@ -90,6 +93,7 @@ export default function Gallery() {
           >
             {categories.map((item) => (
               <button
+                aria-pressed={category === item}
                 className={category === item ? "active" : ""}
                 key={item}
                 type="button"
@@ -142,6 +146,7 @@ export default function Gallery() {
             onMouseDown={() => setActiveId(null)}
           >
             <div
+              ref={dialogRef}
               className="lightbox-content"
               role="dialog"
               aria-modal="true"

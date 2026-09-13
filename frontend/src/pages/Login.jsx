@@ -32,7 +32,7 @@ export default function Login() {
       <div>
         <p className="eyebrow">ورود به بهارناژ</p>
         <h1>
-          خوش آمدی
+          خوش آمدید
           <br />
           <em>دوباره.</em>
         </h1>

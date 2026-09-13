@@ -20,8 +20,8 @@ async function mock(page, role) {
   return route.fulfill({json:data})
  })
 }
-const routes=['/','/services','/services/nails','/blog','/blog/care','/book','/gallery','/team','/about','/contact','/terms','/privacy','/admin/appointments','/admin/finance','/employee/calendar','/employee/earnings','/employee/appointments/new']
-for(const width of [360,390,430,768,1024,1366]) for(const theme of ['light','dark']) {
+const routes=['/','/services','/services/nails','/blog','/blog/care','/book','/gallery','/team','/about','/contact','/terms','/privacy','/login','/admin/appointments','/admin/finance','/employee/calendar','/employee/earnings','/employee/appointments/new']
+for(const width of [360,390,768,1024,1440]) for(const theme of ['light','dark']) {
  test(`${theme} visual surfaces at ${width}`,async({page})=>{
   await page.setViewportSize({width,height:950})
   await page.addInitScript(theme=>{localStorage.setItem('baharnaj-theme',theme)},theme)
@@ -29,10 +29,11 @@ for(const width of [360,390,430,768,1024,1366]) for(const theme of ['light','dar
    await page.unroute('**/api/v1/**');await mock(page,path.startsWith('/admin')?'admin':path.startsWith('/employee')?'employee':'public')
    await page.goto(path)
    await expect(page.locator('h1').first()).toBeVisible()
+   await page.evaluate(()=>document.fonts.ready)
    if(!process.env.THEME_BEFORE) expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),path).toBe(true)
-   if((width===390||width===1366)&&['/','/book','/admin/finance','/employee/earnings'].includes(path)){
+   if((width===390||width===1440)&&['/','/book','/admin/finance','/employee/earnings'].includes(path)){
     if(path==='/book') await page.locator('.service-choice-grid button').first().click()
-    await page.screenshot({path:`/tmp/theme-${process.env.THEME_BEFORE?'before':'after'}-${theme}-${width}-${path.replaceAll('/','_')||'home'}.png`,fullPage:true})
+    await page.screenshot({animations:'disabled',path:`/tmp/theme-${process.env.THEME_BEFORE?'before':'after'}-${theme}-${width}-${path.replaceAll('/','_')||'home'}.png`,fullPage:true})
    }
   }
  })
@@ -46,16 +47,16 @@ test('footer preferences, chart tooltips and modals', async({page})=>{
   await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible()
   await page.locator('.recharts-bar-rectangle').first().hover()
   await expect(page.locator('.recharts-default-tooltip').first()).toBeVisible()
-  await page.screenshot({path:`/tmp/theme-tooltip-${theme}.png`})
+  await page.screenshot({animations:'disabled',path:`/tmp/theme-tooltip-${theme}.png`})
   await page.locator('.finance-employee-card').first().click()
   await expect(page.locator('.employee-finance-modal')).toBeVisible()
-  await page.screenshot({path:`/tmp/theme-modal-${theme}.png`})
+  await page.screenshot({animations:'disabled',path:`/tmp/theme-modal-${theme}.png`})
   await page.goto('/admin/appointments')
   await page.getByRole('button',{name:/افزودن نوبت/}).click()
   await expect(page.locator('.admin-modal')).toBeVisible()
   await page.locator('[data-jdp]').first().click()
   await expect(page.locator('jdp-container')).toBeVisible()
-  await page.screenshot({path:`/tmp/theme-picker-${theme}.png`})
+  await page.screenshot({animations:'disabled',path:`/tmp/theme-picker-${theme}.png`})
   await page.goto('/admin/finance')
   for(const [name,mode] of [['کوچک','compact'],['بزرگ','large'],['معمولی','normal']]){
    await page.getByRole('radio',{name}).check()

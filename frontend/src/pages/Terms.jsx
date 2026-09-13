@@ -22,7 +22,7 @@ const sections = [
 export default function Terms() {
   return <>
     <SEO title="شرایط استفاده | بهارناژ" description="شرایط استفاده از وب‌سایت و رزرو خدمات سالن بهارناژ." canonicalPath="/terms" />
-    <PageIntro eyebrow="BAHARNAJ / LEGAL" title="شرایط استفاده از خدمات بهارناژ" text="توضیح روشن و ساده درباره رزرو، حضور، پرداخت و استفاده از محتوای سایت." aside={<span className="page-index">آخرین بروزرسانی: شهریور ۱۴۰۵</span>} />
+    <PageIntro eyebrow="راهنمای استفاده" title="شرایط استفاده از خدمات بهارناژ" text="توضیح روشن و ساده درباره رزرو، حضور، پرداخت و استفاده از محتوای سایت." aside={<span className="page-index">آخرین بروزرسانی: شهریور ۱۴۰۵</span>} />
     <main className="legal-page container"><nav aria-label="فهرست شرایط">{sections.map(([title], index) => <a key={title} href={`#term-${index + 1}`}>{new Intl.NumberFormat("fa-IR").format(index + 1)}. {title}</a>)}</nav><article>{sections.map(([title, text], index) => <section id={`term-${index + 1}`} key={title}><h2>{new Intl.NumberFormat("fa-IR").format(index + 1)}. {title}</h2><p>{text}</p></section>)}</article></main>
   </>;
 }

@@ -1,5 +1,6 @@
+import { useFocusScope } from "../shared/useFocusScope";
 import TextSizeControl from "./TextSizeControl";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../shared/auth";
 import { useTheme } from "../shared/theme";
@@ -7,17 +8,22 @@ import { siteConfig } from "../shared/siteConfig";
 
 const publicLinks = [
   ["/", "خانه"],
-  ["/services", "سرویس‌ها"],
-  ["/gallery", "گالری"],
+  ["/services", "خدمات"],
+  ["/gallery", "نمونه‌کارها"],
   ["/blog", "مجله"],
   ["/team", "تیم"],
-  ["/about", "درباره ما"],
-  ["/contact", "تماس"],
+  ["/about", "دربارهٔ ما"],
+  ["/contact", "تماس با ما"],
 ];
 
 export function PublicLayout({ children }) {
   const location = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPath, setMenuPath] = useState(null);
+  const menuOpen = menuPath === location.pathname;
+  const setMenuOpen = (open) => setMenuPath(open ? location.pathname : null);
+  const menuRef = useRef(null);
+  const menuButtonRef = useRef(null);
+  useFocusScope(menuOpen, menuRef, () => setMenuOpen(false), menuButtonRef);
   const { accessToken, role } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const panelPath =
@@ -26,19 +32,18 @@ export function PublicLayout({ children }) {
     role === "employee" ? "پنل کارمند" : role === "admin" ? "پنل مدیریت" : "";
   const closeMenu = () => setMenuOpen(false);
   useEffect(() => {
-    document.body.style.overflow = menuOpen ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [menuOpen]);
+    const resize = () => { if (window.innerWidth > 760) setMenuPath(null); };
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
 
   return (
-    <main className="public-site" dir="rtl">
+    <div className="public-site" dir="rtl">
+      <a className="skip-link" href="#public-content">رفتن به محتوای اصلی</a>
       <header className="site-header">
         <nav className="nav container" aria-label="ناوبری اصلی">
           <Link className="brand" to="/" onClick={closeMenu}>
-            <span>بَ</span>
-            <b>بهارناژ</b>
+            <b>بهارناژ<small>BAHARNAJ</small></b>
           </Link>
           <div className="desktop-links">
             {publicLinks.map(([path, label]) => (
@@ -75,9 +80,11 @@ export function PublicLayout({ children }) {
             </Link>
           </div>
           <button
+            ref={menuButtonRef}
+            aria-label={menuOpen ? "بستن منو" : "باز کردن منو"}
             className="mobile-menu-button"
             type="button"
-            onClick={() => setMenuOpen((value) => !value)}
+            onClick={() => setMenuOpen(!menuOpen)}
             aria-expanded={menuOpen}
             aria-controls="mobile-navigation"
           >
@@ -88,10 +95,16 @@ export function PublicLayout({ children }) {
       </header>
       <div
         className={`mobile-navigation ${menuOpen ? "open" : ""}`}
+        ref={menuRef}
+        role="dialog"
+        aria-modal={menuOpen ? "true" : undefined}
+        aria-label="منوی اصلی"
+        inert={!menuOpen}
         id="mobile-navigation"
         aria-hidden={!menuOpen}
       >
         <div className="mobile-navigation-inner container">
+          <button className="mobile-menu-close" type="button" onClick={closeMenu}>بستن منو ×</button>
           <p>منوی بهارناژ</p>
           {publicLinks.map(([path, label], index) => (
             <Link
@@ -124,26 +137,25 @@ export function PublicLayout({ children }) {
           </div>
         </div>
       </div>
-      {children}
-      <footer className="site-footer">
+      <main id="public-content" tabIndex={-1} inert={menuOpen}>{children}</main>
+      <footer className="site-footer" inert={menuOpen}>
         <div className="container footer-main">
           <div>
             <Link className="brand footer-brand" to="/">
-              <span>بَ</span>
-              <b>بهارناژ</b>
+              <b>بهارناژ<small>BAHARNAJ</small></b>
             </Link>
-            <p>فضایی برای مراقبت، انتخاب و تجربه‌ای که با سبک تو هماهنگ است.</p>
-            <address className="footer-contact">{siteConfig.province}، {siteConfig.city}، {siteConfig.area}<br /><a href={`tel:${siteConfig.mobileInternational}`}>{siteConfig.mobile}</a> · هر روز ۹ تا ۲۱</address>
+            <p>بهارناژ در رشت؛ تجربه و توجه به سلیقهٔ شما، از انتخاب تا جزئیات نهایی.</p>
+            <address className="footer-contact">{siteConfig.province}، {siteConfig.city}، {siteConfig.area}<br /><a href={`tel:${siteConfig.mobileInternational}`}><bdi>{siteConfig.mobile}</bdi></a> · {siteConfig.hoursLabel}</address>
           </div>
           <nav aria-label="پیوندهای پایین صفحه">
-            {publicLinks.slice(0, 5).map(([path, label]) => (
+            {publicLinks.filter(([path]) => path !== "/").map(([path, label]) => (
               <Link key={path} to={path}>
                 {label}
               </Link>
             ))}
           </nav>
           <div className="footer-action">
-            <p>وقت تغییر بعدی‌ات رسیده؟</p>
+            <p>برای هماهنگی نوبت</p>
             <Link className="button button-light" to="/book">
               رزرو آنلاین <span>←</span>
             </Link>
@@ -165,7 +177,7 @@ export function PublicLayout({ children }) {
           </div>
         </div>
       </footer>
-    </main>
+    </div>
   );
 }
 

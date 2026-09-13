@@ -21,7 +21,7 @@ const sections = [
 export default function Privacy() {
   return <>
     <SEO title="حریم خصوصی | بهارناژ" description="نحوه دریافت، استفاده و محافظت از اطلاعات در وب‌سایت و سامانه رزرو بهارناژ." canonicalPath="/privacy" />
-    <PageIntro eyebrow="BAHARNAJ / PRIVACY" title="حریم خصوصی" text="این صفحه توضیح می‌دهد چه داده‌هایی برای رزرو و اداره سامانه لازم است و چگونه از آن‌ها استفاده می‌کنیم." aside={<span className="page-index">آخرین بروزرسانی: شهریور ۱۴۰۵</span>} />
+    <PageIntro eyebrow="حریم خصوصی شما" title="حریم خصوصی" text="این صفحه توضیح می‌دهد چه داده‌هایی برای رزرو و اداره سامانه لازم است و چگونه از آن‌ها استفاده می‌کنیم." aside={<span className="page-index">آخرین بروزرسانی: شهریور ۱۴۰۵</span>} />
     <main className="legal-page container"><nav aria-label="فهرست حریم خصوصی">{sections.map(([title], index) => <a key={title} href={`#privacy-${index + 1}`}>{new Intl.NumberFormat("fa-IR").format(index + 1)}. {title}</a>)}</nav><article>{sections.map(([title, text], index) => <section id={`privacy-${index + 1}`} key={title}><h2>{new Intl.NumberFormat("fa-IR").format(index + 1)}. {title}</h2><p>{text}</p></section>)}</article></main>
   </>;
 }

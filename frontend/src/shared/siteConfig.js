@@ -1,13 +1,14 @@
 const configuredUrl = (import.meta.env.VITE_SITE_URL || "https://baharnaj.ir").trim();
 
 export const siteConfig = {
-  name: "سالن بهارناژ",
+  name: "سالن زیبایی بهارناژ",
   brand: "Baharnaj",
   siteUrl: configuredUrl.replace(/\/$/, ""),
   city: "رشت",
   province: "گیلان",
   area: "فاز ۲ ضیابری",
   country: "ایران",
+  hoursLabel: "هر روز، ۹ تا ۲۱",
   mobile: "09111375136",
   mobileInternational: "+989111375136",
   landline: "0133520572",

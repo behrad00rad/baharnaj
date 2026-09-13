@@ -13,7 +13,7 @@ export default function Team() {
         canonicalPath="/team"
       />
       <PageIntro
-        eyebrow="THE TEAM"
+        eyebrow="تیم بهارناژ"
         title={
           <>
             تیم

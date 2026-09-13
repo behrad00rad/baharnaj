@@ -43,24 +43,24 @@ export default function ServiceDetail() {
     <SEO title={title} description={description} canonicalPath={canonicalPath} image={hero?.image_url} structuredData={structuredData} />
     <article className="service-article container">
       <nav className="breadcrumbs" aria-label="مسیر صفحه"><Link to="/">خانه</Link><span aria-hidden="true">←</span><Link to="/services">سرویس‌ها</Link><span aria-hidden="true">←</span><span aria-current="page">{name}</span></nav>
-      <header className="service-detail">
-        <div className="detail-media"><MediaImage src={hero?.image_url} alt={hero?.alt_text || `${name} در سالن بهارناژ`} eager /><span>BAHARNAJ / SERVICE</span></div>
+      <header className={`service-detail ${hero?.image_url ? "" : "service-detail-no-media"}`}>
+        {hero?.image_url && <div className="detail-media"><MediaImage src={hero?.image_url} alt={hero?.alt_text || `${name} در سالن بهارناژ`} eager /><span>BAHARNAJ / SERVICE</span></div>}
         <div className="detail-content">
           <p className="eyebrow">{category}</p>
           <h1>{name}</h1>
           {service.short_description && <p className="service-intro">{service.short_description}</p>}
-          <div className="detail-facts"><div><span>زمان</span><strong>{new Intl.NumberFormat("fa-IR").format(service.duration)} دقیقه</strong></div><div><span>هزینه</span><strong>{formatServicePrice(service)}</strong></div></div>
+          <div className="detail-facts"><div><span>زمان</span><strong>{service.duration > 0 ? `${new Intl.NumberFormat("fa-IR").format(service.duration)} دقیقه` : "با سالن هماهنگ کنید"}</strong></div><div><span>هزینه</span><strong>{formatServicePrice(service)}</strong></div></div>
           {service.pricing_type && service.pricing_type !== 'FIXED' && <aside className="pricing-note"><p>قیمت این سرویس بسته به شرایط و انتخاب شما تعیین می‌شود.</p>{service.pricing_note && <p>{service.pricing_note}</p>}</aside>}
           <div className="detail-actions"><Link className="button" to={`/book?service=${service.id}`}>رزرو این سرویس <span>←</span></Link><Link className="text-link" to="/services">همه سرویس‌ها</Link></div>
         </div>
       </header>
       {(service.description || images.length > 1 || service.employees?.length > 0) && <div className="service-article-body">
-        {service.description && <section className="service-copy"><p className="eyebrow">ABOUT THE SERVICE</p><h2>درباره {name}</h2>{service.description.split(/\n+/).filter(Boolean).map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</section>}
+        {service.description && <section className="service-copy"><p className="eyebrow">دربارهٔ خدمات</p><h2>درباره {name}</h2>{service.description.split(/\n+/).filter(Boolean).map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</section>}
         {service.employees?.length > 0 && <aside className="service-specialists"><span>متخصصان قابل انتخاب</span><div>{service.employees.map((employee) => <b key={employee.id}>{employee.name || "متخصص بهارناژ"}</b>)}</div></aside>}
       </div>}
-      {images.length > 1 && <section className="service-photo-gallery" aria-labelledby="service-gallery-title"><p className="eyebrow">SERVICE GALLERY</p><h2 id="service-gallery-title">تصاویر {name}</h2><div>{images.slice(1).map((image) => <MediaImage key={image.id} src={image.image_url} alt={image.alt_text || `تصویر ${name} در بهارناژ`} />)}</div></section>}
+      {images.length > 1 && <section className="service-photo-gallery" aria-labelledby="service-gallery-title"><p className="eyebrow">نمونه‌کارها</p><h2 id="service-gallery-title">تصاویر {name}</h2><div>{images.slice(1).map((image) => <MediaImage key={image.id} src={image.image_url} alt={image.alt_text || `تصویر ${name} در بهارناژ`} />)}</div></section>}
     </article>
-    {related.length > 0 && <section className="related-services container" aria-labelledby="related-services-title"><p className="eyebrow">MORE IN {category}</p><h2 id="related-services-title">سرویس‌های مرتبط</h2><div>{related.map((item) => <Link key={item.id} to={`/services/${item.slug || item.id}`}>{serviceName(item)} <span>{formatServicePrice(item)} · ←</span></Link>)}</div></section>}
-    {articles.length > 0 && <section className="article-related container" aria-labelledby="service-articles-title"><p className="eyebrow">READ BEFORE YOU BOOK</p><h2 id="service-articles-title">مطالب مرتبط با {name}</h2><div>{articles.map((post) => <BlogCard key={post.id} post={post} compact />)}</div></section>}
+    {related.length > 0 && <section className="related-services container" aria-labelledby="related-services-title"><p className="eyebrow">خدمات دیگر در {category}</p><h2 id="related-services-title">سرویس‌های مرتبط</h2><div>{related.map((item) => <Link key={item.id} to={`/services/${item.slug || item.id}`}>{serviceName(item)} <span>{formatServicePrice(item)} · ←</span></Link>)}</div></section>}
+    {articles.length > 0 && <section className="article-related container" aria-labelledby="service-articles-title"><p className="eyebrow">پیش از رزرو بخوانید</p><h2 id="service-articles-title">مطالب مرتبط با {name}</h2><div>{articles.map((post) => <BlogCard key={post.id} post={post} compact />)}</div></section>}
   </>;
 }

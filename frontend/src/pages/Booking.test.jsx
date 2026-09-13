@@ -77,7 +77,9 @@ describe("booking wizard", () => {
     );
   });
 
-  it("submits every selected service as sequential held booking items", async () => {
+  it.each(["pending", "confirmed"])("submits sequential held items and reports server status %s", async (status) => {
+    post.mockClear();
+    post.mockImplementation((url) => Promise.resolve({ data: url === "appointments/" ? { confirmation_code: "ABC", status, items: [] } : { token: "hold", expires_at: "later" } }));
     render(
       <MemoryRouter>
         <Booking />
@@ -123,5 +125,6 @@ describe("booking wizard", () => {
         expect.objectContaining({ items: heldItems }),
       ),
     );
+    expect(await screen.findByRole("heading", {name: status === "confirmed" ? "نوبت شما تأیید شد." : "درخواست نوبت دریافت شد."})).toBeInTheDocument();
   });
 });

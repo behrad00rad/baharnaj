@@ -23,8 +23,8 @@ export default function BlogArticle() {
     <article className="blog-article">
       <nav className="breadcrumbs container" aria-label="مسیر صفحه"><Link to="/">خانه</Link><span>←</span><Link to="/blog">مجله</Link><span>←</span><span aria-current="page">{post.category?.name || post.title}</span></nav>
       <header className="article-header container"><span>{post.category?.name || "مجله بهارناژ"}</span><h1>{post.title}</h1>{post.excerpt && <p>{post.excerpt}</p>}<div><time dateTime={published}>{articleDate(published)}</time><span>نوشته {post.author_name}</span></div></header>
-      <div className="article-hero container"><MediaImage src={post.cover_image_url} alt={post.cover_alt_text || post.title} eager /></div>
-      <main className="article-reading"><BlogContent blocks={post.content} media={post.media} services={post.related_services} /></main>
+      {post.cover_image_url && <div className="article-hero container"><MediaImage src={post.cover_image_url} alt={post.cover_alt_text || post.title} eager /></div>}
+      <div className="article-reading"><BlogContent blocks={post.content} media={post.media} services={post.related_services} /></div>
       {!!post.related_services?.length && <section className="article-related-services container"><p className="eyebrow">FROM READING TO DOING</p><h2>سرویس‌های مرتبط در بهارناژ</h2><div>{post.related_services.slice(0, 3).map((service) => <BlogServiceCard key={service.id} service={service} />)}</div></section>}
       {!!post.related_articles?.length && <section className="article-related container"><p className="eyebrow">KEEP READING</p><h2>مطالب مرتبط</h2><div>{post.related_articles.map((item) => <BlogCard key={item.id} post={item} compact />)}</div></section>}
     </article>

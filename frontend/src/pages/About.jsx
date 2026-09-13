@@ -1,3 +1,4 @@
+import { brandCopy } from "../shared/brandCopy";
 import { Link } from "react-router-dom";
 import { PageIntro } from "../components/PublicLayout";
 import { SEO } from "../components/SEO";
@@ -11,28 +12,22 @@ export default function About() {
         canonicalPath="/about"
       />
       <PageIntro
-        eyebrow="ABOUT BAHARNAJ"
-        title={
-          <>
-            فضایی برای
-            <br />
-            <em>انتخاب خودت.</em>
-          </>
-        }
-        text="بهارناژ، استودیو زیبایی ما در ضیابری رشت. اینجا انتخاب استایل با توست."
+        eyebrow="داستان بهارناژ"
+        title={brandCopy.aboutHeading}
+        text={brandCopy.about}
         aside={<span className="page-index">۰۳ — داستان ما</span>}
       />
       <section className="about-page container">
         <div className="about-statement">
-          <span>بَ</span>
+          <span aria-hidden="true">ب</span>
           <h2>زیبایی برای ما یک نسخه ثابت ندارد.</h2>
         </div>
         <div className="about-copy">
           <p>
-            قبل از رزرو، نمونه‌کارها را ببین و با تیم آشنا شو. قیمت و مدت هر سرویس هم در دسترس توست.
+            انتخاب رنگ، فرم یا مدل، از شناخت سلیقهٔ شما شروع می‌شود. نمونه‌کارها می‌توانند نقطهٔ شروعی برای گفت‌وگو باشند؛ جزئیاتی که می‌پسندید را با ما در میان بگذارید.
           </p>
           <p>
-            برای انتخاب سرویس سؤال داری؟ با ما تماس بگیر.
+            برای انتخاب خدمات، توضیحات و مبنای قیمت هر خدمت را ببینید. اگر هنوز سؤالی دارید، پیش از رزرو با ما تماس بگیرید.
           </p>
           <p>بهارناژ در فاز ۲ ضیابری رشت، گیلان قرار دارد و هر روز از ۹ تا ۲۱ پذیرای رزروهای ثبت‌شده است.</p>
           <Link className="button" to="/book">

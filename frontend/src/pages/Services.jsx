@@ -30,15 +30,15 @@ export default function Services() {
         canonicalPath="/services"
       />
       <PageIntro
-        eyebrow="SERVICES"
+        eyebrow="خدمات بهارناژ"
         title={
           <>
-            منوی
+            انتخاب
             <br />
-            <em>سرویس‌ها.</em>
+            <em>خدمات.</em>
           </>
         }
-        text="سرویس‌ها را ببین، قیمت و زمان را مقایسه کن و نوبتت را رزرو کن."
+        text="جزئیات خدمات و مبنای هزینه را ببین؛ سپس متخصص و زمان مناسب را انتخاب کن."
         aside={
           <span className="page-index">
             ۰۱ — {new Intl.NumberFormat("fa-IR").format(services.length)} سرویس
@@ -49,6 +49,7 @@ export default function Services() {
         <nav className="filter-strip" aria-label="دسته‌بندی سرویس‌ها">
           {categories.map((item) => (
             <button
+              aria-pressed={category === item}
               className={category === item ? "active" : ""}
               type="button"
               key={item}

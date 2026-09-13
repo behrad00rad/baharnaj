@@ -24,15 +24,15 @@ export function SectionHeader({ eyebrow, title, text, action }) {
 }
 
 export function MediaImage({ src, alt, className = "", eager = false }) {
-  const [failed, setFailed] = useState(false);
-  if (!src || failed)
+  const [failedSource, setFailedSource] = useState(null);
+  if (!src || src === failedSource)
     return (
       <div
         className={`media-fallback ${className}`.trim()}
         role="img"
         aria-label={alt}
       >
-        <span>بَ</span>
+        <span aria-hidden="true">ب</span>
       </div>
     );
   return (
@@ -40,10 +40,12 @@ export function MediaImage({ src, alt, className = "", eager = false }) {
       className={className}
       src={src}
       alt={alt}
+      width="800"
+      height="1000"
       loading={eager ? "eager" : "lazy"}
       fetchPriority={eager ? "high" : undefined}
       decoding="async"
-      onError={() => setFailed(true)}
+      onError={() => setFailedSource(src)}
     />
   );
 }
@@ -69,9 +71,9 @@ export function EmployeeCard({ employee, compact = false }) {
   const name = employee.name?.trim() || "متخصص بهارناژ";
   return (
     <article className={`employee-card ${compact ? "employee-card-compact" : ""}`}>
-      <div className="employee-card-media">
+      {employee.profile_photo_url && <div className="employee-card-media">
         <MediaImage src={employee.profile_photo_url} alt={`تصویر ${name}`} />
-      </div>
+      </div>}
       <div className="employee-card-copy">
         <span>۰{String(employee.id).slice(-1)}</span>
         <div>

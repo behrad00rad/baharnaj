@@ -45,6 +45,8 @@ The relative URL sends API and media requests through Vite's development proxy. 
 
 The frontend is available at `http://localhost:5173`. The API is versioned under `/api/v1/`.
 
+To run the backend without Docker from the repository root, use `./run-backend.sh`. It uses `backend/.venv` when available, applies migrations, and starts Django at `http://localhost:8000`.
+
 Backend configuration is documented in `backend/.env.example`. `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `PUBLIC_BACKEND_URL`, and `DEFAULT_FROM_EMAIL` are supported. `SQLITE_PATH` is optional. Never commit real secrets.
 
 ## Production SEO routing

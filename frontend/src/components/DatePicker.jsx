@@ -1,3 +1,4 @@
+import { useFocusScope } from "../shared/useFocusScope";
 import { useEffect, useRef } from "react";
 import { toGregorian, toJalaali } from "jalaali-js";
 import { pad } from "../shared/date";
@@ -54,9 +55,13 @@ export function JalaliDatePicker({ value, onChange }) {
 }
 
 export function DateModal({ value, onChange, onClose }) {
+  const dialogRef = useRef(null);
+  useFocusScope(true, dialogRef, onClose);
+  useEffect(() => () => window.jalaliDatepicker?.hide(), []);
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <div
+        ref={dialogRef}
         className="date-modal"
         role="dialog"
         aria-modal="true"

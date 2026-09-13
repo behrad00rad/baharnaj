@@ -8,7 +8,7 @@ export default function Contact() {
     <>
       <SEO title="تماس با سالن بهارناژ در رشت | آدرس و ساعت کاری" description="اطلاعات تماس، آدرس و ساعت کاری سالن زیبایی بهارناژ در رشت، گیلان را ببینید یا نوبت خود را آنلاین رزرو کنید." canonicalPath="/contact" />
       <PageIntro
-        eyebrow="CONTACT"
+        eyebrow="تماس با بهارناژ"
         title={
           <>
             از رزرو تا
@@ -41,9 +41,9 @@ export default function Contact() {
           <span>اطلاعات سالن</span>
           <h2>بهارناژ در رشت</h2>
           <address>{siteConfig.province}، {siteConfig.city}، {siteConfig.area}</address>
-          <a href={`tel:${siteConfig.mobileInternational}`}>{siteConfig.mobile}</a>
-          <a href={`tel:${siteConfig.landlineInternational}`}>{siteConfig.landline}</a>
-          <p>هر روز ۰۹:۰۰ تا ۲۱:۰۰<br />ممکن است در تعطیلات سوگواری اسلامی تعطیل باشیم.</p>
+          <a href={`tel:${siteConfig.mobileInternational}`}><bdi>{siteConfig.mobile}</bdi></a>
+          <a href={`tel:${siteConfig.landlineInternational}`}><bdi>{siteConfig.landline}</bdi></a>
+          <p>{siteConfig.hoursLabel}<br />ممکن است در تعطیلات سوگواری اسلامی تعطیل باشیم.</p>
           <a href={siteConfig.instagram} target="_blank" rel="noopener noreferrer">Instagram بهارناژ ↗</a>
         </div>
       </section>

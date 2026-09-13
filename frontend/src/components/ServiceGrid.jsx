@@ -24,12 +24,10 @@ export function ServiceCard({ service, index = 0 }) {
       </div>
       <div className="service-meta">
         <span>{formatServicePrice(service)}</span>
-        <span>
-          {new Intl.NumberFormat("fa-IR").format(service.duration || 0)} دقیقه
-        </span>
+        {service.duration > 0 && <span>{new Intl.NumberFormat("fa-IR").format(service.duration)} دقیقه</span>}
       </div>
       <div className="service-card-actions">
-        <Link to={`/services/${service.slug || service.id}`}>مشاهده سرویس</Link>
+        <Link to={`/services/${service.slug || service.id}`}>جزئیات خدمات</Link>
         <Link to={`/book?service=${service.id}`}>
           رزرو <span>←</span>
         </Link>

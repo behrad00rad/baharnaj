@@ -2,7 +2,7 @@
 .public-site .button:hover,.public-site .nav-book:hover {background:var(--color-brand-fill);color:var(--color-brand-contrast)}
 .public-site .button-light,.public-site .button-light:hover {background:var(--color-brand-accent);color:var(--color-brand-accent-text)}
 .public-site .hero-visual>p,.public-site .wizard-steps .current b {background:var(--color-brand-fill);color:var(--color-brand-contrast)}
-.public-site :is(.service-choice-grid,.employee-choice-grid) button.selected {background:var(--color-brand-accent);color:var(--color-brand-accent-text);border-color:var(--color-brand-accent)}
+.public-site :is(.service-choice-grid,.employee-choice-grid) button.selected {background:var(--color-brand-accent);color:var(--color-brand-accent-text);border-color:var(--color-brand-fill)}
 .public-site :is(.service-choice-grid,.employee-choice-grid) button.selected :is(span,strong,p) {color:var(--color-brand-accent-text)}
 .public-site :is(.service-choice-grid,.employee-choice-grid) button.selected small {color:var(--color-accent-muted)}
 .public-site .booking-callout em {color:var(--color-home-cta-text)}

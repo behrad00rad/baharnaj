@@ -1,3 +1,4 @@
+import { brandCopy } from "../shared/brandCopy";
 import { useEffect } from "react";
 import { publicImageUrl, siteConfig, siteUrl } from "../shared/siteConfig";
 
@@ -18,7 +19,7 @@ function removeHeadElement(key) {
   document.head.querySelector(`[data-baharnaj-seo="${key}"]`)?.remove();
 }
 
-export function SEO({ title, description, canonicalPath = "/", image, noindex = false, structuredData, ogType = "website" }) {
+export function SEO({ title = brandCopy.title, description, canonicalPath = "/", image, noindex = false, structuredData, ogType = "website" }) {
   useEffect(() => {
     const canonical = siteUrl(canonicalPath);
     const socialImage = publicImageUrl(image);
