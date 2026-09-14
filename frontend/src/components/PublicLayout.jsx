@@ -161,6 +161,16 @@ export function PublicLayout({ children }) {
             </Link>
             <a className="footer-instagram" href={siteConfig.instagram} target="_blank" rel="noopener noreferrer">Instagram بهارناژ ↗</a>
           </div>
+          <div className="footer-map">
+            <p>نشانی بهارناژ</p>
+            <iframe
+              title="موقعیت سالن زیبایی بهارناژ روی نقشه"
+              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d198.43821781991576!2d49.5670135022841!3d37.2711547489798!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3ff563840324b6a9%3A0x16e8704961c3157!2z2LPYp9mE2YYg2LLbjNio2KfbjNuMINio2YfYp9ix2YbYp9qY!5e0!3m2!1sfa!2sde!4v1789316293539!5m2!1sfa!2sde"
+              loading="lazy"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+            />
+          </div>
         </div>
         <div className="container footer-bottom">
           <TextSizeControl />
