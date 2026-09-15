@@ -1,0 +1,9 @@
+{
+  "secret": "public-test-fixture-never-use-in-production",
+  "timestamp": "1789380000",
+  "nonce": "0123456789abcdef0123456789abcdef",
+  "body": "{\"update_id\":\"123\",\"actor\":123456,\"chat_id\":123456,\"chat_type\":\"private\",\"username\":\"\",\"operation\":\"home\",\"token\":\"\"}",
+  "signature": "ec20365db83b053fbc42eb71db60bbc9d553db033d0bfbfd2edaacd9342120d1",
+  "response_payload": "{\"text\":\"به بهارناژ خوش آمدید.\",\"keyboard\":[]}",
+  "response_signature": "996aff96bd22e88cd79595394bc756c915867d2ee74cf9a534c916330a5976e9"
+}

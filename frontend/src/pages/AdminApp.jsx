@@ -1,3 +1,4 @@
+import AdminTelegram from "./AdminTelegram";
 import ServicePricingFields from "../components/ServicePricingFields";
 import ItemPricing from "../components/ItemPricing";
 import { formatServicePrice, servicePricingPayload } from "../shared/pricing";
@@ -2218,6 +2219,7 @@ function AdminRouter() {
           />
         }
       />
+      <Route path="telegram" element={<AdminTelegram />} />
       <Route path="finance" element={<Finance />} />
       <Route path="content" element={<Content />} />
       <Route path="blog" element={<BlogManagement />} />

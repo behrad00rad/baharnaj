@@ -1,3 +1,4 @@
+import TelegramConnect from "../components/TelegramConnect";
 import { formatServicePrice, bookingPriceSummary } from "../shared/pricing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -196,6 +197,7 @@ export default function Booking() {
     setLoading(true);
     try {
       const { data } = await api.post("appointments/", {
+        tg_campaign: new URLSearchParams(window.location.search).get("tg_campaign"),
         customer_name: contact.name,
         customer_phone: contact.phone,
         notes: contact.notes,
@@ -704,6 +706,7 @@ function Confirmation({ appointment, navigate }) {
           </div>
         ))}
       </div>
+      <TelegramConnect receipt={appointment.telegram_receipt} compact />
       <button className="button" onClick={() => navigate("/")}>
         بازگشت به خانه <span>←</span>
       </button>

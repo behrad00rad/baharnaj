@@ -75,3 +75,7 @@ python manage.py makemigrations --check --dry-run
 cd ../frontend
 npm run build
 ```
+
+## Telegram and customer communications
+
+The optional integration adds `/admin/telegram`, customer `/telegram` settings and a booking confirmation connection card. Outbound sending is disabled by default. See [setup and activation](telegram/README.md), [TeleBotHost commands](telegram/telebothost/README.md) and the [requirement audit and verification results](telegram/IMPLEMENTATION_AUDIT.md).

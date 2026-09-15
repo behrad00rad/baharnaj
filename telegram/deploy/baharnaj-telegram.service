@@ -1,0 +1,13 @@
+[Unit]
+Description=Baharnaj Telegram bounded outbox worker
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=baharnaj
+WorkingDirectory=/srv/baharnaj/backend
+EnvironmentFile=/etc/baharnaj/backend.env
+ExecStart=/srv/baharnaj/backend/.venv/bin/python manage.py telegram_worker
+TimeoutStartSec=14min
+NoNewPrivileges=true
+PrivateTmp=true

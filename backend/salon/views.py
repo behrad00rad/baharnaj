@@ -545,7 +545,20 @@ class AppointmentCreateView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         appointment = serializer.save()
-        return Response(self.get_serializer(appointment).data, status=status.HTTP_201_CREATED)
+        data = dict(self.get_serializer(appointment).data)
+        # Receipt capability is issued only in the successful booking response.
+        # It is never serialized in appointment lists or recoverable by phone.
+        from telegram_crm.services import issue_receipt, attach_attribution
+        try:
+            with transaction.atomic():
+                data["telegram_receipt"] = issue_receipt(appointment)
+                attach_attribution(appointment, request.data.get("tg_campaign"), request.user)
+        except Exception as error:
+            # Optional integration failures cannot roll back a successful booking.
+            import logging
+            logging.getLogger(__name__).warning("Optional Telegram receipt unavailable (%s)", type(error).__name__)
+            data["telegram_receipt"] = None
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class BookingHoldView(generics.CreateAPIView):
@@ -747,6 +760,8 @@ class FinalPriceActionMixin:
         authorized = self.get_object()  # Existing viewset enforces admin / own-item access.
         appointment = Appointment.objects.select_for_update().get(pk=authorized.appointment_id)
         item = AppointmentItem.objects.select_for_update().select_related("employee", "service").get(pk=authorized.pk)
+        if item.discount_applied:
+            raise ValidationError("پس از ثبت هدیه، قیمت قفل است؛ برای اصلاح از روند لغو و بازپرداخت استفاده کنید.")
         if item.pricing_type == "FIXED":
             raise ValidationError("قیمت این سرویس ثابت و در زمان رزرو ثبت شده است.")
         if appointment.status == "cancelled" or item.completion_status in {"cancelled", "completed"}:

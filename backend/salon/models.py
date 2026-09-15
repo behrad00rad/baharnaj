@@ -504,9 +504,12 @@ class AppointmentItem(models.Model):
     price_snapshot = models.PositiveIntegerField()
     catalog_pricing_snapshot = models.JSONField(default=dict, blank=True)
     final_price = models.PositiveIntegerField(null=True, blank=True)
+    discount_amount = models.PositiveIntegerField(default=0, editable=False)
+    discount_applied = models.BooleanField(default=False, editable=False)
     duration_snapshot = models.PositiveIntegerField()
     notes = models.TextField(blank=True)
     completion_status = models.CharField(max_length=20, choices=COMPLETION_CHOICES, default="pending")
+    completed_at = models.DateTimeField(null=True, blank=True, editable=False)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="created_appointment_items")
     updated_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="updated_appointment_items")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -516,6 +519,10 @@ class AppointmentItem(models.Model):
         indexes = [models.Index(fields=("employee", "date", "completion_status"), name="apptitem_emp_date_status")]
 
     def save(self, *args, **kwargs):
+        if self.completion_status == "completed" and self.completed_at is None:
+            self.completed_at = timezone.now()
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = set(kwargs["update_fields"]) | {"completed_at"}
         if self._state.adding:
             for field, value in self.service.appointment_price_fields().items():
                 setattr(self, field, value)
@@ -532,7 +539,8 @@ class AppointmentItem(models.Model):
 
     @property
     def effective_price(self):
-        return self.price_snapshot if self.pricing_type == "FIXED" else (self.final_price or 0)
+        base = self.price_snapshot if self.pricing_type == "FIXED" else (self.final_price or 0)
+        return max(base - self.discount_amount, 0)
 
     @property
     def price_status(self):
@@ -556,7 +564,7 @@ class AppointmentItem(models.Model):
         from django.db import transaction
         with transaction.atomic():
             appointment = Appointment.objects.select_for_update().get(pk=self.appointment_id)
-            self.refresh_from_db(fields=("price_snapshot", "catalog_pricing_snapshot", "final_price"))
+            self.refresh_from_db(fields=("price_snapshot", "catalog_pricing_snapshot", "final_price", "discount_amount", "discount_applied"))
             if status == "completed" and not self.is_price_final:
                 raise ValidationError("ابتدا قیمت نهایی این سرویس را مشخص کنید.")
             self.completion_status = status

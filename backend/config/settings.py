@@ -222,3 +222,19 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
 }
 AUTH_USER_MODEL = "salon.User"
+
+# Telegram remains inert until explicitly configured and enabled.
+INSTALLED_APPS += ['telegram_crm']
+TELEGRAM_ENABLED = os.getenv('TELEGRAM_ENABLED', 'false').lower() == 'true'
+TELEGRAM_DRY_RUN = os.getenv('TELEGRAM_DRY_RUN', 'true').lower() == 'true'
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
+TELEGRAM_BOT_USERNAME = os.getenv('TELEGRAM_BOT_USERNAME', '')
+TELEGRAM_INTEGRATION_SECRET = os.getenv('TELEGRAM_INTEGRATION_SECRET', '')
+TELEGRAM_BATCH_SIZE = int(os.getenv('TELEGRAM_BATCH_SIZE', '20'))
+TELEGRAM_MAX_PER_MINUTE = int(os.getenv('TELEGRAM_MAX_PER_MINUTE', '20'))
+REST_FRAMEWORK['DEFAULT_THROTTLE_RATES']['telegram_link'] = '20/minute'
+
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = [*default_headers, 'x-booking-receipt']
+
+TELEGRAM_FORCE_DISABLED = os.getenv("TELEGRAM_FORCE_DISABLED", "false").lower() in {"1", "true", "yes"}

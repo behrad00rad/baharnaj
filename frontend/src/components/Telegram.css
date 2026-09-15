@@ -1,0 +1,21 @@
+.telegram-panel { padding: clamp(1rem, 3vw, 2rem); margin-block: 1rem; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-surface); color: inherit; min-width: 0; }
+.telegram-panel h2, .public-site .telegram-panel h2 { font-size: calc(1.25rem * var(--text-scale, 1)); margin-block: 0 .75rem; line-height: 1.6; }
+.telegram-panel p { line-height: 1.9; }
+.telegram-panel label { display: grid; gap: .5rem; margin-block: .75rem; }
+.telegram-panel .telegram-check { display: flex; align-items: center; gap: .65rem; }
+.telegram-check input { width: 1.2rem; height: 1.2rem; flex: 0 0 auto; }
+.telegram-panel input:not([type=checkbox]), .telegram-panel select, .telegram-panel textarea { min-width: 0; width: 100%; box-sizing: border-box; font: inherit; padding: .65rem; background: var(--color-surface); color: inherit; border: 1px solid var(--color-border-strong); border-radius: 8px; }
+.telegram-panel textarea { min-height: 110px; resize: vertical; }
+.telegram-panel button, .telegram-actions a { min-height: 44px; padding: .55rem 1rem; font: inherit; cursor: pointer; border: 1px solid var(--color-border-strong); border-radius: 8px; color: inherit; background: var(--color-surface); text-decoration: none; }
+.telegram-panel button:disabled { opacity: .55; cursor: wait; }
+.telegram-panel :focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+.telegram-actions, .telegram-tabs { display: flex; flex-wrap: wrap; gap: .65rem; margin-block: 1rem; }
+.telegram-tabs button[aria-pressed=true] { border-width: 2px; font-weight: bold; text-decoration: underline; text-underline-offset: .4em; }
+.telegram-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 1rem; }
+.telegram-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; padding-block: 1rem; border-bottom: 1px solid var(--color-border); }
+.telegram-row > * { min-width: 0; overflow-wrap: anywhere; }
+.telegram-stats { display: flex; flex-wrap: wrap; gap: 1.5rem; }
+.telegram-stats span { display: grid; gap: .5rem; }
+.telegram-stats strong { font-size: 1.4rem; }
+.telegram-message { white-space: pre-wrap; overflow-wrap: anywhere; padding: 1rem; border-inline-start: 3px solid var(--color-focus); }
+.telegram-panel [role=alert] { border-inline-start: 3px solid var(--color-error-text); padding-inline: .75rem; }

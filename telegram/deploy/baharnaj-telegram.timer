@@ -1,0 +1,11 @@
+[Unit]
+Description=Process Baharnaj Telegram outbox every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=1min
+Persistent=true
+Unit=baharnaj-telegram.service
+
+[Install]
+WantedBy=timers.target

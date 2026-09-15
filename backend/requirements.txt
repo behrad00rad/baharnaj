@@ -6,3 +6,6 @@ Pillow==12.3.0
 psycopg[binary]==3.3.5
 python-dotenv==1.2.1
 firebase-admin==7.1.0
+jdatetime==5.2.0
+jalali-core==1.0.0
+cryptography>=41.0.7,<52

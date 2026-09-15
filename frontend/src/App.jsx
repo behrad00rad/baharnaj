@@ -1,3 +1,5 @@
+import BookingManage from "./pages/BookingManage";
+import TelegramSettings from "./pages/TelegramSettings";
 import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { PublicLayout } from "./components/PublicLayout";
@@ -73,6 +75,8 @@ export default function App() {
             </PublicLayout>
           }
         />
+        <Route path="/booking/manage" element={<PublicLayout><BookingManage /></PublicLayout>} />
+        <Route path="/telegram" element={<PublicLayout><TelegramSettings /></PublicLayout>} />
         <Route path="/blog" element={<PublicLayout><Blog /></PublicLayout>} />
         <Route path="/blog/:slug" element={<PublicLayout><BlogArticle /></PublicLayout>} />
         <Route

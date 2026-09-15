@@ -609,8 +609,8 @@ class AppointmentItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AppointmentItem
-        fields = ("id", "service", "service_name", "employee", "employee_name", "date", "start_time", "end_time", "price_snapshot", "catalog_pricing_snapshot", "final_price", "pricing_type", "price_status", "is_price_final", "effective_price", "duration_snapshot", "notes", "completion_status", "status")
-        read_only_fields = ("id", "price_snapshot", "catalog_pricing_snapshot", "final_price", "duration_snapshot", "completion_status", "status")
+        fields = ("id", "service", "service_name", "employee", "employee_name", "date", "start_time", "end_time", "price_snapshot", "catalog_pricing_snapshot", "final_price", "discount_amount", "discount_applied", "pricing_type", "price_status", "is_price_final", "effective_price", "duration_snapshot", "notes", "completion_status", "status")
+        read_only_fields = ("id", "price_snapshot", "catalog_pricing_snapshot", "final_price", "discount_amount", "discount_applied", "duration_snapshot", "completion_status", "status")
 
     def validate(self, attrs):
         service = attrs.get("service", self.instance.service if self.instance else None)

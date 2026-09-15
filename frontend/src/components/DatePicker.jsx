@@ -26,19 +26,23 @@ const toMinDate = (value) => toJalaliValue(value);
 
 export function JalaliDatePicker({ value, onChange }) {
   const input = useRef(null);
+  const container = useRef(null);
   const minimum = today();
   useEffect(() => {
     let active = true;
     import("@majidh1/jalalidatepicker").then(() => {
-      if (active) window.jalaliDatepicker?.startWatch({ minDate: "attr" });
+      // The library has a delayed show animation. Keep its overlay inside this
+      // component so a late callback cannot cover the page after the modal closes.
+      if (active) window.jalaliDatepicker?.startWatch({ minDate: "attr", container: container.current });
     });
     return () => {
       active = false;
+      window.jalaliDatepicker?.hide();
     };
   }, []);
 
   return (
-    <div className="jalali-picker">
+    <div className="jalali-picker" ref={container}>
       <input
         ref={input}
         data-jdp
