@@ -170,7 +170,7 @@ class Service(models.Model):
     short_description = models.CharField(max_length=320, blank=True)
     # Generated once and kept stable so service URLs do not change when a display
     # name is edited. Admins can deliberately set a clearer Latin slug if needed.
-    slug = models.SlugField(max_length=160, unique=True, blank=True)
+    slug = models.SlugField(max_length=160, unique=True, blank=True, db_index=False)
     seo_title = models.CharField(max_length=160, blank=True)
     seo_description = models.TextField(blank=True)
     price = models.PositiveIntegerField(default=0)

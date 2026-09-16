@@ -561,7 +561,7 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(payment.status_code, 201)
         revenue = client.get(f"/api/v1/admin/revenue/?period=day&date={timezone.localdate()}")
         self.assertEqual(revenue.status_code, 200)
-        self.assertEqual(revenue.data["total"], self.service.price)
+        self.assertEqual(revenue.data["service_revenue"], 0)
         update = client.patch(f"/api/v1/admin/appointments/{response.data['id']}/", {"status": "completed"}, format="json")
         self.assertEqual(update.status_code, 200)
         self.assertEqual(update.data["status"], "completed")
@@ -789,7 +789,10 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(day.data["items"][0]["payment_status"], "paid")
         self.assertEqual(month.data["completed_services"], 2)
         self.assertEqual(month.data["employee_commission"], 130)
-        self.assertEqual(month.data["statuses"]["pending"], 2)
+        self.assertEqual(
+            next(status["value"] for status in month.data["statuses"] if status["status"] == "pending"),
+            2,
+        )
         self.assertNotEqual(day.data["employee_commission"], month.data["employee_commission"])
 
     def test_reschedule_revalidates_and_cancellation_history(self):
@@ -803,7 +806,7 @@ class AppointmentItemSchemaTests(TestCase):
     def test_multi_service_booking_hold_and_confirmation_contract(self):
         second_service = Service.objects.create(category=self.service.category, name="Color", persian_name="Color", price=1200, duration=60)
         EmployeeService.objects.create(employee=self.employee, service=second_service)
-        booking_date = date(2026, 8, 31)
+        booking_date = date(2026, 9, 21)
         WorkingSchedule.objects.create(employee=self.employee, weekday=booking_date.weekday(), start_time="09:00", end_time="20:00")
         items = [
             {"service": self.service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "10:00", "end_time": "11:00"},

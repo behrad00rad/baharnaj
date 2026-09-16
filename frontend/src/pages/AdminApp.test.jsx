@@ -364,11 +364,18 @@ describe("admin CRUD forms", () => {
       .getAllByRole("button", { name: /^\d{4}-\d{2}-\d{2}$/ })
       .filter((cell) => cell.classList.contains("current-week"));
     expect(initialWeek).toHaveLength(7);
+    const initialWeekDates = initialWeek.map((cell) => cell.getAttribute("aria-label"));
 
     fireEvent.click(screen.getByRole("button", { name: "هفته بعد" }));
-    expect(screen.getByRole("button", { name: current })).not.toHaveClass(
-      "selected",
-    );
+    await waitFor(() => {
+      const nextWeek = screen
+        .getAllByRole("button", { name: /^\d{4}-\d{2}-\d{2}$/ })
+        .filter((cell) => cell.classList.contains("current-week"));
+      expect(nextWeek).toHaveLength(7);
+      expect(nextWeek.map((cell) => cell.getAttribute("aria-label"))).not.toEqual(
+        initialWeekDates,
+      );
+    });
     const nextWeek = screen
       .getAllByRole("button", { name: /^\d{4}-\d{2}-\d{2}$/ })
       .filter((cell) => cell.classList.contains("current-week"));

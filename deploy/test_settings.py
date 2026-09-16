@@ -4,7 +4,8 @@ import subprocess
 import unittest
 
 BASE = {
-    "PATH": os.environ["PATH"], "PYTHONPATH": "/app",
+    "PATH": os.environ["PATH"],
+    "PYTHONPATH": os.environ.get("PYTHONPATH", "/app"),
     "SECRET_KEY": "isolated-check-only-abcdefghijklmnopqrstuvwxyz-0123456789-ABCDEF",
     "DJANGO_SETTINGS_MODULE": "config.settings", "DEBUG": "false", "EMAIL_HOST": "smtp.invalid",
     "TELEGRAM_ENABLED": "false", "TELEGRAM_FORCE_DISABLED": "true",

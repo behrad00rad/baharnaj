@@ -30,9 +30,32 @@ class Migration(migrations.Migration):
             field=models.TextField(blank=True),
         ),
         migrations.RunPython(populate_service_slugs, migrations.RunPython.noop),
-        migrations.AlterField(
-            model_name="service",
-            name="slug",
-            field=models.SlugField(blank=True, max_length=160, unique=True),
+        # Django 6.1 duplicates SlugField's PostgreSQL pattern index when a
+        # nullable field becomes unique in one AlterField operation.
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.AlterField(
+                    model_name="service",
+                    name="slug",
+                    field=models.SlugField(
+                        blank=True, db_index=False, max_length=160, unique=False
+                    ),
+                ),
+                migrations.AddConstraint(
+                    model_name="service",
+                    constraint=models.UniqueConstraint(
+                        fields=("slug",), name="salon_service_slug_unique"
+                    ),
+                ),
+            ],
+            state_operations=[
+                migrations.AlterField(
+                    model_name="service",
+                    name="slug",
+                    field=models.SlugField(
+                        blank=True, db_index=False, max_length=160, unique=True
+                    ),
+                ),
+            ],
         ),
     ]

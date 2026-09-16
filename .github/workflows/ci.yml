@@ -29,8 +29,16 @@ jobs:
       POSTGRES_DB: baharnaj
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      SECRET_KEY: ci-only-secret-key-with-at-least-32-characters
-      DEBUG: 'true'
+      SECRET_KEY: ci-only-secret-key-with-at-least-50-characters-0123456789
+      DEBUG: 'false'
+      EMAIL_HOST: smtp.invalid
+      EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+      ALLOWED_HOSTS: baharnaj.ir
+      CORS_ALLOWED_ORIGINS: https://baharnaj.ir
+      CSRF_TRUSTED_ORIGINS: https://baharnaj.ir
+      TELEGRAM_ENABLED: 'false'
+      TELEGRAM_DRY_RUN: 'true'
+      TELEGRAM_FORCE_DISABLED: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,10 +47,56 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python manage.py migrate --noinput
       - run: python manage.py makemigrations --check --dry-run
-      - run: python manage.py test
-      - name: pip-audit advisory scan
-        continue-on-error: true
-        run: python -m pip install pip-audit && pip-audit
+      - name: Run business tests with explicit development settings
+        env:
+          DEBUG: 'true'
+          EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
+          ALLOWED_HOSTS: localhost,127.0.0.1
+          CORS_ALLOWED_ORIGINS: http://localhost:5173
+          CSRF_TRUSTED_ORIGINS: http://localhost:5173
+          TELEGRAM_FORCE_DISABLED: 'false'
+        run: python manage.py test
+
+  production-settings:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      SECRET_KEY: ci-only-production-check-secret-0123456789-abcdefghijklmnopqrstuvwxyz
+      DEBUG: 'false'
+      EMAIL_HOST: smtp.invalid
+      EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
+      ALLOWED_HOSTS: baharnaj.ir
+      CORS_ALLOWED_ORIGINS: https://baharnaj.ir
+      CSRF_TRUSTED_ORIGINS: https://baharnaj.ir
+      TELEGRAM_ENABLED: 'false'
+      TELEGRAM_DRY_RUN: 'true'
+      TELEGRAM_FORCE_DISABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.1'
+      - run: python -m pip install -r requirements.txt
+      - run: python ../deploy/test_settings.py
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.1'
+      - run: python -m pip install pip-audit
+      - run: pip-audit -r backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --prefix frontend
+      - run: npm audit --prefix frontend --audit-level=moderate
 
   frontend:
     runs-on: ubuntu-latest
