@@ -1,0 +1,33 @@
+/* Shared, theme-aware guidance and controls for the internal workspaces. */
+.panel-guide{color:var(--color-text-primary);margin:20px 0;line-height:1.9;font-size:var(--text-body)}
+.admin-main>.panel-guide{margin:20px 30px 0}
+.panel-guide>p{margin:0 0 6px}
+.panel-disclosure{border:1px solid var(--color-border);border-radius:8px;background:var(--color-surface);color:var(--color-text-primary);margin:14px 0;min-width:0}
+.panel-disclosure>summary{padding:14px 18px;min-height:48px;cursor:pointer;font-size:var(--text-body);font-weight:600;line-height:1.6}
+.panel-disclosure[open]>summary{border-bottom:1px solid var(--color-border)}
+.panel-disclosure-body{padding:16px;min-width:0}
+.panel-guide .panel-disclosure{margin:0;background:transparent}
+.panel-guide ol{margin:0;padding-inline-start:24px;max-width:75ch}
+.panel-guide li+li{margin-top:10px}
+:is(.admin-app,.employee-app) :is(button,input:not([type=checkbox]):not([type=radio]),select){min-height:44px}
+:is(.admin-app,.employee-app) :is(input,select,textarea){font-size:var(--text-body)}
+:is(.admin-app,.employee-app) :is(button,a,input,select,textarea,summary):focus-visible{outline:3px solid var(--color-button-primary-bg);outline-offset:3px}
+:is(.admin-app,.employee-app) :is(input[type=checkbox],input[type=radio]){width:20px;height:20px;accent-color:var(--color-button-primary-bg)}
+:is(.admin-app,.employee-app) :is(.admin-panel,.employee-card,.admin-stat){box-shadow:none}
+.employee-app .employee-action{background:var(--color-button-primary-bg);color:var(--color-button-primary-text)}
+.employee-app .warning,.employee-app .detail-notes{background:var(--color-warning-bg);color:var(--color-warning-text);border-color:var(--color-warning-text)}
+.employee-app .customer-avatar{background:var(--color-button-secondary-bg);color:var(--color-text-primary)}
+:is(.admin-app,.employee-app) .panel-disclosure-body>.admin-grid-two{margin:0}
+:is(.admin-app,.employee-app) .panel-disclosure-body>.finance-chart-grid{margin-bottom:0}
+@media(max-width:650px){
+.admin-main>.panel-guide{margin:16px 14px 0}
+.panel-guide{font-size:var(--text-small)}
+.panel-disclosure-body{padding:12px}
+:is(.admin-app,.employee-app) :is(.admin-modal,.admin-drawer){max-width:100vw}
+:is(.admin-app,.employee-app) :is(.finance-table-filters,.finance-review-actions){flex-wrap:wrap;gap:10px}
+:is(.admin-app,.employee-app) .finance-table-filters>*{flex:1 1 160px;min-width:0}
+.employee-app .weekly-schedule-row{grid-template-columns:1fr 1fr;gap:12px}
+.employee-app .weekly-schedule-row>strong{grid-column:1/-1}
+.employee-app .weekly-schedule-row input[type=time]{width:100%;min-width:0}
+.employee-app .weekly-schedule-row>button{width:100%}
+}

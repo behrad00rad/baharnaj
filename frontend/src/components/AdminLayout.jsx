@@ -1,3 +1,4 @@
+import PanelGuide from "./PanelGuide";
 import TextSizeControl from "./TextSizeControl";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
@@ -129,6 +130,7 @@ export default function AdminLayout() {
             </div>
           </div>
         </header>
+        <PanelGuide role="admin" />
         <Outlet />
         <footer className="panel-preferences"><TextSizeControl /></footer>
       </main>

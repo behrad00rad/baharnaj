@@ -1,3 +1,4 @@
+import PanelGuide from "./PanelGuide";
 import TextSizeControl from "./TextSizeControl";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../shared/auth";
@@ -40,6 +41,7 @@ export default function EmployeeLayout() {
         <div className="employee-header-actions"><button className="panel-theme-toggle" type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "فعال‌کردن حالت روشن" : "فعال‌کردن حالت تاریک"}>{theme === "dark" ? "☀" : "☾"}</button><NotificationBell /></div>
       </header>
       <main>
+        <PanelGuide role="employee" />
         <Outlet />
       </main>
       <footer className="panel-preferences"><TextSizeControl /></footer>

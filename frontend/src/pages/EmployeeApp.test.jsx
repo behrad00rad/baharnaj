@@ -109,6 +109,27 @@ describe("employee app", () => {
     expect(post.mock.calls[0][1]).not.toHaveProperty("employee");
   });
 
+  it("preserves another day's edits when saving weekly hours and validates time order", async () => {
+    get.mockImplementation(endpoint => Promise.resolve({ data: endpoint === "employee/schedule/" ? [
+      { id: 71, weekday: 0, start_time: "09:00", end_time: "17:00", is_active: true },
+    ] : [] }));
+    patch.mockResolvedValue({ data: { id: 71 } });
+    render(<MemoryRouter initialEntries={["/availability"]}><EmployeeApp /></MemoryRouter>);
+    const first = await screen.findByLabelText("شروع دوشنبه");
+    const other = screen.getByLabelText("شروع سه‌شنبه");
+    fireEvent.change(other, { target: { value: "11:00" } });
+    fireEvent.change(first, { target: { value: "18:00" } });
+    const before = patch.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "ذخیره دوشنبه" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("ساعت پایان باید بعد از ساعت شروع باشد");
+    expect(patch.mock.calls.length).toBe(before);
+    fireEvent.change(first, { target: { value: "10:00" } });
+    fireEvent.click(screen.getByRole("button", { name: "ذخیره دوشنبه" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("ساعات کاری دوشنبه ذخیره شد"));
+    expect(other).toHaveValue("11:00");
+    expect(patch).toHaveBeenLastCalledWith("employee/schedule/71/", expect.objectContaining({ start_time: "10:00" }));
+  });
+
   it("keeps availability administration out of the employee profile", async () => {
     render(
       <MemoryRouter initialEntries={["/profile"]}>

@@ -1,3 +1,4 @@
+import { PanelDisclosure } from "../components/PanelGuide";
 import { formatServicePrice } from "../shared/pricing";
 import ItemPricing from "../components/ItemPricing";
 import { useEffect, useState } from "react";
@@ -309,109 +310,6 @@ const addDays = (value, amount) => {
 };
 const weekdayNumber = (value) =>
   (new Date(`${value}T12:00:00`).getDay() + 6) % 7;
-function Calendar() {
-  const [selectedDate, setSelectedDate] = useState(() => isoDate(new Date()));
-  const resource = useData(`employee/appointments/?date=${selectedDate}`);
-  const schedule = useData("employee/schedule/");
-  const [mode, setMode] = useState("day");
-  const [selected, setSelected] = useState(null);
-  const days = Array.from({ length: 7 }, (_, index) =>
-    addDays(selectedDate, index - 3),
-  );
-  const workingHours = schedule.data.find(
-    (item) => item.weekday === weekdayNumber(selectedDate) && item.is_active,
-  );
-  const selectedLabel = jalaliDateLabel(selectedDate);
-  return (
-    <div className="employee-page">
-      <Heading kicker="برنامه‌ریزی" title="تقویم" />
-      <div className="calendar-toggle">
-        <button
-          className={mode === "day" ? "active" : ""}
-          onClick={() => setMode("day")}
-        >
-          روز
-        </button>
-        <button
-          className={mode === "week" ? "active" : ""}
-          onClick={() => setMode("week")}
-        >
-          هفته
-        </button>
-      </div>
-      <div className="calendar-navigation">
-        <button
-          type="button"
-          aria-label="روز قبل"
-          onClick={() => setSelectedDate(addDays(selectedDate, -1))}
-        >
-          ›
-        </button>
-        <strong>{selectedLabel}</strong>
-        <button
-          type="button"
-          aria-label="روز بعد"
-          onClick={() => setSelectedDate(addDays(selectedDate, 1))}
-        >
-          ‹
-        </button>
-      </div>
-      {mode === "week" && (
-        <div className="week-strip">
-          {days.map((day) => (
-            <button
-              type="button"
-              aria-label={`انتخاب ${jalaliDateLabel(day)}`}
-              className={day === selectedDate ? "active" : ""}
-              onClick={() => setSelectedDate(day)}
-              key={day}
-            >
-              {new Intl.DateTimeFormat("fa-IR", {
-                weekday: "short",
-                day: "numeric",
-              }).format(new Date(`${day}T12:00:00`))}
-            </button>
-          ))}
-        </div>
-      )}
-      <section className="employee-card">
-        <div className="day-label">
-          <h2>{selectedLabel}</h2>
-          <span>
-            {schedule.loading
-              ? "در حال دریافت ساعات کاری..."
-              : workingHours
-                ? `بازه کاری ${workingHours.start_time.slice(0, 5)} تا ${workingHours.end_time.slice(0, 5)}`
-                : "برای این روز ساعتی ثبت نشده است"}
-          </span>
-        </div>
-        {resource.loading ? (
-          <Skeleton />
-        ) : resource.data.length ? (
-          resource.data.map((item) => (
-            <AppointmentCard
-              key={item.id}
-              item={item}
-              onClick={() => setSelected(item)}
-            />
-          ))
-        ) : (
-          <Empty title="تقویم خالی است" text="نوبتی برای این روز پیدا نشد." />
-        )}
-      </section>
-      {selected && (
-        <AppointmentDetail
-          item={selected}
-          close={() => setSelected(null)}
-          onSaved={() => {
-            setSelected(null);
-            resource.reload();
-          }}
-        />
-      )}
-    </div>
-  );
-}
 function CalendarWorkspace() {
   const location = useLocation();
   const [selectedDate, setSelectedDate] = useState(() => isoDate(new Date()));
@@ -560,7 +458,7 @@ function Availability() {
 
   return (
     <div className="employee-page">
-      <Heading kicker="برنامه کاری" title="دسترسی و مرخصی" />
+      <Heading kicker="برنامه کاری" title="ساعات کاری و مرخصی" />
       <WeeklyScheduleEditor />
       <section className="employee-card">
         <h2>ثبت مرخصی</h2>
@@ -968,11 +866,13 @@ function Earnings() {
         <section className="employee-card"><span>گزارش در انتظار</span><strong>{toman(resource.data.pending_reports || 0)}</strong><small>در انتظار بررسی مدیریت</small></section>
         <section className="employee-card"><span>مانده منتسب به کار من</span><strong>{toman(resource.data.outstanding || 0)}</strong><small>بازپرداخت: {toman(resource.data.refunded || 0)}</small></section>
       </div>
+      <PanelDisclosure title="نمودار روند درآمد">
       <section className="employee-card employee-finance-chart">
         <div className="employee-finance-chart-head"><div><span className="employee-kicker">روند مالی</span><h2>{employeeFinanceMetrics[metric]}</h2></div><label>شاخص<select value={metric} onChange={(event) => setMetric(event.target.value)}>{Object.entries(employeeFinanceMetrics).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
         <div className="calendar-toggle">{Object.entries(employeeFinanceGroups).map(([value,label]) => <button key={value} className={grouping === value ? "active" : ""} onClick={() => setGrouping(value)}>{label}</button>)}</div>
         {resource.data.series?.length ? <ResponsiveContainer width="100%" height={270}><BarChart data={resource.data.series}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><YAxis tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><Tooltip formatter={(value) => ["commission","revenue"].includes(metric) ? toman(value) : new Intl.NumberFormat("fa-IR").format(value)} /><Bar name={employeeFinanceMetrics[metric]} dataKey={metric} fill="var(--color-chart-1)" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer> : <Empty title="در این بازه داده‌ای برای نمودار نیست" />}
       </section>
+      </PanelDisclosure>
       <section className="employee-card employee-service-performance"><div className="day-label"><h2>عملکرد سرویس‌های من</h2><span>بر اساس پرداخت تأییدشده</span></div>{resource.data.services?.length ? resource.data.services.slice(0,8).map((service) => <div key={service.id}><span><b>{service.name}</b><small>{service.paid_services} اجرای پرداخت‌شده</small></span><i><b style={{ width: `${service.share}%` }} /></i><strong>{toman(service.revenue)}</strong></div>) : <Empty title="سرویس پرداخت‌شده‌ای نیست" />}</section>
       <div className="day-label">
         <h2>جزئیات سرویس و کمیسیون</h2>
@@ -1015,6 +915,7 @@ function WeeklyScheduleEditor() {
   const schedule = useData("employee/schedule/");
   const [entries, setEntries] = useState([]);
   const [message, setMessage] = useState("");
+  const [savingDay, setSavingDay] = useState(null);
   useEffect(() => {
     if (!schedule.loading)
       setEntries(
@@ -1038,6 +939,12 @@ function WeeklyScheduleEditor() {
       ),
     );
   const save = async (entry) => {
+    if (savingDay !== null) return;
+    if (entry.is_active && entry.end_time <= entry.start_time) {
+      setMessage("ساعت پایان باید بعد از ساعت شروع باشد.");
+      return;
+    }
+    setSavingDay(entry.weekday);
     setMessage("");
     const payload = {
       weekday: entry.weekday,
@@ -1046,17 +953,21 @@ function WeeklyScheduleEditor() {
       is_active: entry.is_active,
     };
     try {
-      if (entry.id) await api.patch(`employee/schedule/${entry.id}/`, payload);
-      else await api.post("employee/schedule/", payload);
-      setMessage("ساعات کاری ذخیره شد");
-      schedule.reload();
+      const { data } = entry.id
+        ? await api.patch(`employee/schedule/${entry.id}/`, payload)
+        : await api.post("employee/schedule/", payload);
+      setEntries(current => current.map(row => row.weekday === entry.weekday ? { ...row, id: data.id || entry.id } : row));
+      setMessage(`ساعات کاری ${entry.label} ذخیره شد`);
     } catch {
-      setMessage("ذخیره ساعات کاری انجام نشد");
+      setMessage("ذخیره ساعات کاری انجام نشد؛ دوباره تلاش کنید.");
+    } finally {
+      setSavingDay(null);
     }
   };
   return (
     <section className="employee-card">
       <h2>ساعات کاری من</h2>
+      <p>تغییر هر روز را با دکمه ذخیره همان روز ثبت کنید.</p>
       {schedule.loading ? (
         <Skeleton />
       ) : (
@@ -1095,11 +1006,13 @@ function WeeklyScheduleEditor() {
                     change(entry.weekday, "is_active", event.target.checked)
                   }
                 />
-                <span>فعال</span>
+                <span>روز کاری</span>
               </label>
               <button
                 className="employee-action"
                 type="button"
+                disabled={savingDay !== null}
+                aria-label={`ذخیره ${entry.label}`}
                 onClick={() => save(entry)}
               >
                 ذخیره
@@ -1108,7 +1021,7 @@ function WeeklyScheduleEditor() {
           ))}
         </div>
       )}
-      {message && <small className="schedule-message">{message}</small>}
+      {message && <small role="status" className="schedule-message">{message}</small>}
     </section>
   );
 }
