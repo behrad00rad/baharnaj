@@ -9,3 +9,4 @@ firebase-admin==7.1.0
 jdatetime==5.2.0
 jalali-core==1.0.0
 cryptography>=41.0.7,<52
+gunicorn==23.0.0

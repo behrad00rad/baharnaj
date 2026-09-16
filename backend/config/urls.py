@@ -26,7 +26,9 @@ urlpatterns = [
     path("api/v1/telegram/", include("telegram_crm.urls")),
     path("robots.txt", robots_txt, name="robots-txt"),
     path("sitemap.xml", sitemap_xml, name="sitemap-xml"),
-    path("admin/", admin.site.urls),
+    path("django-admin/", admin.site.urls),
+    # Legacy backend-only URL remains available during local development.
+    path("admin/", (admin.site.get_urls(), "admin", "legacy_admin")),
     path("api/v1/", include("salon.urls")),
     path("api/v1/auth/token/", CookieTokenView.as_view()),
     path("api/v1/auth/token/refresh/", CookieRefreshView.as_view()),

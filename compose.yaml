@@ -2,10 +2,12 @@ services:
   backend:
     build:
       context: ./backend
+      target: development
     env_file:
       - path: ./backend/.env
         required: false
     environment:
+      DEBUG: "true"
       ALLOWED_HOSTS: localhost,127.0.0.1,backend
       CORS_ALLOWED_ORIGINS: http://localhost:5173
       SQLITE_PATH: /data/db.sqlite3
@@ -19,6 +21,7 @@ services:
   frontend:
     build:
       context: ./frontend
+      target: development
     environment:
       VITE_API_BASE_URL: /api/v1/
       VITE_PROXY_TARGET: http://backend:8000

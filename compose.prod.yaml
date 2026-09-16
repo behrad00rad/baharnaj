@@ -1,0 +1,63 @@
+# Standalone: never merge this file with the development compose.yaml.
+name: baharnaj-production
+services:
+  backend:
+    image: baharnaj-backend:${RELEASE_ID:?Set reviewed release identifier}
+    build:
+      context: ./backend
+      target: production
+    env_file:
+      - ${BACKEND_ENV_FILE:?Set absolute backend environment file path}
+    environment:
+      DEBUG: "false"
+      SQLITE_PATH: /data/db.sqlite3
+      MEDIA_ROOT: /app/media
+      STATIC_ROOT: /app/staticfiles
+      TELEGRAM_ENABLED: "false"
+      TELEGRAM_DRY_RUN: "true"
+      TELEGRAM_FORCE_DISABLED: "true"
+      FIREBASE_PROJECT_ID: ""
+      FIREBASE_SERVICE_ACCOUNT_FILE: ""
+      FIREBASE_SERVICE_ACCOUNT_JSON: ""
+      GOOGLE_APPLICATION_CREDENTIALS: /disabled/no-credentials.json
+      POSTGRES_HOST: ""
+    volumes:
+      - type: bind
+        source: ${DATABASE_DIR:?Set existing SQLite directory containing db.sqlite3}
+        target: /data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${MEDIA_DIR:?Set existing media directory}
+        target: /app/media
+        bind:
+          create_host_path: false
+      - static_data:/app/staticfiles
+    restart: unless-stopped
+    networks: [application]
+    security_opt: [no-new-privileges:true]
+  frontend:
+    image: baharnaj-frontend:${RELEASE_ID:?Set reviewed release identifier}
+    build:
+      context: ./frontend
+      target: production
+    ports:
+      - "127.0.0.1:${PROXY_PORT:-8080}:80"
+    volumes:
+      - static_data:/srv/static:ro
+      - type: bind
+        source: ${MEDIA_DIR:?Set existing media directory}
+        target: /srv/media
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [application]
+    security_opt: [no-new-privileges:true]
+networks:
+  application:
+volumes:
+  static_data:

@@ -1,0 +1,1778 @@
+diff --git a/.dockerignore b/.dockerignore
+index 0db7778..31404f5 100644
+--- a/.dockerignore
++++ b/.dockerignore
+@@ -16,3 +16,42 @@ backend/db.sqlite3
+ 
+ **/*firebase-adminsdk*.json
+ **/*service-account*.json
++
++.env
++.env.*
++!.env.example
++!.env.production.example
++**/*firebase-adminsdk*.json
++**/*service-account*.json
++**/*service_account*.json
++*.pem
++*.key
++*.crt
++*.p12
++*.pfx
++*.sqlite3*
++*.db
++media
++staticfiles
++.venv*
++venv
++node_modules
++dist
++*.log
++*.bak
++*.tar
++*.tar.gz
++*.zip
++.git
++
++*.sqlite
++*.sqlite-wal
++*.sqlite-shm
++*.db-wal
++*.db-shm
++*.cer
++*.cert
++*.tgz
++*.dump
++backups/
++**/*serviceAccount*.json
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index cdb3198..f4e5857 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -30,12 +30,12 @@ jobs:
+       POSTGRES_USER: postgres
+       POSTGRES_PASSWORD: postgres
+       SECRET_KEY: ci-only-secret-key-with-at-least-32-characters
+-      DEBUG: 'false'
++      DEBUG: 'true'
+     steps:
+       - uses: actions/checkout@v4
+       - uses: actions/setup-python@v5
+         with:
+-          python-version: '3.12'
++          python-version: '3.12.1'
+       - run: python -m pip install -r requirements.txt
+       - run: python manage.py migrate --noinput
+       - run: python manage.py makemigrations --check --dry-run
+@@ -75,3 +75,10 @@ jobs:
+       - run: npm ci --prefix frontend
+       - run: npx playwright install --with-deps chromium
+       - run: npx playwright test
++
++  production-safety:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++      - name: Build and smoke-test isolated production stack
++        run: bash deploy/verify.sh
+diff --git a/.gitignore b/.gitignore
+index 1bfde3b..ca95ae4 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -28,3 +28,42 @@ backend/source/*
+ # Local browser verification artifacts
+ test-results/
+ playwright-report/
++
++.env
++.env.*
++!.env.example
++!.env.production.example
++**/*firebase-adminsdk*.json
++**/*service-account*.json
++**/*service_account*.json
++*.pem
++*.key
++*.crt
++*.p12
++*.pfx
++*.sqlite3*
++*.db
++media
++staticfiles
++.venv*
++venv
++node_modules
++dist
++*.log
++*.bak
++*.tar
++*.tar.gz
++*.zip
++
++
++*.sqlite
++*.sqlite-wal
++*.sqlite-shm
++*.db-wal
++*.db-shm
++*.cer
++*.cert
++*.tgz
++*.dump
++backups/
++**/*serviceAccount*.json
+diff --git a/README.md b/README.md
+index ab8c7d5..d913918 100644
+--- a/README.md
++++ b/README.md
+@@ -63,7 +63,7 @@ docker compose up --build
+ 
+ The frontend uses port 5173 and the backend uses port 8000. SQLite data is retained in the `backend_data` named volume.
+ 
+-Stop the containers with `docker compose down`. Rebuild after dependency changes with `docker compose up --build`. To intentionally remove the development database as well, use `docker compose down --volumes`.
++Stop the containers with `docker compose down`. Rebuild after dependency changes with `docker compose up --build`.
+ 
+ ## Validation
+ 
+@@ -79,3 +79,7 @@ npm run build
+ ## Telegram and customer communications
+ 
+ The optional integration adds `/admin/telegram`, customer `/telegram` settings and a booking confirmation connection card. Outbound sending is disabled by default. See [setup and activation](telegram/README.md), [TeleBotHost commands](telegram/telebothost/README.md) and the [requirement audit and verification results](telegram/IMPLEMENTATION_AUDIT.md).
++
++## Production safety
++
++Use the standalone `compose.prod.yaml`, never the development Compose file. See [the deployment and rollback runbook](deploy/PRODUCTION.md) and [verification report](deploy/VERIFICATION.md). Production requires a unique secret and SMTP configuration; examples contain no working credentials. Do not deploy until existing VPS paths, TLS proxy, backups, and storage permissions have been verified.
+diff --git a/SECURITY.md b/SECURITY.md
+index 2dda8ac..be9e6bc 100644
+--- a/SECURITY.md
++++ b/SECURITY.md
+@@ -6,7 +6,7 @@ This change prepares the backend for admin and employee UI work under the PR tit
+ 
+ - `User.role` is the authorization source of truth with `customer`, `employee`, and `admin` values. `User.save()` derives `is_staff` from `role`; callers must not set staff independently.
+ - JWTs include `role`. Refresh tokens are issued only in the `baharnaj_refresh` HTTP-only cookie. Access tokens stay in frontend memory and are never written to localStorage.
+-- Refresh rotation, secure/SameSite cookie settings, credentialed CORS, and CSRF token/header handling are configured. Origins come from `CORS_ALLOWED_ORIGINS`; production must set that variable explicitly.
++- Refresh rotation, secure/SameSite cookie settings, credentialed CORS, and CSRF token/header handling are configured. CORS and CSRF use separate explicit origin variables; production accepts only Baharnaj HTTPS origins. Cookies default to Secure and SameSite=Lax in production.
+ - DRF defaults to `IsAuthenticated`, with explicit `AllowAny` only on catalog, availability, guest booking, login, CSRF bootstrap, and password reset request/confirm endpoints.
+ - Login and guest booking use scoped DRF throttles. Login also locks an account after five failed attempts in 15 minutes for 15 minutes.
+ - Password reset request and confirm endpoints use Django's time-limited password reset token and email delivery.
+@@ -20,3 +20,9 @@ This change prepares the backend for admin and employee UI work under the PR tit
+ - Login history is modeled, but request middleware/event logging should be added to record every successful and failed login consistently.
+ - Password-reset email contains a token payload for now; the frontend should replace it with a branded, HTTPS reset link before production.
+ - SQLite is suitable for local development. Production should use PostgreSQL and a database-native exclusion constraint for appointment range overlap.
++
++## Phase 0 deployment boundary
++
++See [production runbook](deploy/PRODUCTION.md). Production runs Gunicorn and a built frontend with no source mount. Only the host TLS proxy can reach loopback port 8080; it must overwrite forwarded headers. Collected admin static files and existing media are read-only in Nginx. SQLite and media must be backed up before deployment. SMTP configuration is required; no messages are sent by verification. Telegram remains disabled and Firebase credentials are not mounted.
++
++Obsolete Web Push key material was removed from the example. Treat the historical private-key-shaped value as exposed: retire/rotate it if ever used, and review history separately. No history rewriting or credential rotation is authorized by this patch. The tracked broken virtual environment remains a separate repository hygiene issue and is excluded from images.
+diff --git a/backend/.dockerignore b/backend/.dockerignore
+index 288d6d6..c975993 100644
+--- a/backend/.dockerignore
++++ b/backend/.dockerignore
+@@ -6,3 +6,42 @@ __pycache__
+ db.sqlite3
+ media
+ .env
++
++.env
++.env.*
++!.env.example
++!.env.production.example
++**/*firebase-adminsdk*.json
++**/*service-account*.json
++**/*service_account*.json
++*.pem
++*.key
++*.crt
++*.p12
++*.pfx
++*.sqlite3*
++*.db
++media
++staticfiles
++.venv*
++venv
++node_modules
++dist
++*.log
++*.bak
++*.tar
++*.tar.gz
++*.zip
++.git
++
++*.sqlite
++*.sqlite-wal
++*.sqlite-shm
++*.db-wal
++*.db-shm
++*.cer
++*.cert
++*.tgz
++*.dump
++backups/
++**/*serviceAccount*.json
+diff --git a/backend/.env.example b/backend/.env.example
+index da4cf15..7b4aa59 100644
+--- a/backend/.env.example
++++ b/backend/.env.example
+@@ -7,9 +7,6 @@ PUBLIC_BACKEND_URL=
+ # Public frontend domain used for canonical sitemap URLs (no trailing slash).
+ SITE_URL=https://baharnaj.ir
+ DEFAULT_FROM_EMAIL=no-reply@baharnaj.local
+-WEB_PUSH_VAPID_PRIVATE_KEY=MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgvrKVNSUojjWMUb2faw09leO00Eij1eHZ8rUPE6mmLp6hRANCAAT+iNJdn4Z1LhbtuwCxa4FYmE5xlBJ4oWl1s1/F/YNgzdXSyyn3dj0QjnR3Y1bvtxZROfyduc6EShz0+wKpPKB7
+-WEB_PUSH_VAPID_PUBLIC_KEY=MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE/ojSXZ+GdS4W7bsAsWuBWJhOcZQSeKFpdbNfxf2DYM3V0ssp93Y9EI50d2NW77cWUTn8nbnOhEoc9PsCqTygew==
+-WEB_PUSH_CONTACT=mailto:admin@example.com
+ # Firebase Admin is optional for local web development. Use a mounted file for FCM:
+ FIREBASE_PROJECT_ID=baharnaj
+ # FIREBASE_SERVICE_ACCOUNT_JSON=
+@@ -30,3 +27,4 @@ TELEGRAM_MAX_PER_MINUTE=20
+ # Schedule `python manage.py telegram_worker` once per minute, one instance.
+ # Emergency stop overrides the admin panel's saved sending mode.
+ TELEGRAM_FORCE_DISABLED=false
++CSRF_TRUSTED_ORIGINS=http://localhost:5173
+diff --git a/backend/Dockerfile b/backend/Dockerfile
+index d72d3c3..2ddecf4 100644
+--- a/backend/Dockerfile
++++ b/backend/Dockerfile
+@@ -1,16 +1,18 @@
+-FROM python:3.12.1-slim
+-
+-ENV PYTHONDONTWRITEBYTECODE=1 \
+-    PYTHONUNBUFFERED=1
+-
++FROM python:3.12.1-slim AS base
++ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ WORKDIR /app
+-
+ COPY requirements.txt .
+-RUN python -m pip install --no-cache-dir --upgrade pip \
+-    && python -m pip install --no-cache-dir -r requirements.txt
+-
++RUN python -m pip install --no-cache-dir -r requirements.txt
+ COPY . .
+ 
++FROM base AS development
+ EXPOSE 8000
+-
+ CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
++
++FROM base AS production
++RUN groupadd -g 10001 app && useradd -u 10001 -g app -M app \
++    && mkdir -p /data /app/staticfiles /app/media && chown app:app /data /app/staticfiles /app/media
++USER 10001:10001
++EXPOSE 8000
++HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD ["python", "healthcheck.py"]
++CMD ["gunicorn", "--config", "gunicorn.conf.py", "config.wsgi:application"]
+diff --git a/backend/config/settings.py b/backend/config/settings.py
+index 332ee8f..d9703e6 100644
+--- a/backend/config/settings.py
++++ b/backend/config/settings.py
+@@ -24,41 +24,48 @@ load_dotenv(BASE_DIR / ".env")
+ # Quick-start development settings - unsuitable for production
+ # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
+ 
+-# SECURITY WARNING: keep the secret key used in production secret!
+-SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-change-this-secret-key-32")
++from django.core.exceptions import ImproperlyConfigured
+ 
+-# SECURITY WARNING: don't run with debug turned on in production!
+-DEBUG = os.getenv("DEBUG", "true").lower() in {"1", "true", "yes"}
+ 
+-CODESPACE_NAME = os.getenv("CODESPACE_NAME", "")
++def env_bool(name, default=False):
++    value = os.getenv(name, str(default)).strip().lower()
++    if value not in {"1", "true", "yes", "0", "false", "no"}:
++        raise ImproperlyConfigured(f"{name} must be a boolean")
++    return value in {"1", "true", "yes"}
++
++
++def env_list(name, default=""):
++    return [value.strip() for value in os.getenv(name, default).split(",") if value.strip()]
++
++
++DEBUG = env_bool("DEBUG")
++DEVELOPMENT_SECRET = "dev-only-change-this-secret-key-32"
++SECRET_KEY = os.getenv("SECRET_KEY", DEVELOPMENT_SECRET if DEBUG else "")
++if not DEBUG and (len(SECRET_KEY) < 50 or len(set(SECRET_KEY)) < 5
++                  or SECRET_KEY == DEVELOPMENT_SECRET or SECRET_KEY.startswith("django-insecure-")
++                  or "replace-me" in SECRET_KEY.lower()):
++    raise ImproperlyConfigured("Production requires a unique SECRET_KEY of at least 50 characters")
++
++CODESPACE_NAME = os.getenv("CODESPACE_NAME", "") if DEBUG else ""
+ CODESPACES_DOMAIN = os.getenv("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN", "app.github.dev")
+ CODESPACE_BACKEND_HOST = f"{CODESPACE_NAME}-8000.{CODESPACES_DOMAIN}" if CODESPACE_NAME else ""
+ CODESPACE_FRONTEND_ORIGIN = f"https://{CODESPACE_NAME}-5173.{CODESPACES_DOMAIN}" if CODESPACE_NAME else ""
+-ALLOWED_HOSTS = os.getenv(
+-    "ALLOWED_HOSTS",
+-    ",".join(
+-        filter(
+-            None,
+-            [
+-                "localhost",
+-                "127.0.0.1",
+-                "baharnaj.ir",
+-                "www.baharnaj.ir",
+-                CODESPACE_BACKEND_HOST,
+-            ],
+-        )
+-    ),
+-).split(",")
+-# Vite proxies the README development API URL to Django over localhost, so a
+-# Codespace needs its dynamically provided public backend origin here.
+-PUBLIC_BACKEND_URL = (
+-    os.getenv("PUBLIC_BACKEND_URL")
+-    or (f"https://{CODESPACE_BACKEND_HOST}" if CODESPACE_BACKEND_HOST else "")
+-).rstrip("/")
+-# This is deliberately independent from API/media origins. It powers sitemap
+-# URLs and should be the public frontend domain in every production deployment.
++ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", ",".join(filter(None, ["localhost", "127.0.0.1", CODESPACE_BACKEND_HOST])) if DEBUG else "baharnaj.ir,www.baharnaj.ir")
++PUBLIC_BACKEND_URL = os.getenv("PUBLIC_BACKEND_URL", f"https://{CODESPACE_BACKEND_HOST}" if CODESPACE_BACKEND_HOST else ("" if DEBUG else "https://baharnaj.ir")).rstrip("/")
+ SITE_URL = os.getenv("SITE_URL", "https://baharnaj.ir").rstrip("/")
++if not DEBUG:
++    if not ALLOWED_HOSTS or not set(ALLOWED_HOSTS) <= {"baharnaj.ir", "www.baharnaj.ir"}:
++        raise ImproperlyConfigured("Production ALLOWED_HOSTS must contain only Baharnaj hosts")
++    if any(url not in {"https://baharnaj.ir", "https://www.baharnaj.ir"} for url in [SITE_URL, PUBLIC_BACKEND_URL]):
++        raise ImproperlyConfigured("Production public URLs must be Baharnaj HTTPS origins")
+ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
++SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", not DEBUG)
++SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "0" if DEBUG else "300"))
++SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS")
++SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD")
++SECURE_CONTENT_TYPE_NOSNIFF = True
++X_FRAME_OPTIONS = "DENY"
++SECURE_REFERRER_POLICY = "same-origin"
+ 
+ 
+ # Application definition
+@@ -160,20 +167,35 @@ USE_TZ = True
+ # Static files (CSS, JavaScript, Images)
+ # https://docs.djangoproject.com/en/6.1/howto/static-files/
+ 
+-STATIC_URL = "static/"
++STATIC_URL = "/static/"
++STATIC_ROOT = Path(os.getenv("STATIC_ROOT", BASE_DIR / "staticfiles"))
+ MEDIA_URL = "/media/"
+-MEDIA_ROOT = BASE_DIR / "media"
++MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", BASE_DIR / "media"))
+ 
+ 
+ # Email
+ # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+ 
+-MAILERS = {
+-    "default": {
+-        "BACKEND": "django.core.mail.backends.console.EmailBackend",
+-    },
+-}
+-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@baharnaj.local")
++email_backend = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend" if DEBUG else "django.core.mail.backends.smtp.EmailBackend")
++email_host = os.getenv("EMAIL_HOST", "")
++email_port = int(os.getenv("EMAIL_PORT", "587"))
++email_host_user = os.getenv("EMAIL_HOST_USER", "")
++email_host_password = os.getenv("EMAIL_HOST_PASSWORD", "")
++email_use_tls = env_bool("EMAIL_USE_TLS", True)
++email_use_ssl = env_bool("EMAIL_USE_SSL")
++email_timeout = 15
++DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@baharnaj.ir")
++if email_use_tls and email_use_ssl:
++    raise ImproperlyConfigured("Select only one of email_use_tls and email_use_ssl")
++if not DEBUG and (email_backend != "django.core.mail.backends.smtp.EmailBackend" or not email_host):
++    raise ImproperlyConfigured("Production requires SMTP email_backend and email_host; configure email before deployment")
++# Django 6.1 forbids mixing MAILERS with legacy EMAIL_* settings.
++# Environment names remain conventional; only MAILERS is exported to Django.
++MAILERS = {"default": {"BACKEND": email_backend, "OPTIONS": {
++    "host": email_host, "port": email_port, "username": email_host_user,
++    "password": email_host_password, "use_tls": email_use_tls,
++    "use_ssl": email_use_ssl, "timeout": email_timeout,
++}}}
+ FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "")
+ FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
+ # Local credentials stay outside frontend builds; production can override this path.
+@@ -189,7 +211,8 @@ REST_FRAMEWORK = {
+     "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
+     "DEFAULT_THROTTLE_RATES": {"login": "5/minute", "guest_booking": "10/hour"},
+ }
+-configured_origins = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin.strip()]
++configured_origins = env_list("CORS_ALLOWED_ORIGINS")
++configured_csrf = env_list("CSRF_TRUSTED_ORIGINS")
+ if DEBUG:
+     CORS_ALLOWED_ORIGINS = configured_origins + [
+         "http://localhost:5173",
+@@ -198,7 +221,7 @@ if DEBUG:
+         "http://127.0.0.1:5174",
+     ]
+     CORS_ALLOWED_ORIGIN_REGEXES = [r"^https://.*-5173\.app\.github\.dev$"]
+-    CSRF_TRUSTED_ORIGINS = configured_origins + [
++    CSRF_TRUSTED_ORIGINS = configured_csrf + [
+         "http://localhost:8000",
+         "https://localhost:8000",
+         "http://127.0.0.1:8000",
+@@ -207,14 +230,16 @@ if DEBUG:
+     ]
+ else:
+     CORS_ALLOWED_ORIGINS = configured_origins
+-    CSRF_TRUSTED_ORIGINS = configured_origins
++    CSRF_TRUSTED_ORIGINS = configured_csrf
++    if not set(configured_origins + configured_csrf) <= {"https://baharnaj.ir", "https://www.baharnaj.ir"}:
++        raise ImproperlyConfigured("Production CORS/CSRF origins must be Baharnaj HTTPS origins")
+ CORS_ALLOW_CREDENTIALS = True
+-CSRF_COOKIE_SECURE = True
+-CSRF_COOKIE_SAMESITE = "None"
+-SESSION_COOKIE_SECURE = True
+-SESSION_COOKIE_SAMESITE = "None"
+-REFRESH_COOKIE_SECURE = True
+-REFRESH_COOKIE_SAMESITE = "None"
++CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", not DEBUG)
++CSRF_COOKIE_SAMESITE = "Lax"
++SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", not DEBUG)
++SESSION_COOKIE_SAMESITE = "Lax"
++REFRESH_COOKIE_SECURE = env_bool("REFRESH_COOKIE_SECURE", not DEBUG)
++REFRESH_COOKIE_SAMESITE = "Lax"
+ REFRESH_COOKIE_NAME = "baharnaj_refresh"
+ SIMPLE_JWT = {
+     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=10),
+diff --git a/backend/config/urls.py b/backend/config/urls.py
+index 49ec0a8..debe2de 100644
+--- a/backend/config/urls.py
++++ b/backend/config/urls.py
+@@ -26,7 +26,9 @@ urlpatterns = [
+     path("api/v1/telegram/", include("telegram_crm.urls")),
+     path("robots.txt", robots_txt, name="robots-txt"),
+     path("sitemap.xml", sitemap_xml, name="sitemap-xml"),
+-    path("admin/", admin.site.urls),
++    path("django-admin/", admin.site.urls),
++    # Legacy backend-only URL remains available during local development.
++    path("admin/", (admin.site.get_urls(), "admin", "legacy_admin")),
+     path("api/v1/", include("salon.urls")),
+     path("api/v1/auth/token/", CookieTokenView.as_view()),
+     path("api/v1/auth/token/refresh/", CookieRefreshView.as_view()),
+diff --git a/backend/requirements.txt b/backend/requirements.txt
+index 7521b70..4ed2253 100644
+--- a/backend/requirements.txt
++++ b/backend/requirements.txt
+@@ -9,3 +9,4 @@ firebase-admin==7.1.0
+ jdatetime==5.2.0
+ jalali-core==1.0.0
+ cryptography>=41.0.7,<52
++gunicorn==23.0.0
+diff --git a/compose.yaml b/compose.yaml
+index dbb8220..4b68c86 100644
+--- a/compose.yaml
++++ b/compose.yaml
+@@ -2,10 +2,12 @@ services:
+   backend:
+     build:
+       context: ./backend
++      target: development
+     env_file:
+       - path: ./backend/.env
+         required: false
+     environment:
++      DEBUG: "true"
+       ALLOWED_HOSTS: localhost,127.0.0.1,backend
+       CORS_ALLOWED_ORIGINS: http://localhost:5173
+       SQLITE_PATH: /data/db.sqlite3
+@@ -19,6 +21,7 @@ services:
+   frontend:
+     build:
+       context: ./frontend
++      target: development
+     environment:
+       VITE_API_BASE_URL: /api/v1/
+       VITE_PROXY_TARGET: http://backend:8000
+diff --git a/frontend/.dockerignore b/frontend/.dockerignore
+index 3b24e4a..9064cf5 100644
+--- a/frontend/.dockerignore
++++ b/frontend/.dockerignore
+@@ -2,3 +2,42 @@ node_modules
+ dist
+ .env
+ *.log
++
++.env
++.env.*
++!.env.example
++!.env.production.example
++**/*firebase-adminsdk*.json
++**/*service-account*.json
++**/*service_account*.json
++*.pem
++*.key
++*.crt
++*.p12
++*.pfx
++*.sqlite3*
++*.db
++media
++staticfiles
++.venv*
++venv
++node_modules
++dist
++*.log
++*.bak
++*.tar
++*.tar.gz
++*.zip
++.git
++
++*.sqlite
++*.sqlite-wal
++*.sqlite-shm
++*.db-wal
++*.db-shm
++*.cer
++*.cert
++*.tgz
++*.dump
++backups/
++**/*serviceAccount*.json
+diff --git a/frontend/.env.example b/frontend/.env.example
+index dc91b41..5e5475b 100644
+--- a/frontend/.env.example
++++ b/frontend/.env.example
+@@ -1,3 +1,4 @@
++# Firebase web metadata is PUBLIC; never put Firebase Admin JSON or private keys here.
+ # Firebase Web configuration is public app metadata. Do not put Admin credentials here.
+ VITE_FIREBASE_API_KEY=
+ VITE_FIREBASE_AUTH_DOMAIN=
+diff --git a/frontend/Dockerfile b/frontend/Dockerfile
+index 39b0bdc..d396c61 100644
+--- a/frontend/Dockerfile
++++ b/frontend/Dockerfile
+@@ -1,12 +1,21 @@
+-FROM node:22.13.0-alpine
+-
++FROM node:22.13.0-alpine AS dependencies
+ WORKDIR /app
+-
+ COPY package.json package-lock.json ./
+ RUN npm ci
+-
+ COPY . .
+ 
++FROM dependencies AS development
+ EXPOSE 5173
+-
+ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
++
++FROM dependencies AS build
++# Only public build metadata belongs here. FCM stays unconfigured in Phase 0.
++ENV VITE_API_BASE_URL=/api/v1/ VITE_SITE_URL=https://baharnaj.ir
++RUN npm run build
++
++FROM nginx:1.28-alpine AS production
++COPY nginx.conf /etc/nginx/conf.d/default.conf
++COPY proxy_params_baharnaj /etc/nginx/proxy_params_baharnaj
++COPY --from=build /app/dist /usr/share/nginx/html
++EXPOSE 80
++HEALTHCHECK --interval=30s --timeout=5s CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1
+diff --git a/TASKS.md b/TASKS.md
+new file mode 100644
+index 0000000..3984075
+--- /dev/null
++++ b/TASKS.md
+@@ -0,0 +1,269 @@
++# Baharnaj master task list
++
++This is the ordered backlog for taking Baharnaj from its current public development deployment to a safe, usable salon system. Complete phases in order. Telegram stays disabled until the core system is stable.
++
++## Phase 0 — Emergency production safety
++
++- [ ] Put the public site behind a temporary maintenance page or restricted access while production is unsafe.
++- [ ] Set production `DEBUG=False` and verify Django debug pages are no longer public.
++- [ ] Replace any development/default `SECRET_KEY`; rotate it if it may have been used publicly.
++- [ ] Audit and rotate production credentials, tokens, Firebase credentials, database passwords, and integration secrets as necessary.
++- [ ] Restrict `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, and `CSRF_TRUSTED_ORIGINS` to real production origins.
++- [ ] Confirm `http://localhost:5173` is not accepted as a credentialed origin in production.
++- [ ] Stop exposing the Vite development server, React Refresh, `/@vite/client`, and `/src/*`.
++- [ ] Build the frontend with `npm run build` and serve only the generated static assets.
++- [ ] Replace Django `runserver` with a production application server such as Gunicorn or Uvicorn.
++- [ ] Configure Nginx or Caddy for the frontend, API, media, SPA fallback, sitemap, and robots routes.
++- [ ] Keep HTTP-to-HTTPS redirection and configure HSTS carefully after HTTPS is confirmed everywhere.
++- [ ] Add secure production settings for cookies, proxy headers, static files, and error pages.
++- [ ] Remove the obsolete `WEB_PUSH_*` key material from `backend/.env.example`; rotate it if it was ever used.
++- [ ] Run `python manage.py check --deploy` with production-like environment variables until it passes.
++
++**Repository/local verification (2026-09-16; live items above remain unverified):**
++
++- [x] Add separate production Compose, Gunicorn, built Nginx frontend, and persistent-storage safeguards; both images build.
++- [x] Verify fail-closed settings (12 tests), secure refresh/session cookies, and disabled messaging configuration locally.
++- [x] Verify 39 isolated HTTP smoke assertions, plus 4 encoded/private-path checks and built-asset secret scanning.
++- [x] Remove obsolete Web Push variables from the working-tree example (historical key rotation remains pending).
++- [x] Prepare backup/deployment/rollback runbook and repeatable CI production-safety checks.
++- [ ] Inspect VPS paths, proxy/TLS, backups and SMTP; authorize deployment separately and verify public behavior.
++- [ ] Complete HSTS subdomain/preload review; initial policy intentionally retains security.W005/W021.
++
++See [verification and blockers](deploy/VERIFICATION.md) and [operator runbook](deploy/PRODUCTION.md).
++
++**Done when:** public HTML contains built asset hashes rather than Vite development scripts; source files and Django debug pages are inaccessible; production deployment checks pass.
++
++## Phase 1 — Repair CI and database migrations
++
++- [ ] Reproduce the GitHub Actions PostgreSQL migration failure locally or in an isolated CI database.
++- [ ] Fix all migrations so a completely fresh PostgreSQL database migrates successfully.
++- [ ] Test forward migration, rollback where supported, and re-application.
++- [ ] Verify the appointment overlap guarantee on PostgreSQL using a database-native constraint or equivalent safe locking strategy.
++- [ ] Decide whether any database contains pre-migration data from before migration `0010`.
++- [ ] If old data exists, create and test a data migration for legacy appointments, services, employees, schedules, and financial records.
++- [ ] Reconcile the admin revenue API contract with its outdated test (`total` response mismatch).
++- [ ] Reconcile the employee earnings status response contract with its outdated test (list versus mapping).
++- [ ] Replace fixed/past dates in availability tests with deterministic future/frozen dates.
++- [ ] Fix the date-sensitive frontend calendar test so it does not depend on the current real date.
++- [ ] Clean the React test `act(...)` warnings and unused-variable lint warnings.
++- [ ] Upgrade `python-dotenv` from `1.2.1` to a non-vulnerable version (`1.2.2` or later compatible version).
++- [ ] Run backend tests on both SQLite and PostgreSQL.
++- [ ] Run frontend unit tests, lint, and production build.
++- [ ] Make the GitHub Actions backend, frontend, and E2E jobs all pass.
++
++**Done when:** the latest `main` commit has a fully green CI run, including migrations and E2E.
++
++## Phase 2 — Production database, storage, and operations
++
++- [ ] Confirm which database the live site currently uses.
++- [ ] Move production to PostgreSQL if it still uses SQLite.
++- [ ] Create an encrypted automatic database-backup schedule.
++- [ ] Perform and document a real restore test from a backup.
++- [ ] Move uploaded media to reliable object storage or a properly backed-up persistent volume.
++- [ ] Define private/public media rules; use signed access for private files if introduced.
++- [ ] Add image/file malware scanning or a safe upload-processing policy.
++- [ ] Add application error monitoring and structured server logs without customer secrets.
++- [ ] Add uptime monitoring and backend health/readiness endpoints.
++- [ ] Add disk, database, certificate-expiry, backup-failure, and worker-failure alerts.
++- [ ] Document deployment, migration, rollback, backup, and emergency-disable procedures.
++- [ ] Separate development, staging, and production configuration and data.
++
++**Done when:** a failed deployment or server loss can be detected, rolled back, and restored without losing salon data.
++
++## Phase 3 — Remove demo data and prepare real salon content
++
++- [ ] Remove gibberish/test service descriptions, SEO values, categories, articles, tags, biographies, and prices from production.
++- [ ] Enter the final Persian name, short description, full description, duration, pricing type, price/range/note, and images for every service.
++- [ ] Enter every specialist's real Persian name, specialty, biography, services, photo, and active status.
++- [ ] Verify actual working hours, holidays, time off, and Islamic mourning-day closure handling.
++- [ ] Add enough real gallery work for each important service category.
++- [ ] Review image crops, sizes, compression, alt text, and ownership/consent.
++- [ ] Finalize homepage, About, contact, location, phone numbers, Instagram, policies, and booking instructions.
++- [ ] Finalize privacy, cancellation, rescheduling, deposit/payment, refund, and no-show policies.
++- [ ] Replace the temporary text identity/favicon with an approved logo and brand assets.
++- [ ] Review the mother-daughter/30-year brand story with Bahar and the salon manager.
++- [ ] Publish a small set of useful real articles; remove all test articles.
++- [ ] Review every service and article SEO title, description, slug, internal links, and structured data.
++- [ ] Add and verify the real Google Search Console token; submit and inspect the sitemap.
++
++**Done when:** nothing customer-visible looks like a test, placeholder, internal note, or unfinished identity.
++
++## Phase 4 — Core booking and salon acceptance testing
++
++- [ ] Create a staging environment with realistic but non-sensitive sample data.
++- [ ] Test guest multi-service booking from start to confirmation.
++- [ ] Test simultaneous booking attempts and confirm overlapping appointments cannot be created.
++- [ ] Test booking holds, expiration, retry, duplicate submission, and weak/interrupted internet.
++- [ ] Test fixed, starting-from, range, consultation, and variable pricing.
++- [ ] Test final-price approval before completion/payment for variable services.
++- [ ] Test admin and employee appointment creation.
++- [ ] Test customer lookup, confirmation code, cancellation, and rescheduling.
++- [ ] Test waitlist registration and decide whether slot-opening notifications will actually be automated.
++- [ ] Test staff working schedules, exceptions, leave requests, and approvals.
++- [ ] Test partial completion/cancellation in a multi-service appointment.
++- [ ] Test cash/card/manual payment reports, confirmation, rejection, partial payment, refund, and payment locking.
++- [ ] Test employee commissions after settlement and after refunds/cancellations.
++- [ ] Confirm all finance dashboard numbers come from real records and reconcile against hand calculations.
++- [ ] Confirm payment can only be recorded once where the workflow requires it.
++- [ ] Confirm employee ownership and admin-only actions on every sensitive endpoint.
++- [ ] Test upload limits, invalid files, profile photos, service images, gallery images, and blog media.
++- [ ] Test public, admin, and employee flows on real Android/iPhone-sized devices and desktop browsers.
++- [ ] Test RTL, light/dark themes, all text sizes, keyboard behavior, and 200% zoom with real API data.
++- [ ] Test the system under slow, intermittent, and temporarily unavailable internet conditions.
++
++**Done when:** the salon manager and at least one employee can complete a full fake working day in staging without developer intervention.
++
++## Phase 5 — Customer confirmations and account decision
++
++- [ ] Configure a production email provider; the current console backend does not send mail.
++- [ ] Replace password-reset token payloads with a branded HTTPS reset link.
++- [ ] Choose and integrate an Iranian SMS provider if SMS confirmations are required.
++- [ ] Send or display a reliable booking receipt containing the confirmation code and management link.
++- [ ] Define templates for received, confirmed, rescheduled, cancelled, reminder, and follow-up events.
++- [ ] Decide whether customer accounts are part of the first launch.
++- [ ] Until a dashboard exists, either remove the `create account` option or clearly explain its limited purpose.
++- [ ] If customer accounts launch, implement the dashboard scope below.
++
++**Done when:** a customer can always recover or find their booking and receives truthful status information.
++
++## Phase 6 — Customer dashboard MVP
++
++### Authentication and profile
++
++- [ ] Create customer-specific login routing; customer accounts must never be sent to the admin panel.
++- [ ] Support login with phone plus password initially; consider OTP only after choosing a dependable Iranian provider.
++- [ ] Add password reset and logout.
++- [ ] Show/edit name, phone, birthday, neighborhood, and profile preferences.
++- [ ] Require verification before changing the primary phone number.
++- [ ] Add account deletion/request flow and clear privacy wording.
++
++### Appointments
++
++- [ ] Show the next appointment first, with services, specialists, date/time, status, price state, and payment state.
++- [ ] Show appointment history with completed/cancelled status.
++- [ ] Allow reschedule/cancel only when salon policy and appointment state permit it.
++- [ ] Require confirmation before cancellation and show any deadline or fee clearly.
++- [ ] Provide a direct `book again` action that preselects previous services/specialists.
++- [ ] Provide the booking confirmation/management code and a shareable receipt view.
++- [ ] Show a clear contact-salon action when self-service changes are no longer allowed.
++
++### Notifications and preferences
++
++- [ ] Show persistent in-app customer notifications.
++- [ ] Let customers separately control operational reminders and promotional consent.
++- [ ] Let customers manage Firebase push, email, SMS, and later Telegram preferences without dark patterns.
++- [ ] Record consent time, source, and changes for auditing.
++
++### Payments and loyalty
++
++- [ ] Show payment history and refunds without exposing internal employee/commission data.
++- [ ] Do not add online payment until a reliable Iranian gateway and reconciliation process are selected.
++- [ ] Show loyalty points/coupons only after the salon approves the commercial rules and the logic is tested.
++- [ ] Show coupon terms, expiry, eligible services, reservation, use, and reversal truthfully.
++
++### Customer experience
++
++- [ ] Use a mobile-first Persian interface with one simple dashboard home screen.
++- [ ] Avoid exposing internal statuses or technical terminology.
++- [ ] Add empty, loading, offline, expired-session, and error states.
++- [ ] Add tests proving customers can access only their own profile, appointments, payments, coupons, and notifications.
++
++**MVP recommendation:** launch only profile + upcoming appointment + history + cancel/reschedule + notification preferences. Add loyalty and online payment later.
++
++## Phase 7 — Admin and employee workflow verification
++
++- [ ] Verify employee profile photos render consistently across public and internal panels.
++- [ ] Verify specialist biographies appear on the intended public cards and booking step.
++- [ ] Verify employees can reach the public homepage and log out easily.
++- [ ] Verify employee schedule/profile sections do not duplicate conflicting controls.
++- [ ] Verify employees can create appointments only for themselves and report only allowed payments.
++- [ ] Verify admin calendar defaults to today and works correctly across Jalali month/week boundaries.
++- [ ] Verify admin filters, search, pagination, drawers, dialogs, and deletion confirmations with large datasets.
++- [ ] Verify daily/weekly/monthly finance charts and employee filters against backend totals.
++- [ ] Verify refunds, immutable financial history, commission snapshots, and audit logs.
++- [ ] Verify gallery category creation/selection and safe deletion/archive behavior.
++- [ ] Verify blog drafts, scheduling, publishing, revisions, media, categories, tags, and SEO fields.
++- [ ] Add consistent success/error messages for every save, delete, upload, status, and financial action.
++- [ ] Resolve remaining React effect/lint warnings that could hide stale UI behavior.
++
++**Done when:** the two panels can be used by non-technical salon staff without needing explanations from the developer.
++
++## Phase 8 — Firebase notifications
++
++- [ ] Create/configure the production Firebase web application.
++- [ ] Configure all required `VITE_FIREBASE_*` values and public VAPID key in the production build.
++- [ ] Mount Firebase Admin credentials securely on the backend; never include them in frontend variables or the repository.
++- [ ] Test opt-in, opt-out, token refresh, multiple devices, invalid tokens, denied permission, and logout cleanup.
++- [ ] Test foreground, background, closed-browser, notification click-through, and duplicate suppression.
++- [ ] Confirm persistent in-app notifications remain correct when FCM delivery fails.
++- [ ] Decide which events go to admins, employees, and later customers.
++- [ ] Add monitoring for provider failures without logging tokens or secret payloads.
++
++**Done when:** real devices receive the correct notification and failures never corrupt booking/payment operations.
++
++## Phase 9 — Security and privacy hardening
++
++- [ ] Add consistent login-success/failure history logging through middleware or authentication hooks.
++- [ ] Review account lockout and throttling behind the production proxy/client-IP configuration.
++- [ ] Review every DRF endpoint against the permission matrix with automated tests.
++- [ ] Add customer object-ownership tests before releasing the customer dashboard.
++- [ ] Review refresh-token rotation, logout invalidation, CSRF, cookie domain, SameSite, and secure settings in production.
++- [ ] Add a Content Security Policy and review other browser security headers.
++- [ ] Prevent sensitive values and personal data from entering logs, analytics, URLs, or error pages.
++- [ ] Define data retention, export, correction, and deletion procedures.
++- [ ] Review admin/employee account creation, deactivation, password policy, and lost-device response.
++- [ ] Make dependency audits run even if an earlier CI test fails, so security results are still reported.
++- [ ] Perform a final secrets scan, dependency audit, authorization review, and basic penetration test.
++
++**Done when:** production configuration and authorization have been reviewed independently of UI behavior.
++
++## Phase 10 — Real end-to-end release
++
++- [ ] Add CI service orchestration so E2E tests exercise a real Django/PostgreSQL backend instead of only mocked API responses.
++- [ ] Cover guest booking, customer management, admin confirmation, employee completion, payment, refund, and commission in E2E.
++- [ ] Add deployment smoke tests for `/`, public APIs, direct SPA routes, media, sitemap, robots, admin login, and health endpoints.
++- [ ] Prepare a production seed/import plan for services, staff, schedules, and content without demo records.
++- [ ] Perform a staging release rehearsal including database migration, rollback, backup, and restore.
++- [ ] Obtain sign-off from the salon manager on content, prices, policies, schedules, and workflows.
++- [ ] Deploy during a low-risk window and monitor logs, bookings, and errors closely.
++- [ ] Keep a documented manual booking fallback for internet/server outages.
++
++**Done when:** one real controlled booking can move safely through the entire workflow and the salon has a fallback plan.
++
++## Phase 11 — Telegram, after the core release
++
++- [ ] Keep `TELEGRAM_ENABLED=false`, dry-run enabled, and campaigns unscheduled until prior phases are stable.
++- [ ] Review Telegram commercial rules, consent, templates, loyalty, birthday, maintenance, and discount policies with the salon.
++- [ ] Configure the real bot token, username, integration secret, HTTPS origins, and encryption-key backup.
++- [ ] Install and verify the TeleBotHost logic.
++- [ ] Install exactly one production worker/timer and monitor its heartbeat.
++- [ ] Link only the manager first and run diagnostics.
++- [ ] Test account linking, `/stop`, disconnect, consent separation, reminders, cancellations, and manager reports.
++- [ ] Send a dry-run and then a live test only to the manager.
++- [ ] Rerun the Telegram Playwright suite in a stable browser environment.
++- [ ] Gradually enable operational reminders before any promotional campaign.
++- [ ] Do not enable loyalty, coupons, birthdays, or bulk campaigns until their policies and costs are approved.
++
++**Done when:** manager-only live tests are reliable, delivery reporting is truthful, and no customer can be messaged without recorded consent.
++
++## Phase 12 — Post-launch and productization
++
++- [ ] Track booking completion, cancellation, no-show, repeat visit, service demand, and source attribution without fake revenue claims.
++- [ ] Collect structured feedback from the manager, employees, and customers for several weeks.
++- [ ] Fix operational friction before adding more marketing automation.
++- [ ] Create a privacy-safe analytics/reporting plan.
++- [ ] Decide which features are truly reusable across other salons or clinics.
++- [ ] Only after Baharnaj is stable, design multi-tenant isolation, per-business branding, plans, billing, onboarding, support, and data export.
++- [ ] Validate the product with several real businesses before investing in a general all-industry SaaS.
++
++## Current verified status (2026-09-16)
++
++- Public domain responds, but serves the Vite development application and Django debug output.
++- Public production content contains test/demo text and records.
++- Frontend production build succeeds.
++- Local frontend suite: 63 passed, 1 date-sensitive calendar test failed.
++- Local backend suite: 120 passed, 3 outdated/date-sensitive tests failed.
++- Latest GitHub Actions run: backend failed during PostgreSQL migration; frontend failed its calendar test; E2E was skipped.
++- npm production audit reported no known vulnerabilities.
++- Python audit found `PYSEC-2026-2270` in `python-dotenv==1.2.1`.
++- Telegram code is extensive but live TeleBotHost/bot/worker operation is not verified.
+diff --git a/backend/.env.production.example b/backend/.env.production.example
+new file mode 100644
+index 0000000..3f0148c
+--- /dev/null
++++ b/backend/.env.production.example
+@@ -0,0 +1,34 @@
++# PRIVATE runtime configuration. Copy OUTSIDE the checkout; chmod 600.
++SECRET_KEY=replace-me-with-a-new-random-secret-at-least-50-characters
++DEBUG=False
++ALLOWED_HOSTS=baharnaj.ir,www.baharnaj.ir
++CORS_ALLOWED_ORIGINS=https://baharnaj.ir,https://www.baharnaj.ir
++CSRF_TRUSTED_ORIGINS=https://baharnaj.ir,https://www.baharnaj.ir
++SITE_URL=https://baharnaj.ir
++PUBLIC_BACKEND_URL=https://baharnaj.ir
++SECURE_SSL_REDIRECT=True
++# Start short AFTER HTTPS verification. Increase later; subdomains/preload need review.
++SECURE_HSTS_SECONDS=300
++SECURE_HSTS_INCLUDE_SUBDOMAINS=False
++SECURE_HSTS_PRELOAD=False
++CSRF_COOKIE_SECURE=True
++SESSION_COOKIE_SECURE=True
++REFRESH_COOKIE_SECURE=True
++WEB_CONCURRENCY=1
++GUNICORN_TIMEOUT=60
++EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
++# Required: operator supplies working SMTP. No delivery tests in Phase 0.
++EMAIL_HOST=
++EMAIL_PORT=587
++EMAIL_HOST_USER=
++EMAIL_HOST_PASSWORD=
++EMAIL_USE_TLS=True
++EMAIL_USE_SSL=False
++DEFAULT_FROM_EMAIL=no-reply@baharnaj.ir
++# Private Firebase Admin reference only; intentionally NOT mounted in Phase 0.
++FIREBASE_SERVICE_ACCOUNT_FILE=
++FIREBASE_PROJECT_ID=
++TELEGRAM_ENABLED=false
++TELEGRAM_DRY_RUN=true
++TELEGRAM_FORCE_DISABLED=true
++# Preserve existing Telegram encryption credentials in the backed-up secret file.
+diff --git a/backend/gunicorn.conf.py b/backend/gunicorn.conf.py
+new file mode 100644
+index 0000000..b0e84ca
+--- /dev/null
++++ b/backend/gunicorn.conf.py
+@@ -0,0 +1,11 @@
++"""Conservative SQLite deployment; scale only after measuring contention."""
++import os
++
++bind = "0.0.0.0:8000"
++workers = int(os.getenv("WEB_CONCURRENCY", "1"))
++timeout = int(os.getenv("GUNICORN_TIMEOUT", "60"))
++accesslog = None  # URL query strings may contain customer tokens.
++errorlog = "-"
++capture_output = True
++# Django trusts the protocol header only on the private proxy network.
++forwarded_allow_ips = "*"
+diff --git a/backend/healthcheck.py b/backend/healthcheck.py
+new file mode 100644
+index 0000000..02ce55c
+--- /dev/null
++++ b/backend/healthcheck.py
+@@ -0,0 +1,8 @@
++"""Read-only readiness check using the public catalog and standard library."""
++from urllib.request import Request, urlopen
++
++request = Request("http://127.0.0.1:8000/api/v1/services/", headers={
++    "Host": "baharnaj.ir", "X-Forwarded-Proto": "https",
++})
++with urlopen(request, timeout=4) as response:
++    assert response.status == 200
+diff --git a/compose.prod.yaml b/compose.prod.yaml
+new file mode 100644
+index 0000000..22c2103
+--- /dev/null
++++ b/compose.prod.yaml
+@@ -0,0 +1,63 @@
++# Standalone: never merge this file with the development compose.yaml.
++name: baharnaj-production
++services:
++  backend:
++    image: baharnaj-backend:${RELEASE_ID:?Set reviewed release identifier}
++    build:
++      context: ./backend
++      target: production
++    env_file:
++      - ${BACKEND_ENV_FILE:?Set absolute backend environment file path}
++    environment:
++      DEBUG: "false"
++      SQLITE_PATH: /data/db.sqlite3
++      MEDIA_ROOT: /app/media
++      STATIC_ROOT: /app/staticfiles
++      TELEGRAM_ENABLED: "false"
++      TELEGRAM_DRY_RUN: "true"
++      TELEGRAM_FORCE_DISABLED: "true"
++      FIREBASE_PROJECT_ID: ""
++      FIREBASE_SERVICE_ACCOUNT_FILE: ""
++      FIREBASE_SERVICE_ACCOUNT_JSON: ""
++      GOOGLE_APPLICATION_CREDENTIALS: /disabled/no-credentials.json
++      POSTGRES_HOST: ""
++    volumes:
++      - type: bind
++        source: ${DATABASE_DIR:?Set existing SQLite directory containing db.sqlite3}
++        target: /data
++        bind:
++          create_host_path: false
++      - type: bind
++        source: ${MEDIA_DIR:?Set existing media directory}
++        target: /app/media
++        bind:
++          create_host_path: false
++      - static_data:/app/staticfiles
++    restart: unless-stopped
++    networks: [application]
++    security_opt: [no-new-privileges:true]
++  frontend:
++    image: baharnaj-frontend:${RELEASE_ID:?Set reviewed release identifier}
++    build:
++      context: ./frontend
++      target: production
++    ports:
++      - "127.0.0.1:${PROXY_PORT:-8080}:80"
++    volumes:
++      - static_data:/srv/static:ro
++      - type: bind
++        source: ${MEDIA_DIR:?Set existing media directory}
++        target: /srv/media
++        read_only: true
++        bind:
++          create_host_path: false
++    depends_on:
++      backend:
++        condition: service_healthy
++    restart: unless-stopped
++    networks: [application]
++    security_opt: [no-new-privileges:true]
++networks:
++  application:
++volumes:
++  static_data:
+diff --git a/deploy/.env.example b/deploy/.env.example
+new file mode 100644
+index 0000000..58b026a
+--- /dev/null
++++ b/deploy/.env.example
+@@ -0,0 +1,6 @@
++# Compose interpolation only; all paths must be inspected absolute VPS paths.
++RELEASE_ID=
++BACKEND_ENV_FILE=
++DATABASE_DIR=
++MEDIA_DIR=
++PROXY_PORT=8080
+diff --git a/deploy/PRODUCTION.md b/deploy/PRODUCTION.md
+new file mode 100644
+index 0000000..3005106
+--- /dev/null
++++ b/deploy/PRODUCTION.md
+@@ -0,0 +1,203 @@
++# Phase 0 deployment and rollback
++
++Repository preparation is not a live deployment. No usable authenticated VPS
++connection was available in this workspace. The deployment directory, running
++services, database location, media location, proxy, certificate, exposed ports,
++secret presence and backup inventory are **unverified blockers**. Do not infer
++these paths from the development Compose volume. In particular, do not point
++production at a newly created empty directory. No migration files change here.
++
++## Architecture and trust boundary
++
++Cloudflare → existing VPS TLS proxy → **127.0.0.1:8080** → built Nginx frontend →
++private Gunicorn backend (one worker) → existing SQLite and media bind mounts.
++Only collected static files use a new named volume. The backend has no published
++port. No Telegram worker, scheduler, Redis, PostgreSQL, or paid service is added.
++The production image uses UID/GID 10001; operator must verify read/write access to
++the existing database directory, its SQLite journal files, and media directory.
++Nginx also needs read/traverse access to public media (directories 755, files 644,
++or equivalent scoped ACLs). Verify existing permissions before rollout.
++Do not recursively change ownership blindly. Back up ownership/ACLs first and
++use a narrowly scoped ACL or an approved UID mapping if required.
++
++Production Compose always forces DEBUG off, Telegram off/dry-run/force-disabled,
++no Firebase credentials/project, and SQLite. Preserve existing Telegram encryption
++keys in the backed-up runtime configuration; never rotate them blindly. FCM web
++metadata is omitted from the Phase 0 frontend build. In-app notifications remain.
++No email delivery is performed by deployment commands. SMTP is required before
++startup; an absent host fails startup. An unreachable/incorrect SMTP host remains
++an operator blocker, not evidence that mail works. Password-reset behavior is
++unchanged. Never use the dummy smtp.invalid test configuration on the VPS.
++
++React owns `/admin/` and its panel routes. `/django-admin/` is the Django admin
++entry point; legacy `/admin/login/`, auth/model URLs are also routed to Django.
++`/api/`, robots and sitemap go to Django; static and media are served read-only
++by Nginx. Unknown media types download as octet-stream, with nosniff and sandbox;
++common raster images retain their MIME types. Upload bodies allow 20 MiB, while
++the application retains its 5 MiB per-image validation. No source mounts exist.
++
++## Read-only inspection before authorization
++
++On an already authenticated VPS session, run these read-only commands. Do not
++paste secret-bearing `docker inspect`, `compose config`, `.env`, or proxy output
++into logs. Inspect configuration privately and report variable presence only.
++
++```bash
++pwd
++sudo docker ps --format '{{.Names}} {{.Image}} {{.Ports}}'
++sudo ss -lntp
++systemctl is-active nginx caddy apache2 cloudflared
++sudo docker volume ls
++```
++
++Privately inspect the actual proxy configuration and service/Compose file,
++certificate issuer/expiry, SQLite/media mounts, and backup inventory. Check the
++runtime environment for the variable names below without printing their values.
++Identify every writer (web, worker, timer). Determine whether the outer proxy is
++Nginx, Caddy or a tunnel before editing it. The included architecture assumes an
++existing host TLS proxy. If the real ingress differs, adapt and retest before
++approval; never install a competing listener on 80/443.
++
++Cloudflare must use Full (strict) with a valid origin certificate, never Flexible.
++Keep its HTTPS redirect. The origin must also redirect HTTP to HTTPS and must
++not expose 8000/5173/8080 externally. In the **existing HTTPS server block**, route
++the application to loopback and overwrite forwarded headers (Nginx example):
++
++```nginx
++client_max_body_size 20m;
++location / {
++    proxy_pass http://127.0.0.1:8080;
++    proxy_set_header Host $host;
++    proxy_set_header X-Forwarded-Proto $scheme;
++    proxy_set_header X-Forwarded-For $remote_addr;
++}
++```
++
++If Cloudflare real-IP restoration is configured, trust only its verified address
++ranges; never blindly trust client X-Forwarded-For. The outer proxy must strip
++client forwarded protocol headers. Internal Nginx accepts only literal `https`;
++Django retains SECURE_PROXY_SSL_HEADER and SSL redirect as defense in depth.
++The public outer proxy owns HTTPS for **all** paths, including static/SPA/media.
++Configure HSTS there too: initially `max-age=300` on HTTPS responses only. Django
++adds the same short HSTS to API responses. Verify certificates, redirects and
++forwarded headers first; increase to 86400, then a longer policy after observation.
++Only enable includeSubDomains/preload after every subdomain is audited. Local
++smoke tests simulate the trusted TLS hop and do not prove actual HTTPS or TLS.
++
++## Operator configuration
++
++Copy `backend/.env.production.example` outside the checkout, with mode 600.
++Provide SECRET_KEY (unique random >=50 characters), EMAIL_HOST, EMAIL_PORT,
++EMAIL_HOST_USER, EMAIL_HOST_PASSWORD, EMAIL_USE_TLS/SSL, DEFAULT_FROM_EMAIL.
++An unauthenticated relay may leave user/password empty only if verified intentional.
++Review ALLOWED_HOSTS, CORS_ALLOWED_ORIGINS, CSRF_TRUSTED_ORIGINS, SITE_URL,
++PUBLIC_BACKEND_URL, SECURE_SSL_REDIRECT, SECURE_HSTS_SECONDS,
++SECURE_HSTS_INCLUDE_SUBDOMAINS/PRELOAD, CSRF/SESSION/REFRESH_COOKIE_SECURE,
++WEB_CONCURRENCY and GUNICORN_TIMEOUT. SameSite is Lax for same-domain deployment.
++Never use a development or previously exposed secret; changing SECRET_KEY logs
++users out. Coordinate any real rotation separately. Frontend VITE variables are
++public compiled metadata; server secrets must never use the VITE prefix.
++
++Copy `deploy/.env.example` outside the checkout and populate RELEASE_ID (reviewed
++commit), BACKEND_ENV_FILE, DATABASE_DIR (existing db.sqlite3 parent), MEDIA_DIR,
++PROXY_PORT. Compose refuses missing storage directories. If the existing database
++has a different filename, adapt the SQLite mount/path explicitly before approval.
++Do not rename/replace the live database by guesswork.
++
++## Backup, deployment, rollback commands
++
++Exact live paths cannot be supplied honestly until VPS inspection. The commands
++below use **interactive input**, validate existing paths, and have no unresolved
++path globs. Execute only after explicit deployment authorization. Record a private
++operations manifest with absolute paths named `checkout`, `database`, `media`,
++`backend_env`, `compose_env`, `proxy_config`, `service_config`, `backup_directory`
++(a new directory under an existing private backup parent), `previous_images`
++(list of inspected running image IDs), and `additional_secret_files` (all private
++Firebase, Telegram, TLS and other credential files). Include the actual service
++configuration even if deployment is systemd rather than Compose. The old release
++checkout must remain available; the reviewed release should be a separate checkout.
++
++1. Enable maintenance/restricted access at the inspected existing ingress and
++   stop **all** database/media writers using their inspected service names. Those
++   service-specific commands remain blocked pending inspection. No customer writes
++   may occur between backup and health approval. Preserve the old proxy file.
++2. Run the backup (creates new files only; SQLite backup API, media/config archives,
++   previous commit, image archive, non-empty checks):
++
++```bash
++read -r -p 'Existing reviewed checkout: ' RELEASE_DIR
++read -r -p 'Private operations manifest file: ' OPERATIONS_MANIFEST
++test -d "$RELEASE_DIR/.git" && test -s "$OPERATIONS_MANIFEST"
++python3 "$RELEASE_DIR/deploy/backup.py" "$OPERATIONS_MANIFEST"
++```
++
++   Copy backups encrypted off-host and perform a restore rehearsal in a separate
++   directory. Keep `.env`, certificates, encryption keys and backups out of Git.
++   Do not proceed if backup or integrity checks fail.
++3. Fetch/check out the exact approved commit into a **separate release directory**;
++   refuse dirty state, retain old images and checkout. Run in a shell with `set -e`:
++
++```bash
++set -e
++read -r -p 'New release checkout (existing clone): ' RELEASE_DIR
++read -r -p 'Reviewed full commit SHA: ' REVIEWED_COMMIT
++read -r -p 'Private production Compose env file: ' COMPOSE_ENV
++test -d "$RELEASE_DIR/.git" && test -s "$COMPOSE_ENV"
++test -z "$(git -C "$RELEASE_DIR" status --porcelain)"
++git -C "$RELEASE_DIR" fetch origin
++git -C "$RELEASE_DIR" cat-file -e "$REVIEWED_COMMIT^{commit}"
++git -C "$RELEASE_DIR" checkout --detach "$REVIEWED_COMMIT"
++cd "$RELEASE_DIR"
++# RELEASE_ID in COMPOSE_ENV must equal REVIEWED_COMMIT.
++prod() { docker compose --env-file "$COMPOSE_ENV" -f "$RELEASE_DIR/compose.prod.yaml" -p baharnaj-production "$@"; }
++prod config --quiet
++prod build
++prod run --rm --no-deps backend python manage.py check --deploy
++prod run --rm --no-deps backend python manage.py migrate --plan
++# Only after verified backup and migration-plan review; exactly one process:
++prod run --rm --no-deps backend python manage.py migrate --noinput
++prod run --rm --no-deps backend python manage.py collectstatic --noinput
++prod up -d --wait --force-recreate
++prod ps
++```
++
++4. Apply the reviewed change to the existing outer proxy, validate its configuration
++   and reload only after authorization. Exact commands depend on the unverified
++   ingress. Validate loopback first, then the real HTTPS origin and Cloudflare:
++
++```bash
++read -r -p 'Existing harmless media URL path: ' MEDIA_TEST_PATH
++python3 deploy/smoke.py http://127.0.0.1:8080 "$MEDIA_TEST_PATH"
++python3 deploy/smoke.py https://baharnaj.ir "$MEDIA_TEST_PATH"
++```
++
++   Verify public HTTP redirects, untrusted forwarded headers cannot bypass TLS,
++   backend/dev ports are closed, admin login and an operator-controlled authenticated
++   session work, media and SEO URLs are correct, no localhost CORS, and outer-proxy
++   HSTS is present on HTML/assets. Readiness must pass before removing maintenance.
++   Check no pre-existing Telegram timers/workers remain active. No message tests.
++
++5. Rollback: keep maintenance enabled, stop the **new** stack with `prod stop`
++   (never delete volumes), restore the reviewed previous proxy configuration from
++   the private archive, validate it, and start the **previous** services using their
++   recorded commands/images. Load archived images if necessary:
++
++```bash
++read -r -p 'Verified backup directory: ' BACKUP_DIR
++test -s "$BACKUP_DIR/previous-images.tar"
++docker image load -i "$BACKUP_DIR/previous-images.tar"
++```
++
++   No migration changes belong to this patch, so restoring the application normally
++   requires **no database restore**. If a reviewed migration requires a database
++   rollback, stop every writer, take a second backup of current data, and restore
++   the integrity-checked backup to the exact recorded database path only with a
++   separately approved restore plan. Never overwrite live SQLite/WAL files while
++   running. Restore media only if changed and approved; never overwrite newer uploads
++   blindly. Test previous public/API/admin endpoints before lifting maintenance.
++   Exact service, proxy and conditional data-restore commands remain blocked until
++   actual VPS layout is inspected; they are intentionally not invented here.
++
++References: [Django proxy security](https://docs.djangoproject.com/en/dev/topics/security/),
++[Gunicorn settings](https://docs.gunicorn.org/en/stable/settings.html),
++[Vite runtime requirements](https://vite.dev/guide/).
+diff --git a/deploy/VERIFICATION.md b/deploy/VERIFICATION.md
+new file mode 100644
+index 0000000..8413c76
+--- /dev/null
++++ b/deploy/VERIFICATION.md
+@@ -0,0 +1,200 @@
++# Phase 0 implementation and verification — 2026-09-16
++
++Repository changes and local verification are complete. **Live Phase 0 is not
++complete:** no VPS access/layout verification or deployment occurred. Original
++production checkboxes remain open. `TASKS.md` was already untracked when work
++started; its existing backlog was preserved, with a separate local-verification
++section added. No commits or pushes were made.
++
++## Findings and architecture
++
++The original Dockerfiles started Django runserver and Vite dev; settings defaulted
++DEBUG on, accepted the development secret, mixed development hosts with production,
++reused CORS origins for CSRF, always used cross-site cookies, had no STATIC_ROOT,
++and used console mail. The backend example contained obsolete Web Push private
++key material. Docker ignore coverage was incomplete. Public-site findings in the
++request were not re-probed against live production.
++
++Result: existing Cloudflare/TLS ingress → loopback Nginx serving only built Vite
++assets and read-only static/media → internal non-root Gunicorn (one configurable
++worker) → existing SQLite/media bind mounts. Development remains separate.
++Production configuration rejects bad secrets, hosts and origins; requires SMTP;
++sets secure same-domain cookies and proxy security; forces Telegram disabled,
++dry-run, emergency-disabled; excludes Firebase credentials and worker services.
++See [operator configuration and rollout](PRODUCTION.md) for all required variable
++names and exact parameterized commands. No actual VPS paths have been invented.
++
++## Results
++
++| Verification | Result |
++|---|---|
++| Backend production image | Built successfully, Python 3.12.1, Gunicorn 23.0.0 |
++| Frontend production image | Built successfully, Node 22.13.0 build, Nginx runtime |
++| Development and production Compose | Both validate; missing production inputs correctly rejected |
++| Django system check | 0 issues |
++| Migration drift | No changes detected |
++| Fresh isolated SQLite migrations | All applied successfully |
++| Collected static assets | 157 files; admin CSS served successfully |
++| Backend suite | **120 passed, 3 failed/error out of 123** |
++| Frontend suite | **63 passed, 1 failed out of 64**; 18/19 files passed |
++| Frontend lint | **0 errors, 13 warnings** |
++| Frontend production build | Passed |
++| Production settings regression tests | **12/12 passed** |
++| Cookie/runtime checks | **3/3 passed**, real cookie-producing code with mocked authentication/session persistence |
++| HTTP smoke | **39/39 assertions passed** |
++| Extra encoded/private-path probes | **4/4 passed** |
++| Built asset scan | **14 files passed**; no source maps, private-key/token patterns or dummy runtime secrets |
++| Runtime source/node_modules absence | Passed |
++| Nginx configuration test | Passed |
++| Repeatable `deploy/verify.sh` | Passed end to end with fresh isolated storage |
++| `git diff --check`, shell syntax, Python compilation | Passed |
++| Live HTTPS, Cloudflare, SMTP delivery, existing data/backup validation | **Not performed; operator blockers** |
++
++The 39 HTTP assertions cover built hashes, no Vite/Refresh, immutable assets,
++HTML revalidation, security headers, blocked development/secret paths, generic
++Django 404, API HSTS, services/employees/gallery/blog, robots/sitemap, direct public,
++admin and employee SPA paths, Django admin login/CSS, Firebase worker path, media,
++localhost CORS denial, and Secure/SameSite CSRF cookie. Refresh and session cookies
++are separately verified as Secure/HttpOnly/SameSite=Lax. API catalog fixtures are
++empty isolated data; these checks do not prove real salon data or authenticated
++business workflows. No customer account/login/booking/message was created.
++
++Initial production `check --deploy` exits successfully with exactly:
++
++- `security.W005`: includeSubDomains is intentionally false until all subdomains
++  are audited for HTTPS.
++- `security.W021`: preload is intentionally false until domain-wide review.
++
++These are **HSTS rollout decisions, not proxy-owned exemptions or silenced checks**.
++HSTS starts at 300 seconds; outer TLS ingress must supply the same policy on
++static/SPA/media. A separate isolated invocation with includeSubDomains/preload
++true produces **0 issues**, without enabling either on the production example or
++claiming the real domain is ready. SSL redirect, console-email and secret warnings
++are resolved. Live TLS/proxy validation is still required before rollout.
++
++Known baseline failures reproduced (no business code modified):
++
++- Backend revenue response test: missing `total` field.
++- Backend employee earnings test: list versus mapping `statuses` contract.
++- Backend booking availability test: fixed-date expected 10:00 slot missing.
++- Frontend calendar test: date-sensitive assertion.
++- Existing frontend lint and React act warnings remain.
++
++The requested PostgreSQL migration repair and python-dotenv advisory are left for
++Phase 1; PostgreSQL tests were not run and SQLite was not replaced.
++
++Transient verification issues were corrected, not hidden: host frontend tools were
++missing, so checks ran in the pinned Node container; Django 6.1 rejected mixed
++MAILERS/legacy settings, corrected to MAILERS-only; Python 3.13 lacked existing
++imghdr, so the repository's 3.12.1 pin was retained; standalone checks initially
++used unwritable /app SQLite and were rerun with /tmp paths; full suite initially
++lacked its external Telegram JSON fixture and had force-disable conflicting with
++mocked activation tests, corrected with a read-only fixture mount and normal test
++settings under `--network none`; initial local media fixture lacked Nginx traverse
++permission, corrected only on /tmp test media. Final results are above.
++
++This workspace also had legacy iptables FORWARD DROP despite Docker's nft rules.
++Temporary rules limited to each isolated test bridge allowed smoke verification;
++both exact rules were removed afterward. No VPS firewall was changed. Test stacks
++were stopped; databases/media/volumes were retained, not deleted.
++
++## Files changed and purpose
++
++| Files | Purpose |
++|---|---|
++| `backend/config/settings.py` | Fail-closed production secret/hosts/origins, separate CSRF, HTTPS/HSTS/cookies, SMTP MAILERS, static/media paths |
++| `backend/config/urls.py` | Add unambiguous Django admin entry while retaining legacy admin namespace |
++| `backend/requirements.txt` | Pin Gunicorn |
++| `backend/Dockerfile` | Separate development/production targets; non-root Gunicorn and readiness |
++| `backend/gunicorn.conf.py`, `backend/healthcheck.py` | Conservative configurable worker/timeout and read-only catalog health check |
++| `frontend/Dockerfile` | Pinned Node/npm ci/build stages and dist-only Nginx runtime |
++| `frontend/nginx.conf`, `frontend/proxy_params_baharnaj` | SPA/API/SEO/admin/static/media routing, source blocking, caching, headers, trusted protocol forwarding |
++| `compose.yaml` | Preserve explicit development targets and DEBUG |
++| `compose.prod.yaml` | Standalone loopback-only production stack, required existing mounts, restart policies and disabled messaging |
++| `backend/.env.example` | Remove obsolete Web Push key variables, separate development CSRF origin |
++| `backend/.env.production.example`, `deploy/.env.example` | Safe runtime and deployment-variable templates |
++| `frontend/.env.example` | Clarify public Firebase metadata versus private Admin credentials |
++| `.gitignore`, `.dockerignore`, `backend/.dockerignore`, `frontend/.dockerignore` | Exclude secrets, credentials, certificates, SQLite/media, environments and backups |
++| `.github/workflows/ci.yml` | Keep business tests in development settings; add independent production safety build/smoke job |
++| `deploy/test_settings.py`, `deploy/test_runtime.py` | Regression checks for startup rejection, cookie flags and disabled integrations |
++| `deploy/smoke.py`, `deploy/scan_assets.py`, `deploy/verify.sh` | Repeatable isolated production verification and secret-safe asset scanning |
++| `deploy/backup.py` | Non-destructive SQLite backup API, integrity check, media/config/image archives, non-empty verification |
++| `deploy/PRODUCTION.md`, `deploy/VERIFICATION.md` | Deployment/rollback handoff and honest verification record |
++| `README.md`, `SECURITY.md` | Link production workflow and describe security boundary/rotation guidance |
++| `TASKS.md` | Preserve backlog; record verified local items without checking live production items |
++
++## Commands executed
++
++Read-only inspection included `git status --short`, `find .. -name AGENTS.md`,
++`cat`/`sed` on the requested source/configuration files (environment values and SSH
++note were suppressed), `git ls-files`, `docker info`, `docker compose version`,
++`docker ps`, image/network inspection, `nginx -t`, and secret-safe Python scans.
++`rg` was unavailable; find/grep were used. No applicable AGENTS.md was found.
++
++The local dummy environment was generated with Python `secrets.token_urlsafe(60)`
++into mode-600 `/tmp/baharnaj-phase0/backend.env`; no secret value was printed.
++Compose inputs selected `/tmp/baharnaj-phase0/data`, `/tmp/baharnaj-phase0/media`,
++release `phase0-local`, project `baharnaj-phase0`, and loopback port 18080.
++The fresh reusable harness independently generated another isolated directory.
++
++Main verification commands (output redirected to `/tmp/baharnaj-phase0/*.log`):
++
++```bash
++docker compose config --quiet
++docker compose --env-file /tmp/baharnaj-phase0/compose.env -f compose.prod.yaml -p baharnaj-phase0 config --quiet
++docker compose --env-file /tmp/baharnaj-phase0/compose.env -f compose.prod.yaml -p baharnaj-phase0 build
++docker build --target dependencies -t baharnaj-frontend-check:phase0-local frontend
++docker run --rm --network none baharnaj-frontend-check:phase0-local npm test
++docker run --rm --network none baharnaj-frontend-check:phase0-local npm run lint
++docker run --rm --network none baharnaj-frontend-check:phase0-local npm run build
++docker run --rm --network none -e DEBUG=true -e SQLITE_PATH=/tmp/check.sqlite3 -e TELEGRAM_FORCE_DISABLED=true baharnaj-backend:phase0-local python manage.py check
++docker run --rm --network none -e DEBUG=true -e SQLITE_PATH=/tmp/check.sqlite3 -e TELEGRAM_FORCE_DISABLED=true baharnaj-backend:phase0-local python manage.py makemigrations --check --dry-run
++docker run --rm --network none -v /workspaces/baharnaj/telegram/telebothost/contract.json:/telegram/telebothost/contract.json:ro -e DEBUG=true -e SQLITE_PATH=/tmp/check.sqlite3 baharnaj-backend:phase0-local python manage.py test
++docker run --rm --network none --env-file /tmp/baharnaj-phase0/backend.env -e SQLITE_PATH=/tmp/check.sqlite3 baharnaj-backend:phase0-local python manage.py check --deploy
++docker run --rm --network none --env-file /tmp/baharnaj-phase0/backend.env -e SQLITE_PATH=/tmp/check.sqlite3 -e SECURE_HSTS_INCLUDE_SUBDOMAINS=true -e SECURE_HSTS_PRELOAD=true baharnaj-backend:phase0-local python manage.py check --deploy
++docker run --rm --network none --env-file /tmp/baharnaj-phase0/backend.env -v /workspaces/baharnaj/deploy:/checks:ro baharnaj-backend:phase0-local python /checks/test_settings.py
++docker run --rm --network none --env-file /tmp/baharnaj-phase0/backend.env -v /workspaces/baharnaj/deploy:/checks:ro baharnaj-backend:phase0-local python /checks/test_runtime.py
++docker compose --env-file /tmp/baharnaj-phase0/compose.env -f compose.prod.yaml -p baharnaj-phase0 run --rm --no-deps backend python manage.py migrate --noinput
++docker compose --env-file /tmp/baharnaj-phase0/compose.env -f compose.prod.yaml -p baharnaj-phase0 run --rm --no-deps backend python manage.py collectstatic --noinput
++docker compose --env-file /tmp/baharnaj-phase0/compose.env -f compose.prod.yaml -p baharnaj-phase0 up -d --wait
++python deploy/smoke.py
++python deploy/scan_assets.py /tmp/baharnaj-phase0/assets /tmp/baharnaj-phase0/backend.env
++bash deploy/verify.sh
++docker compose --env-file /tmp/baharnaj-phase0/compose.env -f compose.prod.yaml -p baharnaj-phase0 stop
++bash -n deploy/verify.sh
++python -m py_compile deploy/backup.py deploy/smoke.py deploy/test_settings.py deploy/test_runtime.py deploy/scan_assets.py
++git diff --check
++```
++
++Local-only support actions: container `python` created a 1×1 PNG under isolated
++media and set its directory/file permissions to 755/644; `docker compose cp`
++extracted built assets for scanning. A failed first build/config attempt omitted
++required Compose inputs and correctly failed. Image rebuilds followed settings
++and Python compatibility corrections. Full business suites ran with networking
++blocked; production smoke requests were read-only.
++
++## Secret review and remaining handoff
++
++Tracked text scanning found historical `WEB_PUSH_VAPID_PRIVATE_KEY` material in
++`backend/.env.example`; the current example has no WEB_PUSH variables. Retire or
++rotate that key if ever used; review Git history/remediation separately, without
++blindly rewriting it. Credential-shaped URLs in CI and a Telegram test are test
++fixtures, not newly found production credentials. Pattern scanning is not proof
++that no historical secret exists. The tracked `.venv-broken` is excluded from
++images; repository cleanup belongs to a separate change. No actual .env, private
++key, service-account JSON or certificate was added to Git.
++
++Operator blockers: authenticated read-only VPS inspection; actual deployment and
++storage paths; current proxy/service/certificate/port inventory; verified backup
++and restore rehearsal; UID/media ACL review; real SMTP configuration; Cloudflare
++Full (strict), forwarded-header and HTTPS verification; HSTS subdomain review;
++explicit live deployment approval. Exact live service stop/reload/rollback/data
++restore commands cannot be adapted until that inventory exists. The runbook
++provides validated interactive commands and a backup tool without pretending
++unknown paths are inspected. Its backup utility was syntax-checked but has not
++been exercised against real production backups.
++
++**No live deployment/restart, DNS/Cloudflare change, database/media deletion,
++credential rotation, customer message, Git commit/push/merge, or Telegram
++activation occurred.** Only disposable test databases were initialized/migrated;
++no existing database/media was overwritten and no Docker volume was deleted.
+diff --git a/deploy/backup.py b/deploy/backup.py
+new file mode 100644
+index 0000000..2e42529
+--- /dev/null
++++ b/deploy/backup.py
+@@ -0,0 +1,50 @@
++"""Non-destructive offline backup. Run only after maintenance and writer shutdown.
++Reads an operator-created JSON manifest; prints no secret contents.
++"""
++import json
++import os
++from pathlib import Path
++import sqlite3
++import subprocess
++import sys
++import tarfile
++
++os.umask(0o077)
++manifest = json.loads(Path(sys.argv[1]).read_text())
++required = ['checkout', 'database', 'media', 'backend_env', 'compose_env', 'proxy_config', 'service_config', 'backup_directory']
++for key in required:
++    value = Path(manifest[key])
++    if not value.is_absolute() or '..' in value.parts:
++        raise SystemExit(f'{key}: require verified absolute path')
++    if key != 'backup_directory' and not value.exists():
++        raise SystemExit(f'{key}: missing; refusing backup')
++destination = Path(manifest['backup_directory'])
++destination.mkdir(mode=0o700, parents=False, exist_ok=False)
++source = Path(manifest['database'])
++if not source.is_file() or not source.stat().st_size:
++    raise SystemExit('Existing database must be a non-empty file')
++with sqlite3.connect(source.as_uri() + '?mode=ro', uri=True) as db:
++    with sqlite3.connect(destination / 'database.sqlite3') as backup:
++        db.backup(backup)
++        if backup.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
++            raise SystemExit('Database integrity check failed')
++with tarfile.open(destination / 'media.tar.gz', 'w:gz') as archive:
++    archive.add(manifest['media'], arcname='media')
++with tarfile.open(destination / 'configuration.tar.gz', 'w:gz') as archive:
++    for key in ['backend_env','compose_env','proxy_config','service_config']:
++        archive.add(manifest[key], arcname=key)
++    # Include private Firebase/Telegram/certificate files explicitly in the manifest.
++    for index, value in enumerate(manifest.get('additional_secret_files', [])):
++        path = Path(value)
++        if not path.is_absolute() or not path.is_file():
++            raise SystemExit('Additional secret path invalid')
++        archive.add(path, arcname=f'additional-secret-{index}')
++commit = subprocess.check_output(['git','-C',manifest['checkout'],'rev-parse','HEAD'], text=True).strip()
++(destination / 'previous-commit.txt').write_text(commit + '\n')
++(destination / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
++images = manifest.get('previous_images', [])
++if not images: raise SystemExit('previous_images must list inspected running image IDs/tags')
++subprocess.run(['docker','image','save','-o',str(destination / 'previous-images.tar'),*images], check=True)
++for path in destination.iterdir():
++    if not path.is_file() or not path.stat().st_size: raise SystemExit('Empty backup artifact')
++print('Backup completed; database integrity and non-empty artifacts verified. Store an encrypted off-host copy.')
+diff --git a/deploy/scan_assets.py b/deploy/scan_assets.py
+new file mode 100644
+index 0000000..a0a7380
+--- /dev/null
++++ b/deploy/scan_assets.py
+@@ -0,0 +1,22 @@
++"""Scan built assets without printing matching values. Public Firebase IDs allowed."""
++from pathlib import Path
++import re
++import sys
++
++root = Path(sys.argv[1])
++patterns = [rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----', rb'"private_key"\s*:', rb'ghp_[A-Za-z0-9]{20,}', rb'github_pat_[A-Za-z0-9_]{20,}']
++if len(sys.argv) > 2:
++    for line in Path(sys.argv[2]).read_text().splitlines():
++        key, sep, value = line.partition('=')
++        if sep and value and key in {'SECRET_KEY','EMAIL_HOST_PASSWORD','TELEGRAM_BOT_TOKEN','TELEGRAM_INTEGRATION_SECRET'}:
++            patterns.append(re.escape(value.encode()))
++files = [path for path in root.rglob('*') if path.is_file()]
++assert files, 'No built assets found'
++failures = []
++for path in files:
++    data = path.read_bytes()
++    if path.suffix == '.map' or any(re.search(pattern, data) for pattern in patterns):
++        failures.append(str(path.relative_to(root)))
++if failures:
++    raise SystemExit('Suspected secret/source map; values suppressed: ' + ', '.join(failures))
++print(f'PASS {len(files)} built files: no source maps, private-key/token patterns, or supplied runtime secrets')
+diff --git a/deploy/smoke.py b/deploy/smoke.py
+new file mode 100644
+index 0000000..dec90f6
+--- /dev/null
++++ b/deploy/smoke.py
+@@ -0,0 +1,51 @@
++"""Read-only HTTP smoke checks. Defaults target ONLY the isolated local stack.
++Usage: python deploy/smoke.py [base_url] [existing_media_path]
++No accounts, bookings, notifications, or login attempts are created.
++"""
++import re
++import sys
++from urllib.request import Request, urlopen
++from urllib.error import HTTPError
++
++base = sys.argv[1].rstrip('/') if len(sys.argv) > 1 else 'http://127.0.0.1:18080'
++media = sys.argv[2] if len(sys.argv) > 2 else '/media/phase0-smoke.png'
++passed = 0
++
++
++def get(path, **headers):
++    req = Request(base + path, headers={'Host': 'baharnaj.ir', 'X-Forwarded-Proto': 'https', **headers})
++    try: response = urlopen(req, timeout=15)
++    except HTTPError as error: response = error
++    with response: return response.status, response.headers, response.read()
++
++
++def check(condition, label):
++    global passed
++    if not condition: raise AssertionError(label)
++    passed += 1
++    print('PASS', label)
++
++status, headers, body = get('/')
++check(status == 200, 'built homepage')
++check(b'/@vite/client' not in body and b'RefreshRuntime' not in body, 'no Vite or React Refresh in HTML')
++assets = re.findall(rb'(?:src|href)="(/assets/[^" ]+)"', body)
++check(bool(assets) and any(re.search(rb'-[A-Za-z0-9_-]{6,}\.', asset) for asset in assets), 'hashed assets')
++for asset in assets:
++    code, ah, ab = get(asset.decode())
++    check(code == 200 and 'immutable' in ah.get('Cache-Control', ''), 'immutable asset ' + asset.decode())
++check('no-cache' in headers.get('Cache-Control', ''), 'HTML revalidation')
++for key, value in [('X-Content-Type-Options','nosniff'), ('X-Frame-Options','DENY'), ('Referrer-Policy','same-origin')]:
++    check(headers.get(key) == value, key)
++for path in ['/@vite/client','/@react-refresh','/@fs/etc/passwd','/src/main.jsx','/src/anything','/.env','/.git/config','/package.json','/backend/db.sqlite3','/assets/missing.js','/media/.env']:
++    check(get(path)[0] == 404, 'blocked ' + path)
++status, headers, body = get('/api/v1/nonexistent-phase0/')
++check(status == 404 and b'DEBUG' not in body and b'urlpatterns' not in body, 'generic Django 404')
++check('max-age=' in headers.get('Strict-Transport-Security',''), 'Django HSTS')
++for path in ['/api/v1/services/','/api/v1/employees/','/api/v1/gallery/','/api/v1/blog/posts/','/robots.txt','/sitemap.xml','/book','/services/example','/blog/example','/admin/appointments','/employee/schedule','/django-admin/login/','/static/admin/css/base.css','/firebase-messaging-sw.js',media]:
++    check(get(path)[0] == 200, path)
++_, headers, _ = get('/api/v1/services/', Origin='http://localhost:5173')
++check('Access-Control-Allow-Origin' not in headers, 'localhost CORS denied')
++_, headers, _ = get('/api/v1/auth/csrf/')
++cookie = headers.get('Set-Cookie','')
++check('Secure' in cookie and 'SameSite=Lax' in cookie, 'CSRF cookie security')
++print(f'{passed} smoke assertions passed')
+diff --git a/deploy/test_runtime.py b/deploy/test_runtime.py
+new file mode 100644
+index 0000000..0cdffec
+--- /dev/null
++++ b/deploy/test_runtime.py
+@@ -0,0 +1,38 @@
++"""No DB writes or network. Exercise real login cookie response with mocked auth."""
++import os
++import sys
++sys.path.insert(0, "/app")
++os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
++import django
++django.setup()
++from django.conf import settings
++from django.test import RequestFactory
++from django.contrib.sessions.middleware import SessionMiddleware
++from django.http import HttpResponse
++from unittest.mock import Mock, patch
++from salon.views import CookieTokenView
++
++user = Mock(role='admin')
++serializer = Mock(user=user, validated_data={'access': 'dummy-access', 'refresh': 'dummy-refresh'})
++request = Mock(data={'username': 'isolated'}, META={})
++with patch('salon.views.User.objects') as users, patch('salon.views.is_locked', return_value=False), patch('salon.views.clear_failed_logins'), patch('salon.views.get_token', return_value='dummy-csrf'):
++    users.filter.return_value.first.return_value = user
++    view = CookieTokenView()
++    view.get_serializer = Mock(return_value=serializer)
++    response = view.post(request)
++    cookie = response.cookies[settings.REFRESH_COOKIE_NAME]
++    assert cookie['secure'] and cookie['httponly'] and cookie['samesite'] == 'Lax'
++print('PASS refresh cookie: Secure, HttpOnly, SameSite=Lax')
++request = RequestFactory().get('/', secure=True)
++middleware = SessionMiddleware(lambda req: HttpResponse())
++middleware.process_request(request)
++request.session = Mock(session_key='dummy-session', modified=True, accessed=True)
++request.session.is_empty.return_value = False
++request.session.get_expire_at_browser_close.return_value = True
++response = middleware.process_response(request, HttpResponse())
++cookie = response.cookies[settings.SESSION_COOKIE_NAME]
++assert cookie['secure'] and cookie['httponly'] and cookie['samesite'] == 'Lax'
++print('PASS session cookie: Secure, HttpOnly, SameSite=Lax')
++assert not settings.DEBUG and not settings.TELEGRAM_ENABLED and settings.TELEGRAM_DRY_RUN and settings.TELEGRAM_FORCE_DISABLED
++assert not settings.FIREBASE_SERVICE_ACCOUNT_CONFIGURED
++print('PASS DEBUG off; Telegram disabled/dry-run/force-disabled; Firebase unconfigured')
+diff --git a/deploy/test_settings.py b/deploy/test_settings.py
+new file mode 100644
+index 0000000..98a0a67
+--- /dev/null
++++ b/deploy/test_settings.py
+@@ -0,0 +1,34 @@
++"""Run in the backend image: python /checks/test_settings.py. No DB or network."""
++import os
++import subprocess
++import unittest
++
++BASE = {
++    "PATH": os.environ["PATH"], "PYTHONPATH": "/app",
++    "SECRET_KEY": "isolated-check-only-abcdefghijklmnopqrstuvwxyz-0123456789-ABCDEF",
++    "DJANGO_SETTINGS_MODULE": "config.settings", "DEBUG": "false", "EMAIL_HOST": "smtp.invalid",
++    "TELEGRAM_ENABLED": "false", "TELEGRAM_FORCE_DISABLED": "true",
++}
++
++class ProductionSettingsTests(unittest.TestCase):
++    def check(self, changes, success):
++        env = BASE | changes
++        if "SECRET_KEY" in changes and changes["SECRET_KEY"] is None:
++            env.pop("SECRET_KEY", None)
++        result = subprocess.run(["python", "-c", "from django.conf import settings; settings.SECRET_KEY"], env=env, capture_output=True)
++        self.assertEqual(result.returncode == 0, success, "Unexpected settings startup result (values suppressed)")
++
++    def test_valid_production(self): self.check({"SECRET_KEY": BASE["SECRET_KEY"]}, True)
++    def test_missing_secret(self): self.check({"SECRET_KEY": ""}, False)
++    def test_development_secret(self): self.check({"SECRET_KEY": "dev-only-change-this-secret-key-32"}, False)
++    def test_short_secret(self): self.check({"SECRET_KEY": "short"}, False)
++    def test_missing_smtp(self): self.check({"EMAIL_HOST": ""}, False)
++    def test_console_email(self): self.check({"EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend"}, False)
++    def test_localhost_cors(self): self.check({"CORS_ALLOWED_ORIGINS": "http://localhost:5173"}, False)
++    def test_codespaces_cors(self): self.check({"CORS_ALLOWED_ORIGINS": "https://demo-5173.app.github.dev"}, False)
++    def test_wildcard_hosts(self): self.check({"ALLOWED_HOSTS": "*"}, False)
++    def test_localhost_csrf(self): self.check({"CSRF_TRUSTED_ORIGINS": "http://localhost:5173"}, False)
++    def test_trim_empty(self): self.check({"ALLOWED_HOSTS": " baharnaj.ir, ,www.baharnaj.ir, "}, True)
++    def test_local_development(self): self.check({"DEBUG": "true", "SECRET_KEY": None, "EMAIL_HOST": ""}, True)
++
++if __name__ == "__main__": unittest.main()
+diff --git a/deploy/verify.sh b/deploy/verify.sh
+new file mode 100644
+index 0000000..1ed62ce
+--- /dev/null
++++ b/deploy/verify.sh
+@@ -0,0 +1,41 @@
++#!/usr/bin/env bash
++# Local/CI ONLY. New isolated storage each time; no live paths or secrets accepted.
++set -euo pipefail
++cd "$(dirname "$0")/.."
++project="baharnaj-check-$(date +%s)-$$"
++checks_dir=$(mktemp -d /tmp/baharnaj-check.XXXXXXXX)
++export CHECKS_DIR="$checks_dir"
++export RELEASE_ID="$project"
++python3 - <<'PY'
++import os, secrets
++from pathlib import Path
++p = Path(os.environ['CHECKS_DIR'])
++for name in ['data', 'media']: (p / name).mkdir(mode=0o755)
++(p / 'backend.env').write_text('SECRET_KEY=' + secrets.token_urlsafe(60) + '\nDEBUG=false\nEMAIL_HOST=smtp.invalid\nTELEGRAM_ENABLED=false\nTELEGRAM_DRY_RUN=true\nTELEGRAM_FORCE_DISABLED=true\n')
++(p / 'backend.env').chmod(0o600)
++PY
++export BACKEND_ENV_FILE="$checks_dir/backend.env"
++export DATABASE_DIR="$checks_dir/data"
++export MEDIA_DIR="$checks_dir/media"
++export PROXY_PORT=18081
++prod() { docker compose -f compose.prod.yaml -p "$project" "$@"; }
++# Stop containers on success/failure; retain isolated DB/media/volume for diagnosis.
++trap 'prod stop >/dev/null 2>&1 || true' EXIT
++prod config --quiet
++prod build
++docker run --rm --network none -u 0 -v "$checks_dir:/checks" "baharnaj-backend:$RELEASE_ID" python -c 'import os; [os.chown("/checks/"+name,10001,10001) for name in ["data","media"]]; os.chmod("/checks/media",0o755)'
++prod run --rm --no-deps backend python manage.py migrate --noinput
++prod run --rm --no-deps backend python manage.py collectstatic --noinput
++prod run --rm --no-deps backend python manage.py check --deploy
++# Stronger policy only in this isolated command; does not enable it on the server.
++prod run --rm --no-deps -e SECURE_HSTS_INCLUDE_SUBDOMAINS=true -e SECURE_HSTS_PRELOAD=true backend python manage.py check --deploy --fail-level WARNING
++for check in test_settings.py test_runtime.py; do
++    docker run --rm --network none --env-file "$BACKEND_ENV_FILE" -v "$PWD/deploy:/checks:ro" "baharnaj-backend:$RELEASE_ID" python "/checks/$check"
++done
++prod run --rm --no-deps backend python -c 'from PIL import Image; Image.new("RGB", (1,1), "white").save("/app/media/phase0-smoke.png")'
++prod up -d --wait
++python3 deploy/smoke.py http://127.0.0.1:18081
++prod cp frontend:/usr/share/nginx/html "$checks_dir/assets"
++python3 deploy/scan_assets.py "$checks_dir/assets" "$BACKEND_ENV_FILE"
++prod exec -T frontend sh -c 'test ! -d /app/src && test ! -d /app/node_modules'
++printf 'Verification passed. Isolated artifacts retained at %s\n' "$checks_dir"
+diff --git a/frontend/nginx.conf b/frontend/nginx.conf
+new file mode 100644
+index 0000000..cc08a48
+--- /dev/null
++++ b/frontend/nginx.conf
+@@ -0,0 +1,75 @@
++# This listener is published on VPS loopback ONLY. The existing TLS proxy must
++# overwrite X-Forwarded-Proto and Host; clients cannot reach this trust boundary.
++map $http_x_forwarded_proto $trusted_proto {
++    default http;
++    https https;
++}
++server {
++    listen 80;
++    server_name baharnaj.ir www.baharnaj.ir;
++    root /usr/share/nginx/html;
++    server_tokens off;
++    client_max_body_size 20m; # Individual images are validated at 5 MiB by Django.
++    gzip on;
++    gzip_types text/css application/javascript application/json image/svg+xml;
++    access_log off; # Avoid retaining booking receipts/tokens in query strings.
++    add_header X-Content-Type-Options nosniff always;
++    add_header X-Frame-Options DENY always;
++    add_header Referrer-Policy same-origin always;
++
++    location = /healthz { access_log off; return 200 'ok'; }
++    location ~* (^|/)(\.|node_modules|src)(/|$) { return 404; }
++    location ~ /\. { return 404; }
++    location ~* ^/(@vite|@react-refresh|@id|@fs|__vite|src)(/|$) { return 404; }
++    location ~* (\.(env|pem|key|crt|sqlite3?|db|map|bak|log|ya?ml|toml)$|/(package(-lock)?\.json|Dockerfile|vite\.config\.[^/]+|.*service-account.*\.json|.*firebase-adminsdk.*\.json)$) { return 404; }
++
++    location /api/ {
++        proxy_pass http://backend:8000;
++        include /etc/nginx/proxy_params_baharnaj;
++    }
++    location = /robots.txt {
++        proxy_pass http://backend:8000;
++        include /etc/nginx/proxy_params_baharnaj;
++    }
++    location = /sitemap.xml {
++        proxy_pass http://backend:8000;
++        include /etc/nginx/proxy_params_baharnaj;
++    }
++    # Preserve legacy Django login/model URLs; React owns its panel URLs.
++    location ~ ^/admin/(login|logout|password_change|jsi18n|autocomplete|r|auth|salon|telegram_crm)(/|$) {
++        proxy_pass http://backend:8000;
++        include /etc/nginx/proxy_params_baharnaj;
++    }
++    # React owns /admin/*. Django admin also has an unambiguous entry point.
++    location /django-admin/ {
++        proxy_pass http://backend:8000;
++        include /etc/nginx/proxy_params_baharnaj;
++    }
++    location /static/ { alias /srv/static/; autoindex off; }
++    location /media/ {
++        alias /srv/media/;
++        autoindex off;
++        # Never interpret uploaded files or render active HTML/SVG inline.
++        types { image/jpeg jpg jpeg; image/png png; image/gif gif; image/webp webp; image/avif avif; }
++        default_type application/octet-stream;
++        add_header Content-Security-Policy "sandbox" always;
++        add_header X-Content-Type-Options nosniff always;
++    }
++    location /assets/ {
++        try_files $uri =404;
++        add_header Cache-Control 'public, max-age=31536000, immutable';
++        add_header X-Content-Type-Options nosniff always;
++    }
++    location = /firebase-messaging-sw.js {
++        try_files $uri =404;
++        add_header Cache-Control no-cache;
++        add_header X-Content-Type-Options nosniff always;
++    }
++    location / {
++        try_files $uri $uri/ /index.html;
++        add_header Cache-Control no-cache;
++        add_header X-Content-Type-Options nosniff always;
++        add_header X-Frame-Options DENY always;
++        add_header Referrer-Policy same-origin always;
++    }
++}
+diff --git a/frontend/proxy_params_baharnaj b/frontend/proxy_params_baharnaj
+new file mode 100644
+index 0000000..58f38a0
+--- /dev/null
++++ b/frontend/proxy_params_baharnaj
+@@ -0,0 +1,6 @@
++proxy_set_header Host $host;
++proxy_set_header X-Forwarded-Proto $trusted_proto;
++# The outer TLS proxy must replace this header with its verified client IP.
++proxy_set_header X-Forwarded-For $http_x_forwarded_for;
++proxy_set_header X-Real-IP $http_x_forwarded_for;
++proxy_redirect off;

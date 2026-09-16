@@ -63,7 +63,7 @@ docker compose up --build
 
 The frontend uses port 5173 and the backend uses port 8000. SQLite data is retained in the `backend_data` named volume.
 
-Stop the containers with `docker compose down`. Rebuild after dependency changes with `docker compose up --build`. To intentionally remove the development database as well, use `docker compose down --volumes`.
+Stop the containers with `docker compose down`. Rebuild after dependency changes with `docker compose up --build`.
 
 ## Validation
 
@@ -79,3 +79,7 @@ npm run build
 ## Telegram and customer communications
 
 The optional integration adds `/admin/telegram`, customer `/telegram` settings and a booking confirmation connection card. Outbound sending is disabled by default. See [setup and activation](telegram/README.md), [TeleBotHost commands](telegram/telebothost/README.md) and the [requirement audit and verification results](telegram/IMPLEMENTATION_AUDIT.md).
+
+## Production safety
+
+Use the standalone `compose.prod.yaml`, never the development Compose file. See [the deployment and rollback runbook](deploy/PRODUCTION.md) and [verification report](deploy/VERIFICATION.md). Production requires a unique secret and SMTP configuration; examples contain no working credentials. Do not deploy until existing VPS paths, TLS proxy, backups, and storage permissions have been verified.

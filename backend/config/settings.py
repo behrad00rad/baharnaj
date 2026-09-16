@@ -24,41 +24,48 @@ load_dotenv(BASE_DIR / ".env")
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-change-this-secret-key-32")
+from django.core.exceptions import ImproperlyConfigured
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", "true").lower() in {"1", "true", "yes"}
 
-CODESPACE_NAME = os.getenv("CODESPACE_NAME", "")
+def env_bool(name, default=False):
+    value = os.getenv(name, str(default)).strip().lower()
+    if value not in {"1", "true", "yes", "0", "false", "no"}:
+        raise ImproperlyConfigured(f"{name} must be a boolean")
+    return value in {"1", "true", "yes"}
+
+
+def env_list(name, default=""):
+    return [value.strip() for value in os.getenv(name, default).split(",") if value.strip()]
+
+
+DEBUG = env_bool("DEBUG")
+DEVELOPMENT_SECRET = "dev-only-change-this-secret-key-32"
+SECRET_KEY = os.getenv("SECRET_KEY", DEVELOPMENT_SECRET if DEBUG else "")
+if not DEBUG and (len(SECRET_KEY) < 50 or len(set(SECRET_KEY)) < 5
+                  or SECRET_KEY == DEVELOPMENT_SECRET or SECRET_KEY.startswith("django-insecure-")
+                  or "replace-me" in SECRET_KEY.lower()):
+    raise ImproperlyConfigured("Production requires a unique SECRET_KEY of at least 50 characters")
+
+CODESPACE_NAME = os.getenv("CODESPACE_NAME", "") if DEBUG else ""
 CODESPACES_DOMAIN = os.getenv("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN", "app.github.dev")
 CODESPACE_BACKEND_HOST = f"{CODESPACE_NAME}-8000.{CODESPACES_DOMAIN}" if CODESPACE_NAME else ""
 CODESPACE_FRONTEND_ORIGIN = f"https://{CODESPACE_NAME}-5173.{CODESPACES_DOMAIN}" if CODESPACE_NAME else ""
-ALLOWED_HOSTS = os.getenv(
-    "ALLOWED_HOSTS",
-    ",".join(
-        filter(
-            None,
-            [
-                "localhost",
-                "127.0.0.1",
-                "baharnaj.ir",
-                "www.baharnaj.ir",
-                CODESPACE_BACKEND_HOST,
-            ],
-        )
-    ),
-).split(",")
-# Vite proxies the README development API URL to Django over localhost, so a
-# Codespace needs its dynamically provided public backend origin here.
-PUBLIC_BACKEND_URL = (
-    os.getenv("PUBLIC_BACKEND_URL")
-    or (f"https://{CODESPACE_BACKEND_HOST}" if CODESPACE_BACKEND_HOST else "")
-).rstrip("/")
-# This is deliberately independent from API/media origins. It powers sitemap
-# URLs and should be the public frontend domain in every production deployment.
+ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", ",".join(filter(None, ["localhost", "127.0.0.1", CODESPACE_BACKEND_HOST])) if DEBUG else "baharnaj.ir,www.baharnaj.ir")
+PUBLIC_BACKEND_URL = os.getenv("PUBLIC_BACKEND_URL", f"https://{CODESPACE_BACKEND_HOST}" if CODESPACE_BACKEND_HOST else ("" if DEBUG else "https://baharnaj.ir")).rstrip("/")
 SITE_URL = os.getenv("SITE_URL", "https://baharnaj.ir").rstrip("/")
+if not DEBUG:
+    if not ALLOWED_HOSTS or not set(ALLOWED_HOSTS) <= {"baharnaj.ir", "www.baharnaj.ir"}:
+        raise ImproperlyConfigured("Production ALLOWED_HOSTS must contain only Baharnaj hosts")
+    if any(url not in {"https://baharnaj.ir", "https://www.baharnaj.ir"} for url in [SITE_URL, PUBLIC_BACKEND_URL]):
+        raise ImproperlyConfigured("Production public URLs must be Baharnaj HTTPS origins")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", not DEBUG)
+SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "0" if DEBUG else "300"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS")
+SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD")
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+SECURE_REFERRER_POLICY = "same-origin"
 
 
 # Application definition
@@ -160,20 +167,35 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
+STATIC_ROOT = Path(os.getenv("STATIC_ROOT", BASE_DIR / "staticfiles"))
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", BASE_DIR / "media"))
 
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    "default": {
-        "BACKEND": "django.core.mail.backends.console.EmailBackend",
-    },
-}
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@baharnaj.local")
+email_backend = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend" if DEBUG else "django.core.mail.backends.smtp.EmailBackend")
+email_host = os.getenv("EMAIL_HOST", "")
+email_port = int(os.getenv("EMAIL_PORT", "587"))
+email_host_user = os.getenv("EMAIL_HOST_USER", "")
+email_host_password = os.getenv("EMAIL_HOST_PASSWORD", "")
+email_use_tls = env_bool("EMAIL_USE_TLS", True)
+email_use_ssl = env_bool("EMAIL_USE_SSL")
+email_timeout = 15
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@baharnaj.ir")
+if email_use_tls and email_use_ssl:
+    raise ImproperlyConfigured("Select only one of email_use_tls and email_use_ssl")
+if not DEBUG and (email_backend != "django.core.mail.backends.smtp.EmailBackend" or not email_host):
+    raise ImproperlyConfigured("Production requires SMTP email_backend and email_host; configure email before deployment")
+# Django 6.1 forbids mixing MAILERS with legacy EMAIL_* settings.
+# Environment names remain conventional; only MAILERS is exported to Django.
+MAILERS = {"default": {"BACKEND": email_backend, "OPTIONS": {
+    "host": email_host, "port": email_port, "username": email_host_user,
+    "password": email_host_password, "use_tls": email_use_tls,
+    "use_ssl": email_use_ssl, "timeout": email_timeout,
+}}}
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "")
 FIREBASE_SERVICE_ACCOUNT_JSON = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "")
 # Local credentials stay outside frontend builds; production can override this path.
@@ -189,7 +211,8 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_CLASSES": ("rest_framework.throttling.ScopedRateThrottle",),
     "DEFAULT_THROTTLE_RATES": {"login": "5/minute", "guest_booking": "10/hour"},
 }
-configured_origins = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin.strip()]
+configured_origins = env_list("CORS_ALLOWED_ORIGINS")
+configured_csrf = env_list("CSRF_TRUSTED_ORIGINS")
 if DEBUG:
     CORS_ALLOWED_ORIGINS = configured_origins + [
         "http://localhost:5173",
@@ -198,7 +221,7 @@ if DEBUG:
         "http://127.0.0.1:5174",
     ]
     CORS_ALLOWED_ORIGIN_REGEXES = [r"^https://.*-5173\.app\.github\.dev$"]
-    CSRF_TRUSTED_ORIGINS = configured_origins + [
+    CSRF_TRUSTED_ORIGINS = configured_csrf + [
         "http://localhost:8000",
         "https://localhost:8000",
         "http://127.0.0.1:8000",
@@ -207,14 +230,16 @@ if DEBUG:
     ]
 else:
     CORS_ALLOWED_ORIGINS = configured_origins
-    CSRF_TRUSTED_ORIGINS = configured_origins
+    CSRF_TRUSTED_ORIGINS = configured_csrf
+    if not set(configured_origins + configured_csrf) <= {"https://baharnaj.ir", "https://www.baharnaj.ir"}:
+        raise ImproperlyConfigured("Production CORS/CSRF origins must be Baharnaj HTTPS origins")
 CORS_ALLOW_CREDENTIALS = True
-CSRF_COOKIE_SECURE = True
-CSRF_COOKIE_SAMESITE = "None"
-SESSION_COOKIE_SECURE = True
-SESSION_COOKIE_SAMESITE = "None"
-REFRESH_COOKIE_SECURE = True
-REFRESH_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", not DEBUG)
+CSRF_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", not DEBUG)
+SESSION_COOKIE_SAMESITE = "Lax"
+REFRESH_COOKIE_SECURE = env_bool("REFRESH_COOKIE_SECURE", not DEBUG)
+REFRESH_COOKIE_SAMESITE = "Lax"
 REFRESH_COOKIE_NAME = "baharnaj_refresh"
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=10),
