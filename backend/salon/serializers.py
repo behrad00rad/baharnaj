@@ -14,6 +14,7 @@ from .models import (
     EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, ServiceImage,
     BlogCategory, BlogMedia, BlogPost, BlogPostRevision, BlogTag, BookingHold, BookingHoldItem, FirebaseDevice,
     Notification, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
+    CustomerCommunicationPreference, CustomerAccountDeletionRequest,
 )
 from .validators import validate_no_employee_overlap
 from .security import validate_image_upload, validate_phone
@@ -24,6 +25,99 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ("id", "type", "title", "message", "is_read", "created_at", "read_at", "target_url", "appointment", "payment")
         read_only_fields = fields
+
+
+class CustomerProfileSerializer(serializers.ModelSerializer):
+    display_name = serializers.SerializerMethodField()
+    first_name = serializers.CharField(source="user.first_name", required=False, allow_blank=True)
+    last_name = serializers.CharField(source="user.last_name", required=False, allow_blank=True)
+    phone = serializers.CharField(source="user.phone", read_only=True)
+    account_status = serializers.CharField(source="user.account_status", read_only=True)
+
+    class Meta:
+        model = CustomerProfile
+        fields = ("id", "display_name", "first_name", "last_name", "phone", "birthday", "neighborhood", "service_preferences", "account_status")
+        read_only_fields = ("id", "display_name", "phone", "account_status")
+
+    def get_display_name(self, obj):
+        return obj.user.get_full_name() or obj.user.username
+
+    def validate_neighborhood(self, value):
+        return value.strip()
+
+    def validate_service_preferences(self, value):
+        return value.strip()
+
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop("user", {})
+        user = instance.user
+        for field in ("first_name", "last_name"):
+            if field in user_data:
+                setattr(user, field, user_data[field].strip())
+        if user_data:
+            user.save(update_fields=("first_name", "last_name"))
+        return super().update(instance, validated_data)
+
+
+class CustomerPreferenceSerializer(serializers.ModelSerializer):
+    available_channels = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomerCommunicationPreference
+        fields = ("operational_reminders", "promotional_messages", "push_enabled", "email_enabled", "sms_enabled", "telegram_enabled", "available_channels", "consent_source", "consent_version", "consented_at", "withdrawn_at")
+        read_only_fields = ("available_channels", "consent_source", "consent_version", "consented_at", "withdrawn_at")
+
+    def get_available_channels(self, obj):
+        from django.conf import settings
+        return {"push": bool(getattr(settings, "FIREBASE_SERVICE_ACCOUNT_CONFIGURED", False)), "email": bool(getattr(settings, "EMAIL_HOST", "")), "sms": False, "telegram": False}
+
+class CustomerAppointmentSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source="pk", read_only=True)
+    confirmation_code = serializers.CharField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    date = serializers.SerializerMethodField()
+    start_time = serializers.SerializerMethodField()
+    end_time = serializers.SerializerMethodField()
+    services = serializers.SerializerMethodField()
+    price = serializers.SerializerMethodField()
+    payment_status = serializers.CharField(read_only=True)
+    capabilities = serializers.SerializerMethodField()
+
+    def _items(self, obj):
+        return list(obj.items.all())
+
+    def get_date(self, obj):
+        item = self._items(obj)[0] if self._items(obj) else None
+        return item.date.isoformat() if item else None
+
+    def get_start_time(self, obj):
+        item = self._items(obj)[0] if self._items(obj) else None
+        return item.start_time.strftime("%H:%M") if item else None
+
+    def get_end_time(self, obj):
+        items = self._items(obj)
+        return max((item.end_time for item in items), default=None).strftime("%H:%M") if items else None
+
+    def get_services(self, obj):
+        return [{"name": item.service.persian_name, "specialist": item.employee.user.get_full_name() or item.employee.user.username, "duration": item.duration_snapshot, "price": item.effective_price if item.is_price_final else None, "price_status": item.price_status} for item in self._items(obj)]
+
+    def get_price(self, obj):
+        items = self._items(obj)
+        if any(not item.is_price_final for item in items):
+            return {"status": "unresolved", "amount": None}
+        return {"status": "final", "amount": obj.appointment_total}
+
+    def get_capabilities(self, obj):
+        policy_configured = bool(getattr(settings, "CUSTOMER_APPOINTMENT_POLICY_CONFIGURED", False))
+        eligible = obj.status in {"pending", "confirmed"}
+        return {"can_cancel": policy_configured and eligible, "can_reschedule": policy_configured and eligible, "policy_code": "policy_not_configured" if not policy_configured else ("eligible" if eligible else "status_not_eligible"), "policy_message": "برای تغییر یا لغو این نوبت با سالن تماس بگیرید." if not policy_configured or not eligible else "تغییرات طبق سیاست سالن انجام می‌شود."}
+
+
+class CustomerDeletionRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomerAccountDeletionRequest
+        fields = ("id", "status", "reason", "requested_at", "processed_at")
+        read_only_fields = ("id", "status", "requested_at", "processed_at")
 
 
 class FirebaseDeviceSerializer(serializers.ModelSerializer):

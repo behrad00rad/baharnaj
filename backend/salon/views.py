@@ -21,10 +21,10 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import AdminActionLog, Appointment, AppointmentItem, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
-from .permissions import IsAdmin, IsEmployee, IsOwnEmployeeObject
-from .security import clear_failed_logins, is_locked, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .models import AdminActionLog, Appointment, AppointmentItem, AppointmentStatusHistory, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerAccountDeletionRequest, CustomerCommunicationPreference, CustomerMutationRequest, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
+from .permissions import IsAdmin, IsCustomer, IsEmployee, IsOwnEmployeeObject
+from .security import clear_failed_logins, is_locked, normalize_phone, record_failed_login
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, CustomerAppointmentSerializer, CustomerDeletionRequestSerializer, CustomerPreferenceSerializer, CustomerProfileSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 def public_blog_posts():
@@ -254,7 +254,7 @@ class AdminBlogTagViewSet(viewsets.ModelViewSet):
 
 
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = (IsAdmin | IsEmployee,)
+    permission_classes = (IsAdmin | IsEmployee | IsCustomer,)
     serializer_class = NotificationSerializer
 
     def get_queryset(self):
@@ -608,6 +608,188 @@ class CustomerBookingView(generics.GenericAPIView):
         if not appointment:
             return Response({"detail": "رزرو پیدا نشد."}, status=status.HTTP_404_NOT_FOUND)
         return Response(AppointmentSerializer(appointment, context={"request": request}).data)
+
+
+class CustomerBaseView:
+    permission_classes = (IsCustomer,)
+
+    def customer_profile(self):
+        profile, _ = CustomerProfile.objects.get_or_create(user=self.request.user)
+        return profile
+
+    def customer_appointments(self):
+        return Appointment.objects.filter(customer=self.customer_profile(), is_deleted=False).select_related("customer__user").prefetch_related("items__service", "items__employee__user", "payments", "status_history")
+
+
+class CustomerProfileView(CustomerBaseView, generics.RetrieveUpdateAPIView):
+    serializer_class = CustomerProfileSerializer
+
+    def get_object(self):
+        return self.customer_profile()
+
+
+class CustomerPreferencesView(CustomerBaseView, generics.RetrieveUpdateAPIView):
+    serializer_class = CustomerPreferenceSerializer
+
+    def get_object(self):
+        preference, _ = CustomerCommunicationPreference.objects.get_or_create(customer=self.customer_profile())
+        return preference
+
+    def perform_update(self, serializer):
+        preference = serializer.save(consent_source="customer_dashboard", consent_version="1", consented_at=timezone.now() if serializer.validated_data.get("promotional_messages") else None, withdrawn_at=None if serializer.validated_data.get("promotional_messages") else timezone.now())
+        return preference
+
+
+class CustomerDashboardView(CustomerBaseView, generics.GenericAPIView):
+    serializer_class = CustomerAppointmentSerializer
+
+    def get(self, request):
+        appointments = self.customer_appointments().order_by("items__date", "items__start_time", "pk")
+        upcoming = appointments.filter(status__in=("pending", "confirmed"), items__date__gte=timezone.localdate()).distinct().first()
+        recent = appointments.filter(status__in=("completed", "cancelled")).order_by("-items__date", "-pk")[:3]
+        return Response({"customer": CustomerProfileSerializer(self.customer_profile(), context={"request": request}).data, "next_appointment": CustomerAppointmentSerializer(upcoming, context={"request": request}).data if upcoming else None, "unread_notification_count": Notification.objects.filter(recipient=request.user, is_read=False).count(), "upcoming_count": appointments.filter(status__in=("pending", "confirmed"), items__date__gte=timezone.localdate()).distinct().count(), "recent_history_count": len(recent)})
+
+
+class CustomerPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 50
+
+
+class CustomerAppointmentListView(CustomerBaseView, generics.ListAPIView):
+    serializer_class = CustomerAppointmentSerializer
+    pagination_class = CustomerPagination
+
+    def get_queryset(self):
+        queryset = self.customer_appointments().order_by("-items__date", "-pk")
+        category = self.request.query_params.get("filter", "all")
+        if category == "upcoming":
+            queryset = queryset.filter(status__in=("pending", "confirmed"), items__date__gte=timezone.localdate())
+        elif category == "completed":
+            queryset = queryset.filter(status="completed")
+        elif category == "cancelled":
+            queryset = queryset.filter(status="cancelled")
+        return queryset.distinct()
+
+
+class CustomerAppointmentDetailView(CustomerBaseView, generics.RetrieveAPIView):
+    serializer_class = CustomerAppointmentSerializer
+    lookup_url_kwarg = "appointment_id"
+
+    def get_queryset(self):
+        return self.customer_appointments()
+
+
+class CustomerBookAgainView(CustomerBaseView, generics.GenericAPIView):
+    def get(self, request, appointment_id):
+        appointment = generics.get_object_or_404(self.customer_appointments(), pk=appointment_id)
+        return Response({"source_appointment_id": appointment.pk, "services": [{"id": item.service_id, "name": item.service.persian_name, "preferred_employee": item.employee_id} for item in appointment.items.all()]})
+
+
+class CustomerAppointmentMutationView(CustomerBaseView, generics.GenericAPIView):
+    def get_appointment(self, appointment_id):
+        return generics.get_object_or_404(self.customer_appointments(), pk=appointment_id)
+
+    def mutation_response(self, customer, appointment, action, key):
+        return CustomerMutationRequest.objects.filter(customer=customer, appointment=appointment, action=action, idempotency_key=key).first()
+
+    def save_mutation(self, customer, appointment, action, key, response):
+        CustomerMutationRequest.objects.create(customer=customer, appointment=appointment, action=action, idempotency_key=key, response_status=response.status_code, response_body=response.data)
+        return response
+
+    @transaction.atomic
+    def post(self, request, appointment_id, action):
+        customer = self.customer_profile()
+        appointment = Appointment.objects.select_for_update().filter(customer=customer, is_deleted=False).prefetch_related("items__service", "items__employee__user").filter(pk=appointment_id).first()
+        if not appointment:
+            return Response({"code": "not_found", "detail": "نوبت پیدا نشد."}, status=status.HTTP_404_NOT_FOUND)
+        if action not in {"cancel", "reschedule"}:
+            return Response({"code": "invalid_action", "detail": "عملیات نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+        key = str(request.data.get("idempotency_key", "")).strip()
+        if not key or len(key) > 100:
+            return Response({"code": "idempotency_key_required", "detail": "شناسه درخواست الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
+        previous = self.mutation_response(customer, appointment, action, key)
+        if previous:
+            return Response(previous.response_body, status=previous.response_status)
+        if not getattr(settings, "CUSTOMER_APPOINTMENT_POLICY_CONFIGURED", False):
+            return self.save_mutation(customer, appointment, action, key, Response({"code": "policy_not_configured", "detail": "برای تغییر یا لغو این نوبت با سالن تماس بگیرید."}, status=status.HTTP_409_CONFLICT))
+        if appointment.status not in ("pending", "confirmed"):
+            return Response({"code": "status_not_eligible", "detail": "این نوبت قابل تغییر نیست."}, status=status.HTTP_409_CONFLICT)
+        if action == "cancel":
+            appointment.set_status("cancelled", changed_by=request.user, reason=str(request.data.get("reason", "لغو توسط مشتری"))[:500])
+            transaction.on_commit(lambda: Notification.objects.create(recipient=request.user, type="appointment_cancelled", title="نوبت لغو شد", message="نوبت شما با موفقیت لغو شد.", appointment=appointment, target_url=f"/account/appointments/{appointment.pk}"))
+            response = Response(CustomerAppointmentSerializer(appointment, context={"request": request}).data)
+        else:
+            try:
+                target_date = date_type.fromisoformat(request.data.get("date", ""))
+                target_start = datetime.strptime(request.data.get("start_time", ""), "%H:%M").time()
+            except (TypeError, ValueError):
+                return Response({"code": "invalid_datetime", "detail": "تاریخ یا زمان معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
+            items = sorted(appointment.items.all(), key=lambda item: (item.date, item.start_time, item.pk))
+            base_minutes = items[0].start_time.hour * 60 + items[0].start_time.minute
+            for item in items:
+                offset = item.start_time.hour * 60 + item.start_time.minute - base_minutes
+                start_minutes = target_start.hour * 60 + target_start.minute + offset
+                end_minutes = start_minutes + item.duration_snapshot
+                start_time = time(start_minutes // 60, start_minutes % 60)
+                end_time = time(end_minutes // 60, end_minutes % 60)
+                if not item.employee.working_schedules.filter(weekday=target_date.weekday(), is_active=True, start_time__lte=start_time, end_time__gte=end_time).exists() or item.employee.time_off.filter(start_date__lte=target_date, end_date__gte=target_date).exists():
+                    return Response({"code": "availability_conflict", "detail": "این زمان برای همه سرویس‌ها در دسترس نیست."}, status=status.HTTP_409_CONFLICT)
+                if AppointmentItem.objects.filter(employee=item.employee, date=target_date, appointment__status__in=("pending", "confirmed")).exclude(appointment=appointment).filter(start_time__lt=end_time, end_time__gt=start_time).exists():
+                    return Response({"code": "availability_conflict", "detail": "این زمان قبلاً رزرو شده است."}, status=status.HTTP_409_CONFLICT)
+                item.date, item.start_time, item.end_time, item.updated_by = target_date, start_time, end_time, request.user
+                item.save(update_fields=("date", "start_time", "end_time", "updated_by", "updated_at"))
+            AppointmentStatusHistory.objects.create(appointment=appointment, status=appointment.status, changed_by=request.user, reason="تغییر زمان توسط مشتری", created_by=request.user, updated_by=request.user)
+            appointment.refresh_from_db()
+            transaction.on_commit(lambda: Notification.objects.create(recipient=request.user, type="appointment_rescheduled", title="زمان نوبت تغییر کرد", message="زمان نوبت شما با موفقیت تغییر کرد.", appointment=appointment, target_url=f"/account/appointments/{appointment.pk}"))
+            response = Response(CustomerAppointmentSerializer(appointment, context={"request": request}).data)
+        return self.save_mutation(customer, appointment, action, key, response)
+
+
+class CustomerNotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = (IsCustomer,)
+    serializer_class = NotificationSerializer
+
+    def get_queryset(self):
+        return Notification.objects.filter(recipient=self.request.user).order_by("-created_at")
+
+    @action(detail=False, methods=("get",), url_path="unread-count")
+    def unread_count(self, request):
+        return Response({"count": self.get_queryset().filter(is_read=False).count()})
+
+    @action(detail=True, methods=("post",))
+    def read(self, request, pk=None):
+        notification = self.get_object()
+        notification.is_read = True
+        notification.read_at = timezone.now()
+        notification.save(update_fields=("is_read", "read_at"))
+        return Response(self.get_serializer(notification).data)
+
+    @action(detail=False, methods=("post",), url_path="read-all")
+    def read_all(self, request):
+        self.get_queryset().filter(is_read=False).update(is_read=True, read_at=timezone.now())
+        return Response({"count": 0})
+
+
+class CustomerDeletionRequestView(CustomerBaseView, generics.GenericAPIView):
+    serializer_class = CustomerDeletionRequestSerializer
+
+    def get(self, request):
+        request_obj = CustomerAccountDeletionRequest.objects.filter(customer=self.customer_profile()).order_by("-requested_at").first()
+        return Response(self.get_serializer(request_obj).data if request_obj else None)
+
+    def post(self, request):
+        if request.data.get("confirm") not in (True, "true", "True", 1, "1"):
+            return Response({"code": "confirmation_required", "detail": "تأیید صریح حذف حساب الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
+        if not request.user.check_password(request.data.get("password", "")):
+            return Response({"code": "password_confirmation_required", "detail": "برای ثبت درخواست، رمز عبور فعلی را وارد کنید."}, status=status.HTTP_400_BAD_REQUEST)
+        customer = self.customer_profile()
+        existing = CustomerAccountDeletionRequest.objects.filter(customer=customer, status="pending").first()
+        if existing:
+            return Response(self.get_serializer(existing).data, status=status.HTTP_200_OK)
+        request_obj = CustomerAccountDeletionRequest.objects.create(customer=customer, reason=str(request.data.get("reason", ""))[:500])
+        Notification.objects.create(recipient=request.user, type="customer_account", title="درخواست حذف حساب ثبت شد", message="درخواست شما برای بررسی سالن ثبت شد.", target_url="/account/profile/")
+        return Response(self.get_serializer(request_obj).data, status=status.HTTP_201_CREATED)
 
     def patch(self, request):
         appointment = self.find(request)
@@ -1253,10 +1435,14 @@ class CookieTokenView(TokenObtainPairView):
 
     def post(self, request, *args, **kwargs):
         username = request.data.get("username", "")
-        user = User.objects.filter(username=username).first()
+        normalized = normalize_phone(username)
+        user = User.objects.filter(Q(username=username) | Q(phone=normalized) | Q(phone=username)).first()
         if user and is_locked(user):
             return Response({"detail": "حساب موقتاً قفل شده است."}, status=status.HTTP_429_TOO_MANY_REQUESTS)
-        serializer = self.get_serializer(data=request.data)
+        credentials = request.data.copy()
+        if user and user.role == "customer":
+            credentials["username"] = user.username
+        serializer = self.get_serializer(data=credentials)
         try:
             serializer.is_valid(raise_exception=True)
         except Exception:
@@ -1264,6 +1450,8 @@ class CookieTokenView(TokenObtainPairView):
                 record_failed_login(user, username, request.META.get("REMOTE_ADDR"))
             return Response({"detail": "نام کاربری یا رمز عبور صحیح نیست."}, status=status.HTTP_401_UNAUTHORIZED)
         user = serializer.user
+        if user.account_status != "active":
+            return Response({"detail": "این حساب در حال حاضر فعال نیست."}, status=status.HTTP_403_FORBIDDEN)
         clear_failed_logins(user, username, request.META.get("REMOTE_ADDR"))
         response = Response({"access": serializer.validated_data["access"], "role": user.role})
         response.set_cookie(settings.REFRESH_COOKIE_NAME, serializer.validated_data["refresh"], httponly=True, secure=settings.REFRESH_COOKIE_SECURE, samesite=settings.REFRESH_COOKIE_SAMESITE, max_age=7 * 24 * 3600)

@@ -62,11 +62,10 @@ function EmptyLine({ text }) {
 export default function Booking() {
   const { services, state: servicesState } = useServices();
   const params = new URLSearchParams(useLocation().search);
+  const initialServices = params.get("services")?.split(",").filter(Boolean) || (params.get("service") ? [params.get("service")] : []);
   const navigate = useNavigate();
-  const [step, setStep] = useState(params.get("service") ? 1 : 0);
-  const [selected, setSelected] = useState(
-    params.get("service") ? [params.get("service")] : [],
-  );
+  const [step, setStep] = useState(initialServices.length ? 1 : 0);
+  const [selected, setSelected] = useState(initialServices);
   const [employees, setEmployees] = useState({});
   const [employeeIds, setEmployeeIds] = useState({});
   const [date, setDate] = useState("");

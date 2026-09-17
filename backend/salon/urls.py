@@ -8,7 +8,7 @@ from .views import (AdminAppointmentViewSet, AdminBlogCategoryViewSet, AdminBlog
 					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
 					PaymentViewSet, FirebaseDeviceViewSet, NotificationViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
 					EmployeeEarningsView, EmployeeAppointmentPaymentReportView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView,
-					BlogCategoryListView, BlogPostDetailView, BlogPostListView)
+					BlogCategoryListView, BlogPostDetailView, BlogPostListView, CustomerAppointmentDetailView, CustomerAppointmentListView, CustomerBookAgainView, CustomerDashboardView, CustomerDeletionRequestView, CustomerNotificationViewSet, CustomerPreferencesView, CustomerProfileView, CustomerAppointmentMutationView)
 
 router = DefaultRouter()
 router.register("admin/services", AdminServiceViewSet, basename="admin-service")
@@ -23,6 +23,7 @@ router.register("admin/transactions", TransactionViewSet, basename="transaction"
 router.register("admin/payments", PaymentViewSet, basename="payment")
 router.register("admin/refunds", RefundViewSet, basename="refund")
 router.register("notifications", NotificationViewSet, basename="notification")
+router.register("customer/notifications", CustomerNotificationViewSet, basename="customer-notification")
 router.register("firebase-devices", FirebaseDeviceViewSet, basename="firebase-device")
 router.register("admin/commissions", EmployeeCommissionViewSet, basename="commission")
 router.register("admin/service-images", ServiceImageViewSet, basename="service-image")
@@ -51,6 +52,14 @@ urlpatterns = [
 	path("waitlist/", WaitlistView.as_view(), name="waitlist-create"),
 	path("customer/booking/", CustomerBookingView.as_view(), name="customer-booking-lookup"),
 	path("customer/history/", CustomerHistoryView.as_view(), name="customer-history"),
+	path("customer/profile/", CustomerProfileView.as_view(), name="customer-profile"),
+	path("customer/dashboard/", CustomerDashboardView.as_view(), name="customer-dashboard"),
+	path("customer/appointments/", CustomerAppointmentListView.as_view(), name="customer-appointments"),
+	path("customer/appointments/<int:appointment_id>/", CustomerAppointmentDetailView.as_view(), name="customer-appointment-detail"),
+	path("customer/appointments/<int:appointment_id>/book-again/", CustomerBookAgainView.as_view(), name="customer-book-again"),
+	path("customer/appointments/<int:appointment_id>/<str:action>/", CustomerAppointmentMutationView.as_view(), name="customer-appointment-mutation"),
+	path("customer/preferences/", CustomerPreferencesView.as_view(), name="customer-preferences"),
+	path("customer/account/deletion-request/", CustomerDeletionRequestView.as_view(), name="customer-deletion-request"),
 	path("employee/appointments/", EmployeeAppointmentsView.as_view(), name="employee-appointments"),
 	path("employee/appointments/create/", EmployeeSelfBookingView.as_view(), name="employee-appointment-create"),
 	path("employee/services/", EmployeeSelfServiceListView.as_view(), name="employee-service-list"),

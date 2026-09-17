@@ -6,6 +6,7 @@ import { PublicLayout } from "./components/PublicLayout";
 import Booking from "./pages/Booking";
 import AdminLayout from "./components/AdminLayout";
 import EmployeeLayout from "./components/EmployeeLayout";
+import CustomerLayout from "./components/CustomerLayout";
 import Gallery from "./pages/Gallery";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -27,6 +28,7 @@ import { ThemeProvider } from "./shared/theme";
 let authBootstrapPromise;
 const AdminRouter = lazy(() => import("./pages/AdminApp"));
 const EmployeeApp = lazy(() => import("./pages/EmployeeApp"));
+const CustomerApp = lazy(() => import("./pages/CustomerApp"));
 
 // App is intentionally limited to routing; page behavior lives beside its page.
 export default function App() {
@@ -141,6 +143,9 @@ export default function App() {
         />
         <Route path="/employee/*" element={<EmployeeLayout />}>
           <Route path="*" element={<Suspense fallback={null}><EmployeeApp /></Suspense>} />
+        </Route>
+        <Route path="/account/*" element={<CustomerLayout />}>
+          <Route path="*" element={<Suspense fallback={null}><CustomerApp /></Suspense>} />
         </Route>
         <Route path="/admin/*" element={<AdminLayout />}>
           <Route path="*" element={<Suspense fallback={null}><AdminRouter /></Suspense>} />

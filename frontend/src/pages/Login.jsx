@@ -17,7 +17,7 @@ export default function Login() {
       const { data } = await api.post("auth/token/", form);
       setSession(data.access, data.role);
       const role = data.role;
-      navigate(role === "employee" ? "/employee" : "/admin", { replace: true });
+      navigate(role === "customer" ? "/account" : role === "employee" ? "/employee" : "/admin", { replace: true });
     } catch (requestError) {
       setError(
         requestError.response?.data?.detail ||
@@ -42,7 +42,7 @@ export default function Login() {
       </div>
       <form onSubmit={submit}>
         <label>
-          نام کاربری
+          شماره تماس یا نام کاربری
           <input
             required
             value={form.username}

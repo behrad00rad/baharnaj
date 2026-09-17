@@ -57,6 +57,7 @@ class Notification(models.Model):
         ("payment_reported", "Payment reported"),
         ("payment_confirmed", "Payment confirmed"),
         ("payment_rejected", "Payment rejected"),
+        ("customer_account", "Customer account"),
     ]
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
@@ -110,6 +111,9 @@ class FirebaseDevice(models.Model):
 class CustomerProfile(SoftDeleteModel):
     user = models.OneToOneField(User, on_delete=models.PROTECT, related_name="customer_profile")
     notes = models.TextField(blank=True)
+    birthday = models.DateField(null=True, blank=True)
+    neighborhood = models.CharField(max_length=120, blank=True)
+    service_preferences = models.TextField(blank=True)
     profile_photo = models.ImageField(upload_to="profiles/", blank=True)
     tags = models.TextField(blank=True)
     no_show_count = models.PositiveIntegerField(default=0)
@@ -118,6 +122,45 @@ class CustomerProfile(SoftDeleteModel):
     def clean(self):
         if self.user_id and self.user.role != "customer":
             raise ValidationError("CustomerProfile requires a customer-role user.")
+
+
+class CustomerCommunicationPreference(models.Model):
+    customer = models.OneToOneField(CustomerProfile, on_delete=models.CASCADE, related_name="communication_preferences")
+    operational_reminders = models.BooleanField(default=True)
+    promotional_messages = models.BooleanField(default=False)
+    push_enabled = models.BooleanField(default=False)
+    email_enabled = models.BooleanField(default=False)
+    sms_enabled = models.BooleanField(default=False)
+    telegram_enabled = models.BooleanField(default=False)
+    consent_source = models.CharField(max_length=80, blank=True)
+    consent_version = models.CharField(max_length=40, blank=True)
+    consented_at = models.DateTimeField(null=True, blank=True)
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class CustomerAccountDeletionRequest(models.Model):
+    STATUS_CHOICES = [("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected"), ("completed", "Completed")]
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.PROTECT, related_name="deletion_requests")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    reason = models.CharField(max_length=500, blank=True)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    processed_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="processed_deletion_requests")
+
+
+class CustomerMutationRequest(models.Model):
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.CASCADE, related_name="mutation_requests")
+    appointment = models.ForeignKey("Appointment", on_delete=models.CASCADE, related_name="customer_mutations")
+    action = models.CharField(max_length=20)
+    idempotency_key = models.CharField(max_length=100)
+    response_status = models.PositiveSmallIntegerField(default=200)
+    response_body = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("customer", "appointment", "action", "idempotency_key"), name="unique_customer_mutation")]
 
 
 class EmployeeProfile(SoftDeleteModel):

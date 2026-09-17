@@ -12,9 +12,18 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 
 def validate_phone(value):
-    compact = re.sub(r"[\s-]", "", value or "")
+    compact = normalize_phone(value)
     if not PHONE_RE.fullmatch(compact):
         raise serializers.ValidationError("شماره تلفن معتبر نیست.")
+    return compact
+
+
+def normalize_phone(value):
+    compact = re.sub(r"[\s-]", "", value or "")
+    if compact.startswith("+98"):
+        compact = "0" + compact[3:]
+    elif compact.startswith("0098"):
+        compact = "0" + compact[4:]
     return compact
 
 

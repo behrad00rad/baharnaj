@@ -32,3 +32,13 @@ class IsOwnEmployeeObject(BasePermission):
 class IsAdminWriteOnly(BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated and request.user.role == "admin")
+
+
+class IsCustomer(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.role == "customer"
+            and request.user.account_status == "active"
+        )
