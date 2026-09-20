@@ -9,6 +9,7 @@ import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import PasswordInput from "../components/PasswordInput";
 import { formatJalaliDate } from "../shared/date";
+import { toGregorian, toJalaali } from "jalaali-js";
 
 const unwrap = (data) => data?.results || data || [];
 const statusNames = {
@@ -311,21 +312,18 @@ const addDays = (value, amount) => {
   next.setDate(next.getDate() + amount);
   return isoDate(next);
 };
-const weekdayNumber = (value) =>
-  (new Date(`${value}T12:00:00`).getDay() + 6) % 7;
 function CalendarWorkspace() {
   const location = useLocation();
   const [selectedDate, setSelectedDate] = useState(() => isoDate(new Date()));
-  const [mode, setMode] = useState("day");
+  const [visibleMonth, setVisibleMonth] = useState(() => `${isoDate(new Date()).slice(0, 7)}-01`);
   const [selected, setSelected] = useState(null);
-  const weekStart = addDays(selectedDate, -weekdayNumber(selectedDate));
-  const weekDays = Array.from({ length: 7 }, (_, index) =>
-    addDays(weekStart, index),
-  );
-  const endpoint =
-    mode === "week"
-      ? `employee/appointments/?start=${weekStart}&end=${weekDays[6]}`
-      : `employee/appointments/?date=${selectedDate}`;
+  const monthValue = new Date(`${visibleMonth}T12:00:00`);
+  const monthJalali = toJalaali(monthValue.getFullYear(), monthValue.getMonth() + 1, monthValue.getDate());
+  const firstGregorian = toGregorian(monthJalali.jy, monthJalali.jm, 1);
+  const calendarStart = new Date(firstGregorian.gy, firstGregorian.gm - 1, firstGregorian.gd, 12);
+  calendarStart.setDate(calendarStart.getDate() - calendarStart.getDay());
+  const calendarDays = Array.from({ length: 42 }, (_, index) => addDays(isoDate(calendarStart), index));
+  const endpoint = `employee/appointments/?start=${calendarDays[0]}&end=${calendarDays[41]}`;
   const appointments = useData(endpoint);
   useEffect(() => {
     const id = new URLSearchParams(location.search).get("appointment");
@@ -336,82 +334,57 @@ function CalendarWorkspace() {
       if (!active || !appointment) return;
       setSelected(appointment);
       const date = appointment.items?.[0]?.date;
-      if (date) setSelectedDate(date);
+      if (date) {
+        setSelectedDate(date);
+        setVisibleMonth(`${date.slice(0, 7)}-01`);
+      }
     }).catch(() => {});
     return () => { active = false; };
   }, [location.search]);
-  const step = mode === "week" ? 7 : 1;
-  const displayDays = mode === "week" ? weekDays : [selectedDate];
+  const moveMonth = (direction) => {
+    const index = monthJalali.jm - 1 + direction;
+    const jy = monthJalali.jy + Math.floor(index / 12);
+    const jm = (((index % 12) + 12) % 12) + 1;
+    const next = toGregorian(jy, jm, 1);
+    const value = `${next.gy}-${String(next.gm).padStart(2, "0")}-${String(next.gd).padStart(2, "0")}`;
+    setVisibleMonth(value);
+    setSelectedDate(value);
+  };
+  const selectToday = () => {
+    const value = isoDate(new Date());
+    setSelectedDate(value);
+    setVisibleMonth(`${value.slice(0, 7)}-01`);
+  };
+  const selectedAppointments = appointments.data.filter((appointment) =>
+    appointment.items?.some((item) => item.date === selectedDate),
+  );
+  const selectedWeekStart = new Date(`${selectedDate}T12:00:00`);
+  selectedWeekStart.setDate(selectedWeekStart.getDate() - selectedWeekStart.getDay());
+  const selectedWeekEnd = new Date(selectedWeekStart);
+  selectedWeekEnd.setDate(selectedWeekEnd.getDate() + 6);
 
   return (
     <div className="employee-page">
       <Heading kicker="برنامه‌ریزی" title="تقویم" />
-      <div className="calendar-toggle">
-        <button
-          className={mode === "day" ? "active" : ""}
-          onClick={() => setMode("day")}
-        >
-          روز
-        </button>
-        <button
-          className={mode === "week" ? "active" : ""}
-          onClick={() => setMode("week")}
-        >
-          هفته
-        </button>
-      </div>
-      <div className="calendar-navigation">
-        <button
-          type="button"
-          aria-label="بازه قبل"
-          onClick={() => setSelectedDate(addDays(selectedDate, -step))}
-        >
-          ›
-        </button>
-        <strong>
-          {mode === "week"
-            ? `${jalaliDateLabel(weekStart)} تا ${jalaliDateLabel(weekDays[6])}`
-            : jalaliDateLabel(selectedDate)}
-        </strong>
-        <button
-          type="button"
-          aria-label="بازه بعد"
-          onClick={() => setSelectedDate(addDays(selectedDate, step))}
-        >
-          ‹
-        </button>
-      </div>
-      {appointments.loading ? (
-        <Skeleton />
-      ) : appointments.error ? (
-        <div className="schedule-message">{appointments.error}</div>
-      ) : (
-        displayDays.map((day) => {
-          const dayAppointments = appointments.data.filter((appointment) =>
-            appointment.items?.some((item) => item.date === day),
-          );
-          const label = jalaliDateLabel(day);
-          return (
-            <section className="calendar-day" key={day}>
-              <div className="day-label">
-                <h2>{label}</h2>
-                <span>{dayAppointments.length} نوبت</span>
-              </div>
-              {dayAppointments.length ? (
-                dayAppointments.map((appointment) => (
-                  <AppointmentCard
-                    key={appointment.id}
-                    item={appointment}
-                    onClick={() => setSelected(appointment)}
-                  />
-                ))
-              ) : (
-                <Empty title="برای این روز نوبتی ندارید" text="" />
-              )}
-            </section>
-          );
-        })
-      )}
+      <section className="employee-card employee-month-calendar">
+        <div className="employee-calendar-head">
+          <div><small>تقویم شمسی</small><h2>{new Intl.NumberFormat("fa-IR").format(monthJalali.jy)} / {new Intl.NumberFormat("fa-IR").format(monthJalali.jm)}</h2></div>
+          <div><button type="button" aria-label="ماه قبل" onClick={() => moveMonth(-1)}>‹</button><button type="button" onClick={selectToday}>امروز</button><button type="button" aria-label="ماه بعد" onClick={() => moveMonth(1)}>›</button></div>
+        </div>
+        <div className="employee-calendar-weekdays">{["ی", "د", "س", "چ", "پ", "ج", "ش"].map((day) => <b key={day}>{day}</b>)}</div>
+        {appointments.loading ? <Skeleton /> : appointments.error ? <div className="schedule-message">{appointments.error}</div> : <div className="employee-calendar-days">
+          {calendarDays.map((day) => {
+            const date = new Date(`${day}T12:00:00`);
+            const local = toJalaali(date.getFullYear(), date.getMonth() + 1, date.getDate());
+            const count = appointments.data.filter((appointment) => appointment.items?.some((item) => item.date === day)).length;
+            return <button type="button" aria-label={day} key={day} className={[day === selectedDate && "selected", day === isoDate(new Date()) && "today", date >= selectedWeekStart && date <= selectedWeekEnd && "current-week", (local.jy !== monthJalali.jy || local.jm !== monthJalali.jm) && "muted"].filter(Boolean).join(" ")} onClick={() => setSelectedDate(day)}><span className="employee-calendar-number">{new Intl.NumberFormat("fa-IR").format(local.jd)}</span><small>{new Intl.DateTimeFormat("fa-IR-u-ca-persian", { weekday: "long", timeZone: "Asia/Tehran" }).format(date)}</small>{count > 0 && <b>{new Intl.NumberFormat("fa-IR").format(count)} نوبت</b>}</button>;
+          })}
+        </div>}
+      </section>
+      <section className="calendar-day employee-selected-day">
+        <div className="day-label"><h2>{jalaliDateLabel(selectedDate)}</h2><span>{new Intl.NumberFormat("fa-IR").format(selectedAppointments.length)} نوبت</span></div>
+        {!appointments.loading && (selectedAppointments.length ? selectedAppointments.map((appointment) => <AppointmentCard key={appointment.id} item={appointment} onClick={() => setSelected(appointment)} />) : <Empty title="برای این روز نوبتی ندارید" text="روز دیگری را از تقویم انتخاب کنید." />)}
+      </section>
       {selected && (
         <AppointmentDetail
           item={selected}
@@ -693,106 +666,30 @@ function AppointmentDetail({ item, close, onSaved }) {
   };
 
   return (
-    <div className="employee-detail">
-      <div className="detail-top">
-        <span className="employee-kicker">جزئیات نوبت</span>
-        <button className="detail-close" onClick={close}>
-          ×
-        </button>
-      </div>
-      <div className="customer-head">
-        <div className="customer-avatar">{(item.customer_name || "م")[0]}</div>
-        <div>
-          <h2>{item.customer_name || item.customer?.name || "مشتری"}</h2>
-          <a href={`tel:${item.customer_phone || item.customer?.phone || ""}`}>
-            {item.customer_phone || item.customer?.phone || "شماره ثبت نشده"}
-          </a>
+    <div className="employee-detail-backdrop" onMouseDown={close}>
+      <section className="employee-detail" role="dialog" aria-modal="true" aria-labelledby="employee-appointment-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="detail-top">
+          <div><span className="employee-kicker">جزئیات نوبت</span><h2 id="employee-appointment-title">{item.customer_name || item.customer?.name || "مشتری"}</h2></div>
+          <button type="button" className="detail-close" aria-label="بستن جزئیات نوبت" onClick={close}>×</button>
         </div>
-      </div>
-      {lines.length > 1 && (
-        <div className="calendar-toggle">
-          {lines.map((entry) => (
-            <button
-              key={entry.id}
-              className={entry.id === line.id ? "active" : ""}
-              onClick={() => chooseLine(entry)}
-            >
-              {entry.service_name || `سرویس #${entry.service}`}
-            </button>
-          ))}
+        <div className="customer-head">
+          <div className="customer-avatar">{(item.customer_name || "م")[0]}</div>
+          <div><a href={`tel:${item.customer_phone || item.customer?.phone || ""}`}>{item.customer_phone || item.customer?.phone || "شماره ثبت نشده"}</a><small>{lines.length > 1 ? `${new Intl.NumberFormat("fa-IR").format(lines.length)} سرویس در این نوبت` : line.service_name || "سرویس رزرو شده"}</small></div>
         </div>
-      )}
-      <div className="detail-info">
-        <div>
-          <span>سرویس</span>
-          <b>{line.service_name || "سرویس رزرو شده"}</b>
+        {lines.length > 1 && <div className="detail-service-tabs" aria-label="سرویس‌های نوبت">{lines.map((entry) => <button type="button" key={entry.id} className={entry.id === line.id ? "active" : ""} onClick={() => chooseLine(entry)}>{entry.service_name || `سرویس #${entry.service}`}</button>)}</div>}
+        <div className="detail-info">
+          <div><span>تاریخ</span><b>{formatJalaliDate(line.date, "نامشخص")}</b></div>
+          <div><span>ساعت</span><b>{line.start_time?.slice(0, 5)} تا {line.end_time?.slice(0, 5)}</b></div>
+          <div><span>سرویس</span><b>{line.service_name || "سرویس رزرو شده"}</b></div>
+          <div><span>وضعیت</span><b>{isFinal ? (line.completion_status === "completed" ? "تکمیل شده" : "لغو شده") : statusNames[item.status] || "در انتظار"}</b></div>
         </div>
-        <div>
-          <span>زمان</span>
-          <b>
-            {line.start_time} تا {line.end_time}
-          </b>
-        </div>
-        <div>
-          <span>مدت</span>
-          <b>{line.duration_snapshot || "--"} دقیقه</b>
-        </div>
-        <div>
-          <span>مبلغ</span>
-          <ItemPricing key={line.id} item={line} role="employee" onSaved={onSaved} />
-        </div>
-        <div>
-          <span>وضعیت پرداخت</span>
-          <b>{item.payment_status || "نامشخص"}</b>
-        </div>
-      </div>
-      {item.notes && (
-        <div className="detail-notes">یادداشت مشتری: {item.notes}</div>
-      )}
-      <PaymentReport appointmentId={item.id} />
-      {isFinal ? (
-        <div className="detail-notes">
-          این سرویس {line.completion_status === "completed" ? "تکمیل" : "لغو"}{" "}
-          شده است.
-        </div>
-      ) : (
-        <div className="detail-buttons">
-          <button disabled={busy} onClick={() => act("complete")}>
-            تکمیل نوبت
-          </button>
-          <button
-            className="danger"
-            disabled={busy}
-            onClick={() => act("cancel")}
-          >
-            لغو نوبت
-          </button>
-        </div>
-      )}
-      {showReason && (
-        <div className="employee-form">
-          <label>
-            دلیل لغو الزامی است
-            <textarea
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          </label>
-          <button className="employee-action" onClick={() => act("cancel")}>
-            ثبت دلیل
-          </button>
-        </div>
-      )}
-      <div className="employee-card">
-        <h2>یادداشت سرویس‌ها</h2>
-        <textarea
-          className="employee-note"
-          placeholder="یادداشت‌ها و محصولات مصرف‌شده را ثبت کنید..."
-          value={notes}
-          onChange={(event) => setNotes(event.target.value)}
-        />
-      </div>
-      {actionError && <small className="schedule-message">{actionError}</small>}
+        {item.notes && <div className="detail-notes">یادداشت مشتری: {item.notes}</div>}
+        <details className="employee-detail-section"><summary>مبلغ و پرداخت</summary><div className="detail-price"><ItemPricing key={line.id} item={line} role="employee" onSaved={onSaved} /></div><PaymentReport appointmentId={item.id} /></details>
+        <details className="employee-detail-section"><summary>یادداشت کاری</summary><textarea className="employee-note" placeholder="یادداشت‌ها و محصولات مصرف‌شده را ثبت کنید..." value={notes} onChange={(event) => setNotes(event.target.value)} /></details>
+        {isFinal ? <div className="detail-final-state">این سرویس قبلاً {line.completion_status === "completed" ? "تکمیل" : "لغو"} شده است.</div> : <div className="detail-buttons"><button disabled={busy} onClick={() => act("complete")}>تکمیل سرویس</button><button className="danger" disabled={busy} onClick={() => setShowReason(true)}>لغو سرویس</button></div>}
+        {showReason && !isFinal && <div className="cancel-box"><div><b>لغو این سرویس</b><button type="button" aria-label="بستن فرم لغو" onClick={() => { setShowReason(false); setReason(""); }}>×</button></div><label>دلیل لغو<textarea autoFocus value={reason} onChange={(event) => setReason(event.target.value)} placeholder="دلیل کوتاه را بنویسید" /></label><button className="employee-action danger" disabled={busy || !reason.trim()} onClick={() => act("cancel")}>{busy ? "در حال ثبت…" : "تأیید لغو"}</button></div>}
+        {actionError && <small className="schedule-message" role="alert">{actionError}</small>}
+      </section>
     </div>
   );
 }

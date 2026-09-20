@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import EmployeeApp from "./EmployeeApp";
 import { MemoryRouter } from "react-router-dom";
+import { formatJalaliDate } from "../shared/date";
 
 const { get, post, patch, logoutSession, disableCurrentFirebaseDevice, navigate } = vi.hoisted(() => ({
   get: vi.fn(() => Promise.resolve({ data: [] })),
@@ -293,7 +294,7 @@ describe("employee app", () => {
       ),
       { target: { value: "کار تکمیل شد" } },
     );
-    fireEvent.click(screen.getByRole("button", { name: "تکمیل نوبت" }));
+    fireEvent.click(screen.getByRole("button", { name: "تکمیل سرویس" }));
 
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith(
@@ -407,18 +408,12 @@ describe("employee app", () => {
     expect(screen.queryByText("متخصص")).not.toBeInTheDocument();
   });
 
-  it("loads only the selected employee week range for the calendar", async () => {
+  it("loads the employee month calendar and keeps dates selectable", async () => {
     const today = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Tehran",
     }).format(new Date());
-    const nextDate = new Date(`${today}T12:00:00`);
-    nextDate.setDate(nextDate.getDate() + 1);
-    const tomorrow = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Tehran",
-    }).format(nextDate);
-    const weekday = (date) => (new Date(`${date}T12:00:00`).getDay() + 6) % 7;
     get.mockImplementation((endpoint) => {
-      if (endpoint === `employee/appointments/?date=${today}`)
+      if (endpoint.startsWith("employee/appointments/?start="))
         return Promise.resolve({
           data: [
             {
@@ -445,19 +440,28 @@ describe("employee app", () => {
     );
 
     expect(await screen.findByText("مشتری امروز")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "هفته" }));
-    const weekStart = new Date(`${today}T12:00:00`);
-    weekStart.setDate(weekStart.getDate() - weekday(today));
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 6);
-    const format = (value) =>
-      new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(
-        value,
-      );
-    await waitFor(() =>
-      expect(get).toHaveBeenCalledWith(
-        `employee/appointments/?start=${format(weekStart)}&end=${format(weekEnd)}`,
-      ),
-    );
+    expect(screen.getByRole("button", { name: today })).toHaveClass("selected");
+    expect(get).toHaveBeenCalledWith(expect.stringMatching(/^employee\/appointments\/\?start=\d{4}-\d{2}-\d{2}&end=\d{4}-\d{2}-\d{2}$/));
+    expect(screen.getByRole("button", { name: "ماه قبل" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "ماه بعد" })).toBeVisible();
+  });
+
+  it("shows a compact dated appointment dialog and submits cancellation reason", async () => {
+    const current = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(new Date());
+    post.mockResolvedValue({ data: {} });
+    get.mockImplementation((endpoint) => {
+      if (endpoint === `employee/appointments/?date=${current}`) return Promise.resolve({ data: [{ id: 8, customer_name: "مشتری لغو", customer_phone: "09120000000", status: "confirmed", items: [{ id: 44, date: current, start_time: "10:00", end_time: "11:00", service_name: "رنگ مو", completion_status: "scheduled" }] }] });
+      if (endpoint === "employee/statistics/") return Promise.resolve({ data: { today_total: 1, completed_services: 0, remaining_services: 1, next_appointment: null } });
+      return Promise.resolve({ data: [] });
+    });
+    render(<MemoryRouter><EmployeeApp /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: /مشتری لغو.*رنگ مو/ }));
+    const dialog = screen.getByRole("dialog", { name: "مشتری لغو" });
+    expect(dialog).toHaveTextContent(formatJalaliDate(current));
+    expect(screen.getByRole("button", { name: "بستن جزئیات نوبت" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "لغو سرویس" }));
+    fireEvent.change(screen.getByLabelText("دلیل لغو"), { target: { value: "عدم امکان حضور" } });
+    fireEvent.click(screen.getByRole("button", { name: "تأیید لغو" }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("employee/appointment-items/44/action/", expect.objectContaining({ status: "cancel", reason: "عدم امکان حضور" })));
   });
 });
