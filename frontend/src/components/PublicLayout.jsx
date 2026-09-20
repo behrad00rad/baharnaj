@@ -79,6 +79,9 @@ export function PublicLayout({ children }) {
             <Link className="nav-book" to="/book">
               رزرو نوبت<span>←</span>
             </Link>
+            <Link className="nav-track" to="/booking/manage">
+              پیگیری نوبت
+            </Link>
           </div>
           <button
             ref={menuButtonRef}
@@ -134,6 +137,9 @@ export function PublicLayout({ children }) {
             )}
             <Link to="/book" onClick={closeMenu}>
               رزرو نوبت ←
+            </Link>
+            <Link to="/booking/manage" onClick={closeMenu}>
+              پیگیری نوبت
             </Link>
           </div>
         </div>
