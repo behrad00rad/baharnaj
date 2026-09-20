@@ -67,3 +67,4 @@ dist
 *.dump
 backups/
 **/*serviceAccount*.json
+ssh.txt

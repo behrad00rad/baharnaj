@@ -1,2 +1,0 @@
-user=baharnaj@185.208.174.126
-password=1386behraD$
