@@ -2,7 +2,7 @@ import PanelGuide from "./PanelGuide";
 import TextSizeControl from "./TextSizeControl";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { clearSession } from "../shared/api";
+import { logoutSession } from "../shared/api";
 import { useAuth } from "../shared/auth";
 import NotificationBell from "./NotificationBell";
 import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
@@ -37,7 +37,7 @@ export default function AdminLayout() {
   }, [menuOpen]);
   const logout = async () => {
     await disableCurrentFirebaseDevice().catch(() => {});
-    clearSession();
+    await logoutSession();
     navigate("/login", { replace: true });
   };
   if (role !== "admin")

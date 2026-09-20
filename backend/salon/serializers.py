@@ -32,12 +32,13 @@ class CustomerProfileSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(source="user.first_name", required=False, allow_blank=True)
     last_name = serializers.CharField(source="user.last_name", required=False, allow_blank=True)
     phone = serializers.CharField(source="user.phone", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
     account_status = serializers.CharField(source="user.account_status", read_only=True)
 
     class Meta:
         model = CustomerProfile
-        fields = ("id", "display_name", "first_name", "last_name", "phone", "birthday", "neighborhood", "service_preferences", "account_status")
-        read_only_fields = ("id", "display_name", "phone", "account_status")
+        fields = ("id", "display_name", "first_name", "last_name", "phone", "email", "birthday", "neighborhood", "service_preferences", "account_status")
+        read_only_fields = ("id", "display_name", "phone", "email", "account_status")
 
     def get_display_name(self, obj):
         return obj.user.get_full_name() or obj.user.username
@@ -82,6 +83,7 @@ class CustomerAppointmentSerializer(serializers.Serializer):
     price = serializers.SerializerMethodField()
     payment_status = serializers.CharField(read_only=True)
     capabilities = serializers.SerializerMethodField()
+    payments = serializers.SerializerMethodField()
 
     def _items(self, obj):
         return list(obj.items.all())
@@ -99,7 +101,7 @@ class CustomerAppointmentSerializer(serializers.Serializer):
         return max((item.end_time for item in items), default=None).strftime("%H:%M") if items else None
 
     def get_services(self, obj):
-        return [{"name": item.service.persian_name, "specialist": item.employee.user.get_full_name() or item.employee.user.username, "duration": item.duration_snapshot, "price": item.effective_price if item.is_price_final else None, "price_status": item.price_status} for item in self._items(obj)]
+        return [{"id": item.service_id, "employee_id": item.employee_id, "name": item.service.persian_name, "specialist": item.employee.user.get_full_name() or item.employee.user.username, "duration": item.duration_snapshot, "price": item.effective_price if item.is_price_final else None, "price_status": item.price_status} for item in self._items(obj)]
 
     def get_price(self, obj):
         items = self._items(obj)
@@ -111,6 +113,9 @@ class CustomerAppointmentSerializer(serializers.Serializer):
         policy_configured = bool(getattr(settings, "CUSTOMER_APPOINTMENT_POLICY_CONFIGURED", False))
         eligible = obj.status in {"pending", "confirmed"}
         return {"can_cancel": policy_configured and eligible, "can_reschedule": policy_configured and eligible, "policy_code": "policy_not_configured" if not policy_configured else ("eligible" if eligible else "status_not_eligible"), "policy_message": "برای تغییر یا لغو این نوبت با سالن تماس بگیرید." if not policy_configured or not eligible else "تغییرات طبق سیاست سالن انجام می‌شود."}
+
+    def get_payments(self, obj):
+        return [{"id": payment.pk, "amount": payment.amount, "status": payment.status, "payment_method": payment.payment_method, "paid_at": payment.paid_at, "refunded_total": sum(refund.amount for refund in payment.refunds.all() if refund.status == "completed")} for payment in obj.payments.all()]
 
 
 class CustomerDeletionRequestSerializer(serializers.ModelSerializer):
@@ -310,6 +315,51 @@ class EmployeePasswordChangeSerializer(serializers.Serializer):
         user = self.context["request"].user
         user.set_password(self.validated_data["new_password"])
         user.save(update_fields=("password",))
+        return user
+
+
+class CustomerPasswordChangeSerializer(EmployeePasswordChangeSerializer):
+    """Customer password changes use the same strong validation as staff."""
+
+
+class CustomerRegistrationSerializer(serializers.Serializer):
+    first_name = serializers.CharField(max_length=150)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    phone = serializers.CharField(max_length=20)
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+    password_confirm = serializers.CharField(write_only=True)
+    accept_terms = serializers.BooleanField(write_only=True)
+
+    def validate_phone(self, value):
+        return validate_phone(value)
+
+    def validate(self, attrs):
+        if not attrs["accept_terms"]:
+            raise serializers.ValidationError({"accept_terms": "پذیرش قوانین و حریم خصوصی الزامی است."})
+        if attrs["password"] != attrs["password_confirm"]:
+            raise serializers.ValidationError({"password_confirm": "تکرار رمز عبور مطابقت ندارد."})
+        phone = attrs["phone"]
+        login_accounts = [user for user in User.objects.filter(Q(username=phone) | Q(phone=phone)) if user.has_usable_password()]
+        if login_accounts:
+            raise serializers.ValidationError({"phone": "برای این شماره حسابی وجود دارد؛ وارد حساب شوید."})
+        if User.objects.filter(email__iexact=attrs["email"]).exclude(email="").exists():
+            raise serializers.ValidationError({"email": "این ایمیل قبلاً برای حساب دیگری ثبت شده است."})
+        candidate = User(username=phone, phone=phone, email=attrs["email"], first_name=attrs["first_name"], last_name=attrs.get("last_name", ""), role="customer")
+        try:
+            password_validation.validate_password(attrs["password"], candidate)
+        except DjangoValidationError as error:
+            raise serializers.ValidationError({"password": list(error.messages)}) from error
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        validated_data.pop("password_confirm")
+        validated_data.pop("accept_terms")
+        password = validated_data.pop("password")
+        phone = validated_data["phone"]
+        user = User.objects.create_user(username=phone, password=password, role="customer", **validated_data)
+        CustomerProfile.objects.create(user=user)
         return user
 
 
@@ -734,7 +784,10 @@ class AppointmentSerializer(serializers.ModelSerializer):
     customer_phone = serializers.SerializerMethodField()
     hold_token = serializers.UUIDField(write_only=True, required=False)
     create_account = serializers.BooleanField(write_only=True, required=False, default=False)
-    account_password = serializers.CharField(write_only=True, required=False, min_length=8)
+    account_password = serializers.CharField(write_only=True, required=False, allow_blank=True, min_length=8)
+    account_password_confirm = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    account_email = serializers.EmailField(write_only=True, required=False, allow_blank=True)
+    account_accept_terms = serializers.BooleanField(write_only=True, required=False, default=False)
     has_unresolved_prices = serializers.BooleanField(read_only=True)
     appointment_total = serializers.IntegerField(read_only=True)
     paid_total = serializers.IntegerField(read_only=True)
@@ -747,7 +800,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Appointment
-        fields = ("id", "customer", "items", "status", "notes", "created_by", "updated_by", "created_at", "updated_at", "confirmation_code", "customer_name", "customer_phone", "hold_token", "create_account", "account_password", "appointment_total", "has_unresolved_prices", "paid_total", "refunded_total", "net_paid", "remaining_total", "payment_status", "payments", "status_history")
+        fields = ("id", "customer", "items", "status", "notes", "created_by", "updated_by", "created_at", "updated_at", "confirmation_code", "customer_name", "customer_phone", "hold_token", "create_account", "account_password", "account_password_confirm", "account_email", "account_accept_terms", "appointment_total", "has_unresolved_prices", "paid_total", "refunded_total", "net_paid", "remaining_total", "payment_status", "payments", "status_history")
         read_only_fields = ("id", "customer", "created_by", "updated_by", "created_at", "updated_at")
 
     def get_customer_name(self, obj):
@@ -807,24 +860,68 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("خدمات انتخاب‌شده باید پشت سر هم زمان‌بندی شوند.")
         return items
 
-    def validate_customer_phone(self, value):
-        return validate_phone(value)
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        request = self.context.get("request")
+        authenticated = bool(request and request.user.is_authenticated)
+        if authenticated and request.user.role != "customer":
+            raise serializers.ValidationError("فقط مشتری می‌تواند از این مسیر نوبت شخصی ثبت کند.")
+        name = str(self.initial_data.get("customer_name", "")).strip()
+        raw_phone = self.initial_data.get("customer_phone", "")
+        if authenticated:
+            attrs["_customer_name"] = request.user.get_full_name() or request.user.username
+            attrs["_customer_phone"] = request.user.phone
+            if attrs.get("create_account"):
+                raise serializers.ValidationError({"create_account": "شما هم‌اکنون وارد حساب خود هستید."})
+            return attrs
+        if not name:
+            raise serializers.ValidationError({"customer_name": "نام و نام خانوادگی الزامی است."})
+        try:
+            phone = validate_phone(raw_phone)
+        except serializers.ValidationError as error:
+            raise serializers.ValidationError({"customer_phone": error.detail}) from error
+        attrs["_customer_name"], attrs["_customer_phone"] = name, phone
+        if attrs.get("create_account"):
+            password = attrs.get("account_password", "")
+            if not password:
+                raise serializers.ValidationError({"account_password": "برای ساخت حساب، رمز عبور الزامی است."})
+            if password != attrs.get("account_password_confirm"):
+                raise serializers.ValidationError({"account_password_confirm": "تکرار رمز عبور مطابقت ندارد."})
+            if not attrs.get("account_email"):
+                raise serializers.ValidationError({"account_email": "ایمیل برای بازیابی حساب الزامی است."})
+            if not attrs.get("account_accept_terms"):
+                raise serializers.ValidationError({"account_accept_terms": "پذیرش قوانین و حریم خصوصی الزامی است."})
+            login_accounts = [user for user in User.objects.filter(Q(username=phone) | Q(phone=phone)) if user.has_usable_password()]
+            if login_accounts:
+                raise serializers.ValidationError({"customer_phone": "برای این شماره حسابی وجود دارد؛ ابتدا وارد حساب شوید."})
+            if User.objects.filter(email__iexact=attrs["account_email"]).exclude(email="").exists():
+                raise serializers.ValidationError({"account_email": "این ایمیل قبلاً ثبت شده است."})
+            candidate = User(username=phone, phone=phone, email=attrs["account_email"], first_name=name, role="customer")
+            try:
+                password_validation.validate_password(password, candidate)
+            except DjangoValidationError as error:
+                raise serializers.ValidationError({"account_password": list(error.messages)}) from error
+        return attrs
 
     def create(self, validated_data):
         item_data = validated_data.pop("items")
         hold_token = validated_data.pop("hold_token", None)
         create_account = validated_data.pop("create_account", False)
         account_password = validated_data.pop("account_password", None)
-        name = self.initial_data.get("customer_name", "مشتری آنلاین")
-        phone = self.initial_data.get("customer_phone", "")
+        validated_data.pop("account_password_confirm", None)
+        account_email = validated_data.pop("account_email", "")
+        validated_data.pop("account_accept_terms", None)
+        name = validated_data.pop("_customer_name")
+        phone = validated_data.pop("_customer_phone")
         request = self.context.get("request")
         customer = request.user if request and request.user.is_authenticated else None
         if customer is None:
             customer = User.objects.create_user(username=f"guest_{phone or 'online'}_{uuid4().hex[:10]}", first_name=name, phone=phone)
         if create_account and account_password:
             customer.username = phone
+            customer.email = account_email
             customer.set_password(account_password)
-            customer.save(update_fields=("username", "password"))
+            customer.save(update_fields=("username", "email", "password"))
         customer_profile, _ = CustomerProfile.objects.get_or_create(user=customer)
         hold = BookingHold.objects.filter(token=hold_token, expires_at__gt=timezone.now()).first() if hold_token else None
         held_items = {(item.employee_id, item.service_id, item.date, item.start_time, item.end_time) for item in hold.items.all()} if hold else set()

@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "corsheaders",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "salon",
 ]
 
@@ -245,7 +246,9 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=10),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
+CUSTOMER_APPOINTMENT_POLICY_CONFIGURED = env_bool("CUSTOMER_APPOINTMENT_POLICY_CONFIGURED")
 AUTH_USER_MODEL = "salon.User"
 
 # Telegram remains inert until explicitly configured and enabled.

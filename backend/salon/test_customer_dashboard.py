@@ -1,6 +1,7 @@
-from datetime import date, time
+from datetime import date, time, timedelta
 
 from django.test import TestCase, override_settings
+from django.core.cache import cache
 from rest_framework.test import APIClient
 
 from .models import (
@@ -15,6 +16,7 @@ from .models import (
     Service,
     ServiceCategory,
     User,
+    WorkingSchedule,
 )
 
 
@@ -33,6 +35,10 @@ class CustomerDashboardTests(TestCase):
         AppointmentItem.objects.create(appointment=self.appointment, service=self.service, employee=self.employee, date=date(2099, 1, 5), start_time=time(10), end_time=time(11))
         self.client = APIClient()
         self.client.force_authenticate(self.customer_user)
+
+    def tearDown(self):
+        cache.clear()
+        super().tearDown()
 
     def test_customer_only_ownership_and_safe_price(self):
         own = self.client.get(f"/api/v1/customer/appointments/{self.appointment.pk}/")
@@ -88,3 +94,119 @@ class CustomerDashboardTests(TestCase):
             response = self.client.post("/api/v1/auth/token/", {"username": phone, "password": "password123"}, format="json")
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.data["role"], "customer")
+
+    def test_customer_registration_login_and_logout_lifecycle(self):
+        self.client.force_authenticate(None)
+        payload = {
+            "first_name": "مریم",
+            "last_name": "احمدی",
+            "phone": "+989351234567",
+            "email": "maryam@example.com",
+            "password": "R8!vQ2#zK7mP",
+            "password_confirm": "R8!vQ2#zK7mP",
+            "accept_terms": True,
+        }
+        registered = self.client.post("/api/v1/auth/register/", payload, format="json")
+        self.assertEqual(registered.status_code, 201)
+        self.assertEqual(registered.data["role"], "customer")
+        self.assertIn("baharnaj_refresh", registered.cookies)
+        user = User.objects.get(username="09351234567")
+        self.assertTrue(hasattr(user, "customer_profile"))
+        duplicate = self.client.post("/api/v1/auth/register/", payload, format="json")
+        self.assertEqual(duplicate.status_code, 400)
+        logged_in = self.client.post("/api/v1/auth/token/", {"username": "00989351234567", "password": payload["password"]}, format="json")
+        self.assertEqual(logged_in.status_code, 200)
+        logged_out = self.client.post("/api/v1/auth/logout/")
+        self.assertEqual(logged_out.status_code, 204)
+        self.assertEqual(logged_out.cookies["baharnaj_refresh"]["max-age"], 0)
+
+    def test_login_skips_older_guest_record_with_same_phone(self):
+        phone = "09127776655"
+        User.objects.create_user(username="guest_old", phone=phone, role="customer")
+        User.objects.create_user(username=phone, phone=phone, password="Strong-login-8472", role="customer")
+        self.client.force_authenticate(None)
+        response = self.client.post("/api/v1/auth/token/", {"username": phone, "password": "Strong-login-8472"}, format="json")
+        self.assertEqual(response.status_code, 200)
+
+    def test_customer_can_change_password(self):
+        response = self.client.post("/api/v1/customer/password/", {
+            "current_password": "password123",
+            "new_password": "New-strong-pass-8472",
+            "new_password_confirm": "New-strong-pass-8472",
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.customer_user.refresh_from_db()
+        self.assertTrue(self.customer_user.check_password("New-strong-pass-8472"))
+
+    @override_settings(CUSTOMER_APPOINTMENT_POLICY_CONFIGURED=True)
+    def test_guest_lookup_and_cancellation_use_the_same_endpoint(self):
+        self.client.force_authenticate(None)
+        credentials = {"phone": self.customer_user.phone, "confirmation_code": self.appointment.confirmation_code}
+        lookup = self.client.post("/api/v1/customer/booking/", credentials, format="json")
+        self.assertEqual(lookup.status_code, 200)
+        self.assertTrue(lookup.data["customer_capabilities"]["can_cancel"])
+        cancelled = self.client.patch("/api/v1/customer/booking/", {**credentials, "cancel": True}, format="json")
+        self.assertEqual(cancelled.status_code, 200)
+        self.appointment.refresh_from_db()
+        self.assertEqual(self.appointment.status, "cancelled")
+
+
+class BookingAccountCreationTests(TestCase):
+    def setUp(self):
+        category = ServiceCategory.objects.create(name="Account booking")
+        self.service = Service.objects.create(category=category, name="account-cut", persian_name="کوتاهی", price=500, duration=60)
+        employee_user = User.objects.create_user(username="account-employee", role="employee")
+        self.employee = EmployeeProfile.objects.create(user=employee_user, is_active=True)
+        EmployeeService.objects.create(employee=self.employee, service=self.service)
+        self.booking_date = date.today() + timedelta(days=14)
+        WorkingSchedule.objects.create(employee=self.employee, weekday=self.booking_date.weekday(), start_time=time(9), end_time=time(17), is_active=True)
+        self.client = APIClient()
+
+    def tearDown(self):
+        cache.clear()
+        super().tearDown()
+
+    def test_booking_can_create_and_sign_into_a_validated_customer_account(self):
+        item = {"service": self.service.pk, "employee": self.employee.pk, "date": self.booking_date.isoformat(), "start_time": "10:00", "end_time": "11:00"}
+        hold = self.client.post("/api/v1/booking-holds/", {"items": [item]}, format="json")
+        self.assertEqual(hold.status_code, 201)
+        response = self.client.post("/api/v1/appointments/", {
+            "customer_name": "سارا رضایی",
+            "customer_phone": "+989121112233",
+            "hold_token": hold.data["token"],
+            "items": [item],
+            "create_account": True,
+            "account_email": "sara@example.com",
+            "account_password": "Secure-booking-8472",
+            "account_password_confirm": "Secure-booking-8472",
+            "account_accept_terms": True,
+        }, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertTrue(response.data["account_created"])
+        self.assertEqual(response.data["role"], "customer")
+        self.assertIn("baharnaj_refresh", response.cookies)
+        account = User.objects.get(username="09121112233")
+        self.assertEqual(account.email, "sara@example.com")
+        self.assertTrue(account.check_password("Secure-booking-8472"))
+        self.assertTrue(account.customer_profile.appointments.filter(pk=response.data["id"]).exists())
+
+    def test_logged_in_customer_booking_accepts_hidden_account_fields_as_blank(self):
+        customer_user = User.objects.create_user(username="logged-in-customer", phone="09123334455", password="Existing-pass-8472", role="customer")
+        CustomerProfile.objects.create(user=customer_user)
+        self.client.force_authenticate(customer_user)
+        item = {"service": self.service.pk, "employee": self.employee.pk, "date": self.booking_date.isoformat(), "start_time": "10:00", "end_time": "11:00"}
+        hold = self.client.post("/api/v1/booking-holds/", {"items": [item]}, format="json")
+        self.assertEqual(hold.status_code, 201)
+        response = self.client.post("/api/v1/appointments/", {
+            "customer_name": "",
+            "customer_phone": "",
+            "hold_token": hold.data["token"],
+            "items": [item],
+            "create_account": False,
+            "account_email": "",
+            "account_password": "",
+            "account_password_confirm": "",
+        }, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        appointment = Appointment.objects.get(pk=response.data["id"])
+        self.assertEqual(appointment.customer.user, customer_user)

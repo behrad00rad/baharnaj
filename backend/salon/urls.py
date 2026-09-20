@@ -8,7 +8,7 @@ from .views import (AdminAppointmentViewSet, AdminBlogCategoryViewSet, AdminBlog
 					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
 					PaymentViewSet, FirebaseDeviceViewSet, NotificationViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
 					EmployeeEarningsView, EmployeeAppointmentPaymentReportView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView,
-					BlogCategoryListView, BlogPostDetailView, BlogPostListView, CustomerAppointmentDetailView, CustomerAppointmentListView, CustomerBookAgainView, CustomerDashboardView, CustomerDeletionRequestView, CustomerNotificationViewSet, CustomerPreferencesView, CustomerProfileView, CustomerAppointmentMutationView)
+					BlogCategoryListView, BlogPostDetailView, BlogPostListView, CustomerAppointmentDetailView, CustomerAppointmentListView, CustomerBookAgainView, CustomerDashboardView, CustomerDeletionRequestView, CustomerNotificationViewSet, CustomerPasswordChangeView, CustomerPreferencesView, CustomerProfileView, CustomerAppointmentMutationView)
 
 router = DefaultRouter()
 router.register("admin/services", AdminServiceViewSet, basename="admin-service")
@@ -59,6 +59,7 @@ urlpatterns = [
 	path("customer/appointments/<int:appointment_id>/book-again/", CustomerBookAgainView.as_view(), name="customer-book-again"),
 	path("customer/appointments/<int:appointment_id>/<str:action>/", CustomerAppointmentMutationView.as_view(), name="customer-appointment-mutation"),
 	path("customer/preferences/", CustomerPreferencesView.as_view(), name="customer-preferences"),
+	path("customer/password/", CustomerPasswordChangeView.as_view(), name="customer-password"),
 	path("customer/account/deletion-request/", CustomerDeletionRequestView.as_view(), name="customer-deletion-request"),
 	path("employee/appointments/", EmployeeAppointmentsView.as_view(), name="employee-appointments"),
 	path("employee/appointments/create/", EmployeeSelfBookingView.as_view(), name="employee-appointment-create"),

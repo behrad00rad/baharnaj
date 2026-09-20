@@ -7,7 +7,7 @@ import { ThemeProvider } from "../shared/theme";
 vi.mock("../shared/auth", () => ({
   useAuth: () => ({ role: "admin" }),
 }));
-vi.mock("../shared/api", () => ({ clearSession: vi.fn() }));
+vi.mock("../shared/api", () => ({ logoutSession: vi.fn(() => Promise.resolve()) }));
 vi.mock("../shared/firebasePush", () => ({
   disableCurrentFirebaseDevice: vi.fn(() => Promise.resolve()),
 }));

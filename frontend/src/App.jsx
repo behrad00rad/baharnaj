@@ -10,6 +10,7 @@ import CustomerLayout from "./components/CustomerLayout";
 import Gallery from "./pages/Gallery";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import { CustomerSignup, ForgotPassword, ResetPassword } from "./pages/AccountAuth";
 import ServiceDetail from "./pages/ServiceDetail";
 import Services from "./pages/Services";
 import About from "./pages/About";
@@ -97,6 +98,10 @@ export default function App() {
             </PublicLayout>
           }
         />
+        <Route path="/account/login" element={<PublicLayout><Login customerOnly /></PublicLayout>} />
+        <Route path="/account/signup" element={<PublicLayout><CustomerSignup /></PublicLayout>} />
+        <Route path="/account/forgot-password" element={<PublicLayout><ForgotPassword /></PublicLayout>} />
+        <Route path="/account/reset-password/:uid/:token" element={<PublicLayout><ResetPassword /></PublicLayout>} />
         <Route
           path="/booking-confirmation"
           element={<Navigate to="/book" replace />}

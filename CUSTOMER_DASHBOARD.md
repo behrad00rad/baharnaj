@@ -2,6 +2,8 @@
 
 The authenticated customer dashboard is available under `/account`. Access uses the existing in-memory JWT access token and HTTP-only refresh cookie; access tokens are not stored in browser storage.
 
+Customer authentication pages are available at `/account/login`, `/account/signup`, `/account/forgot-password`, and `/account/reset-password/<uid>/<token>`. Guests can also create an account during checkout. Successful standalone or checkout registration starts the customer session; logout revokes the refresh token and clears its cookie.
+
 ## API
 
 All endpoints require an authenticated user with `role=customer` and `account_status=active` unless noted otherwise:
@@ -14,11 +16,14 @@ All endpoints require an authenticated user with `role=customer` and `account_st
 - `POST /api/v1/customer/appointments/<id>/reschedule/`
 - `GET /api/v1/customer/appointments/<id>/book-again/`
 - `GET/PATCH /api/v1/customer/preferences/`
+- `POST /api/v1/customer/password/`
 - `GET /api/v1/customer/notifications/`
 - `POST /api/v1/customer/notifications/<id>/read/`
 - `POST /api/v1/customer/notifications/read-all/`
 - `GET /api/v1/customer/notifications/unread-count/`
 - `GET/POST /api/v1/customer/account/deletion-request/`
+- `POST /api/v1/auth/register/`
+- `POST /api/v1/auth/logout/`
 
 Cancellation and rescheduling require an `idempotency_key`. They are ownership-filtered, transaction-locked, and reject the request with `policy_not_configured` until a real salon policy is configured. Rescheduling moves every appointment item together and rejects conflicts rather than partially moving a booking.
 
@@ -46,4 +51,4 @@ npm --prefix frontend run lint
 npm --prefix frontend run build
 ```
 
-Deferred from this MVP: loyalty, coupons, online payments, real phone verification, SMS/Telegram/Firebase delivery, marketing automation, and automatic policy/fee configuration.
+Deferred from this MVP: verified claiming/merging of legacy guest bookings, canonical phone identity migration, audited terms-version storage, loyalty, coupons, online payments, real phone verification, SMS/Telegram/Firebase delivery, marketing automation, and automatic policy/fee configuration. Customer self-service cancellation and rescheduling stay disabled until the salon policy is approved and `CUSTOMER_APPOINTMENT_POLICY_CONFIGURED` is enabled.

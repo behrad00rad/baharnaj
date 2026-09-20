@@ -3,9 +3,11 @@ import { formatServicePrice, bookingPriceSummary } from "../shared/pricing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DateModal } from "../components/DatePicker";
-import { api } from "../shared/api";
+import { api, applyRefreshSession } from "../shared/api";
+import { useAuth } from "../shared/auth";
 import { useServices } from "../shared/hooks";
 import { SEO } from "../components/SEO";
+import PasswordInput from "../components/PasswordInput";
 const steps = ["سرویس‌ها", "متخصص", "زمان", "اطلاعات", "تأیید"];
 const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(
@@ -60,6 +62,7 @@ function EmptyLine({ text }) {
 }
 
 export default function Booking() {
+  const { role } = useAuth();
   const { services, state: servicesState } = useServices();
   const params = new URLSearchParams(useLocation().search);
   const initialServices = params.get("services")?.split(",").filter(Boolean) || (params.get("service") ? [params.get("service")] : []);
@@ -77,6 +80,10 @@ export default function Booking() {
     phone: "",
     notes: "",
     account: false,
+    email: "",
+    password: "",
+    passwordConfirm: "",
+    acceptTerms: false,
   });
   const [hold, setHold] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
@@ -125,6 +132,10 @@ export default function Booking() {
       };
     });
   }, [chosenServices, employeeIds, date, time]);
+  useEffect(() => {
+    if (role !== "customer") return;
+    api.get("customer/profile/").then(({ data }) => setContact((current) => ({ ...current, name: data.display_name || "", phone: data.phone || "", account: false }))).catch(() => {});
+  }, [role]);
   useEffect(() => {
     selected.forEach((serviceId) => {
       if (!employees[serviceId])
@@ -195,22 +206,31 @@ export default function Booking() {
     setError("");
     setLoading(true);
     try {
+      const accountData = contact.account ? {
+        create_account: true,
+        account_password: contact.password,
+        account_password_confirm: contact.passwordConfirm,
+        account_email: contact.email,
+        account_accept_terms: contact.acceptTerms,
+      } : {};
       const { data } = await api.post("appointments/", {
         tg_campaign: new URLSearchParams(window.location.search).get("tg_campaign"),
         customer_name: contact.name,
         customer_phone: contact.phone,
         notes: contact.notes,
-        create_account: contact.account,
-        account_password: contact.password,
+        ...accountData,
         hold_token: hold?.token,
         items: bookingItems,
       });
       setConfirmation(data);
+      if (data.account_created && data.access) applyRefreshSession(data);
       setHold(null);
       setStep(4);
     } catch (requestError) {
+      const responseData = requestError.response?.data;
+      const fieldError = responseData && Object.values(responseData).flat(Infinity).find((value) => typeof value === "string");
       setError(
-        requestError.response?.data?.detail ||
+        responseData?.detail || fieldError ||
           "ثبت رزرو انجام نشد. زمان دیگری را امتحان کنید.",
       );
     } finally {
@@ -293,6 +313,7 @@ export default function Booking() {
               date={date}
               time={time}
               hold={hold}
+              signedIn={role === "customer"}
               onBack={() => {
                 setHold(null);
                 setStep(2);
@@ -592,6 +613,7 @@ function ContactStep({
   date,
   time,
   hold,
+  signedIn,
   onBack,
   onNext,
 }) {
@@ -616,6 +638,7 @@ function ContactStep({
         نام و نام خانوادگی
         <input
           required
+          disabled={signedIn}
           value={contact.name}
           onChange={(event) =>
             setContact({ ...contact, name: event.target.value })
@@ -636,6 +659,7 @@ function ContactStep({
           placeholder="۰۹۱۲…"
           autoComplete="tel"
           inputMode="tel"
+          disabled={signedIn}
         />
       </label>
       <label>
@@ -647,6 +671,16 @@ function ContactStep({
           }
         />
       </label>
+      {!signedIn && <div className="account-offer">
+        <label className="check-label"><input type="checkbox" checked={contact.account} onChange={(event) => setContact({ ...contact, account: event.target.checked })} /> ساخت حساب مشتری همراه این رزرو</label>
+        {contact.account && <div className="account-fields">
+          <p>بعد از ثبت، مستقیماً وارد حساب می‌شوید و این نوبت را در پنل خود می‌بینید.</p>
+          <label>ایمیل بازیابی<input required type="email" autoComplete="email" value={contact.email} onChange={(event) => setContact({ ...contact, email: event.target.value })} /></label>
+          <label>رمز عبور<PasswordInput required minLength="8" autoComplete="new-password" value={contact.password} onChange={(event) => setContact({ ...contact, password: event.target.value })} /></label>
+          <label>تکرار رمز عبور<PasswordInput visibilityLabel="تکرار رمز عبور" required minLength="8" autoComplete="new-password" value={contact.passwordConfirm} onChange={(event) => setContact({ ...contact, passwordConfirm: event.target.value })} /></label>
+          <label className="check-label"><input required type="checkbox" checked={contact.acceptTerms} onChange={(event) => setContact({ ...contact, acceptTerms: event.target.checked })} /> <span>قوانین استفاده و حریم خصوصی را می‌پذیرم.</span></label>
+        </div>}
+      </div>}
       <div className="wizard-footer">
         <Back onClick={onBack} />
         <Next disabled={!hold}>بررسی اطلاعات</Next>
@@ -706,6 +740,8 @@ function Confirmation({ appointment, navigate }) {
         ))}
       </div>
       <TelegramConnect receipt={appointment.telegram_receipt} compact />
+      {appointment.account_created && <button className="button" onClick={() => navigate("/account")}>مشاهده نوبت در حساب من <span>←</span></button>}
+      {!appointment.account_created && <button className="secondary" onClick={() => navigate("/booking/manage")}>پیگیری یا مدیریت نوبت</button>}
       <button className="button" onClick={() => navigate("/")}>
         بازگشت به خانه <span>←</span>
       </button>

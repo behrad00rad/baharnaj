@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
-from salon.views import CookieRefreshView, CookieTokenView, CsrfView, PasswordResetConfirmView, PasswordResetRequestView
+from salon.views import CookieLogoutView, CookieRefreshView, CookieTokenView, CsrfView, CustomerRegistrationView, PasswordResetConfirmView, PasswordResetRequestView
 from salon.seo import robots_txt, sitemap_xml
 
 urlpatterns = [
@@ -33,6 +33,8 @@ urlpatterns = [
     path("api/v1/auth/token/", CookieTokenView.as_view()),
     path("api/v1/auth/token/refresh/", CookieRefreshView.as_view()),
     path("api/v1/auth/csrf/", CsrfView.as_view()),
+    path("api/v1/auth/register/", CustomerRegistrationView.as_view()),
+    path("api/v1/auth/logout/", CookieLogoutView.as_view()),
     path("api/v1/auth/password-reset/", PasswordResetRequestView.as_view()),
     path("api/v1/auth/password-reset/<uidb64>/<token>/", PasswordResetConfirmView.as_view()),
 ]

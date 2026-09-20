@@ -3,17 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import EmployeeApp from "./EmployeeApp";
 import { MemoryRouter } from "react-router-dom";
 
-const { get, post, patch, clearSession, disableCurrentFirebaseDevice, navigate } = vi.hoisted(() => ({
+const { get, post, patch, logoutSession, disableCurrentFirebaseDevice, navigate } = vi.hoisted(() => ({
   get: vi.fn(() => Promise.resolve({ data: [] })),
   post: vi.fn(() => Promise.resolve({ data: {} })),
   patch: vi.fn(() => Promise.resolve({ data: {} })),
-  clearSession: vi.fn(),
+  logoutSession: vi.fn(() => Promise.resolve()),
   disableCurrentFirebaseDevice: vi.fn(() => Promise.resolve()),
   navigate: vi.fn(),
 }));
 vi.mock("../shared/api", () => ({
   api: { get, post, patch },
-  clearSession,
+  logoutSession,
   toman: (value) => `${value} تومان`,
 }));
 vi.mock("../shared/firebasePush", () => ({ disableCurrentFirebaseDevice }));
@@ -176,7 +176,7 @@ describe("employee app", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "خروج از حساب" }));
     await waitFor(() => expect(disableCurrentFirebaseDevice).toHaveBeenCalled());
-    expect(clearSession).toHaveBeenCalled();
+    expect(logoutSession).toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith("/login", { replace: true });
   });
 

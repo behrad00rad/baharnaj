@@ -10,6 +10,7 @@ import { JalaliDatePicker } from "../components/DatePicker";
 import { api, toman } from "../shared/api";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BlogEditor, BlogManagement, BlogPreview } from "./AdminBlog";
+import PasswordInput from "../components/PasswordInput";
 
 const today = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Tehran",
@@ -1775,8 +1776,8 @@ function EmployeeManagement() {
                 </label>
                 <label>
                   رمز عبور
-                  <input
-                    type="password"
+                  <PasswordInput
+                    visibilityLabel="رمز عبور کارمند"
                     value={form.password || ""}
                     onChange={(event) => update("password", event.target.value)}
                   />

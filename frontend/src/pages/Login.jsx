@@ -1,22 +1,28 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../shared/api";
 import { setSession } from "../shared/auth";
 import { SEO } from "../components/SEO";
+import PasswordInput from "../components/PasswordInput";
 
-export default function Login() {
+export default function Login({ customerOnly = false }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [form, setForm] = useState({ username: "", password: "" });
   const [error, setError] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const submit = async (event) => {
     event.preventDefault();
     setError("");
     try {
       await api.get("auth/csrf/");
       const { data } = await api.post("auth/token/", form);
-      setSession(data.access, data.role);
       const role = data.role;
+      if (customerOnly && role !== "customer") {
+        await api.post("auth/logout/").catch(() => {});
+        setError("این صفحه برای حساب مشتری است. برای حساب کارکنان از ورود کارکنان استفاده کنید.");
+        return;
+      }
+      setSession(data.access, data.role);
       navigate(role === "customer" ? "/account" : role === "employee" ? "/employee" : "/admin", { replace: true });
     } catch (requestError) {
       setError(
@@ -27,7 +33,7 @@ export default function Login() {
   };
   return (
     <>
-    <SEO title="ورود کارکنان | بهارناژ" description="ورود به پنل داخلی بهارناژ." canonicalPath="/login" noindex />
+    <SEO title={customerOnly ? "ورود مشتری | بهارناژ" : "ورود کارکنان | بهارناژ"} description="ورود امن به حساب بهارناژ." canonicalPath={customerOnly ? "/account/login" : "/login"} noindex />
     <section className="login-page container">
       <div>
         <p className="eyebrow">ورود به بهارناژ</p>
@@ -37,7 +43,7 @@ export default function Login() {
           <em>دوباره.</em>
         </h1>
         <p>
-          برای ورود به پنل مدیریت یا پنل متخصص، اطلاعات حساب خود را وارد کنید.
+          {customerOnly ? "برای مدیریت نوبت‌ها و اطلاعات خود وارد شوید." : "برای ورود به پنل مدیریت یا پنل متخصص، اطلاعات حساب خود را وارد کنید."}
         </p>
       </div>
       <form onSubmit={submit}>
@@ -54,31 +60,21 @@ export default function Login() {
         </label>
         <label>
           رمز عبور
-          <div className="password-field">
-            <input
+          <PasswordInput
               required
-              type={showPassword ? "text" : "password"}
               value={form.password}
               onChange={(event) =>
                 setForm({ ...form, password: event.target.value })
               }
               autoComplete="current-password"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((current) => !current)}
-              aria-label={
-                showPassword ? "مخفی کردن رمز عبور" : "نمایش رمز عبور"
-              }
-            >
-              {showPassword ? "مخفی" : "نمایش"}
-            </button>
-          </div>
+          />
         </label>
         {error && <p className="error">{error}</p>}
+        {location.state?.reset && <p role="status">رمز عبور تغییر کرد؛ اکنون وارد شوید.</p>}
         <button className="button" type="submit">
           ورود <span>←</span>
         </button>
+        {customerOnly && <><Link to="/account/forgot-password">رمز عبور را فراموش کرده‌اید؟</Link><p>حساب ندارید؟ <Link to="/account/signup">ساخت حساب مشتری</Link></p></>}
       </form>
     </section>
     </>

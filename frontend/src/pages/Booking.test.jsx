@@ -125,6 +125,10 @@ describe("booking wizard", () => {
         expect.objectContaining({ items: heldItems }),
       ),
     );
+    const appointmentPayload = post.mock.calls.find(([url]) => url === "appointments/")[1];
+    expect(appointmentPayload).not.toHaveProperty("account_password");
+    expect(appointmentPayload).not.toHaveProperty("account_password_confirm");
+    expect(appointmentPayload).not.toHaveProperty("account_email");
     expect(await screen.findByRole("heading", {name: status === "confirmed" ? "نوبت شما تأیید شد." : "درخواست نوبت دریافت شد."})).toBeInTheDocument();
   });
 });

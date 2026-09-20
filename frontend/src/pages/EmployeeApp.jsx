@@ -3,10 +3,11 @@ import { formatServicePrice } from "../shared/pricing";
 import ItemPricing from "../components/ItemPricing";
 import { useEffect, useState } from "react";
 import { Link, Route, Routes, useNavigate, useLocation } from "react-router-dom";
-import { api, clearSession, toman } from "../shared/api";
+import { api, logoutSession, toman } from "../shared/api";
 import { JalaliDatePicker } from "../components/DatePicker";
 import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import PasswordInput from "../components/PasswordInput";
 
 const unwrap = (data) => data?.results || data || [];
 const statusNames = {
@@ -1040,7 +1041,7 @@ function Profile() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const logout = async () => {
     await disableCurrentFirebaseDevice().catch(() => {});
-    clearSession();
+    await logoutSession();
     navigate("/login", { replace: true });
   };
   const save = async (event) => {
@@ -1138,8 +1139,8 @@ function Profile() {
         <form className="employee-form" onSubmit={changePassword}>
           <label>
             رمز عبور فعلی
-            <input
-              type="password"
+            <PasswordInput
+              visibilityLabel="رمز عبور فعلی"
               autoComplete="current-password"
               value={passwords.current_password}
               onChange={(event) =>
@@ -1153,8 +1154,8 @@ function Profile() {
           </label>
           <label>
             رمز عبور جدید
-            <input
-              type="password"
+            <PasswordInput
+              visibilityLabel="رمز عبور جدید"
               autoComplete="new-password"
               value={passwords.new_password}
               onChange={(event) =>
@@ -1165,8 +1166,8 @@ function Profile() {
           </label>
           <label>
             تکرار رمز عبور جدید
-            <input
-              type="password"
+            <PasswordInput
+              visibilityLabel="تکرار رمز عبور جدید"
               autoComplete="new-password"
               value={passwords.new_password_confirm}
               onChange={(event) =>

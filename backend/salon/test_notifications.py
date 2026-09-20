@@ -108,6 +108,7 @@ class NotificationTests(TestCase):
         from .notifications import notify_appointment_rescheduled
         notify_appointment_rescheduled(self.appointment, actor=AnonymousUser())
         self.assertTrue(Notification.objects.filter(recipient=self.admin, type="appointment_rescheduled").exists())
+        self.assertTrue(Notification.objects.filter(recipient=self.appointment.customer.user, type="appointment_rescheduled").exists())
 
     def test_multiple_devices_read_all_and_scoped_disable(self):
         from .models import FirebaseDevice

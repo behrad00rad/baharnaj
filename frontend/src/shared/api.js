@@ -42,5 +42,12 @@ api.interceptors.response.use((response) => response, async (error) => {
 export const clearSession = () => {
   clearSessionState()
 }
+export const logoutSession = async () => {
+  try {
+    await api.post('auth/logout/')
+  } finally {
+    clearSessionState()
+  }
+}
 export const toman = (value) => `${new Intl.NumberFormat('fa-IR').format(value || 0)} تومان`
 export const getTokenRole = () => null

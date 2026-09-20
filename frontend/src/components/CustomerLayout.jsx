@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../shared/auth";
-import { clearSession } from "../shared/api";
+import { logoutSession } from "../shared/api";
 import { useTheme } from "../shared/theme";
 import { SEO } from "./SEO";
 import "./Customer.css";
@@ -18,9 +18,9 @@ export default function CustomerLayout() {
   const { role } = useAuth();
   const { theme, toggleTheme } = useTheme();
   if (role !== "customer") {
-    return <div className="customer-denied" dir="rtl"><strong>ورود مشتری لازم است.</strong><button onClick={() => navigate("/login")}>بازگشت به ورود</button></div>;
+    return <div className="customer-denied" dir="rtl"><strong>ورود مشتری لازم است.</strong><button onClick={() => navigate("/account/login")}>بازگشت به ورود</button></div>;
   }
-  const logout = () => { clearSession(); navigate("/login", { replace: true }); };
+  const logout = async () => { await logoutSession(); navigate("/account/login", { replace: true }); };
   return <>
     <SEO title="حساب من | بهارناژ" description="مدیریت نوبت‌ها و اطلاعات حساب مشتری." noindex />
     <div className="customer-app" dir="rtl">

@@ -4,7 +4,9 @@ from datetime import date as date_type, datetime, time, timedelta
 import json
 
 from django.conf import settings
+from django.contrib.auth import password_validation
 from django.contrib.auth.tokens import default_token_generator
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, When
@@ -19,12 +21,25 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from .models import AdminActionLog, Appointment, AppointmentItem, AppointmentStatusHistory, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerAccountDeletionRequest, CustomerCommunicationPreference, CustomerMutationRequest, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsCustomer, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, normalize_phone, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, CustomerAppointmentSerializer, CustomerDeletionRequestSerializer, CustomerPreferenceSerializer, CustomerProfileSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, CustomerAppointmentSerializer, CustomerDeletionRequestSerializer, CustomerPasswordChangeSerializer, CustomerPreferenceSerializer, CustomerProfileSerializer, CustomerRegistrationSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+
+
+def set_refresh_cookie(response, refresh):
+    response.set_cookie(
+        settings.REFRESH_COOKIE_NAME,
+        str(refresh),
+        httponly=True,
+        secure=settings.REFRESH_COOKIE_SECURE,
+        samesite=settings.REFRESH_COOKIE_SAMESITE,
+        max_age=7 * 24 * 3600,
+    )
+    return response
 
 
 def public_blog_posts():
@@ -558,7 +573,14 @@ class AppointmentCreateView(generics.CreateAPIView):
             import logging
             logging.getLogger(__name__).warning("Optional Telegram receipt unavailable (%s)", type(error).__name__)
             data["telegram_receipt"] = None
-        return Response(data, status=status.HTTP_201_CREATED)
+        response = Response(data, status=status.HTTP_201_CREATED)
+        if request.data.get("create_account") and not request.user.is_authenticated:
+            user = appointment.customer.user
+            refresh = RefreshToken.for_user(user)
+            data.update({"account_created": True, "access": str(refresh.access_token), "role": user.role})
+            response.data = data
+            set_refresh_cookie(response, refresh)
+        return response
 
 
 class BookingHoldView(generics.CreateAPIView):
@@ -607,6 +629,22 @@ class CustomerBookingView(generics.GenericAPIView):
         appointment = self.find(request)
         if not appointment:
             return Response({"detail": "رزرو پیدا نشد."}, status=status.HTTP_404_NOT_FOUND)
+        data = AppointmentSerializer(appointment, context={"request": request}).data
+        data["customer_capabilities"] = CustomerAppointmentSerializer(appointment, context={"request": request}).data["capabilities"]
+        return Response(data)
+
+    @transaction.atomic
+    def patch(self, request):
+        appointment = self.find(request)
+        if not appointment:
+            return Response({"detail": "رزرو پیدا نشد."}, status=status.HTTP_404_NOT_FOUND)
+        if not getattr(settings, "CUSTOMER_APPOINTMENT_POLICY_CONFIGURED", False):
+            return Response({"code": "policy_not_configured", "detail": "برای تغییر یا لغو این نوبت با سالن تماس بگیرید."}, status=status.HTTP_409_CONFLICT)
+        if appointment.status not in ("pending", "confirmed") or not request.data.get("cancel"):
+            return Response({"detail": "این نوبت قابل لغو نیست."}, status=status.HTTP_409_CONFLICT)
+        appointment.set_status("cancelled", reason=str(request.data.get("reason", "لغو توسط مشتری"))[:500])
+        from .notifications import notify_appointment_cancelled
+        notify_appointment_cancelled(appointment)
         return Response(AppointmentSerializer(appointment, context={"request": request}).data)
 
 
@@ -618,7 +656,7 @@ class CustomerBaseView:
         return profile
 
     def customer_appointments(self):
-        return Appointment.objects.filter(customer=self.customer_profile(), is_deleted=False).select_related("customer__user").prefetch_related("items__service", "items__employee__user", "payments", "status_history")
+        return Appointment.objects.filter(customer=self.customer_profile(), is_deleted=False).select_related("customer__user").prefetch_related("items__service", "items__employee__user", "payments__refunds", "status_history")
 
 
 class CustomerProfileView(CustomerBaseView, generics.RetrieveUpdateAPIView):
@@ -638,6 +676,16 @@ class CustomerPreferencesView(CustomerBaseView, generics.RetrieveUpdateAPIView):
     def perform_update(self, serializer):
         preference = serializer.save(consent_source="customer_dashboard", consent_version="1", consented_at=timezone.now() if serializer.validated_data.get("promotional_messages") else None, withdrawn_at=None if serializer.validated_data.get("promotional_messages") else timezone.now())
         return preference
+
+
+class CustomerPasswordChangeView(CustomerBaseView, generics.GenericAPIView):
+    serializer_class = CustomerPasswordChangeSerializer
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"detail": "رمز عبور تغییر کرد."})
 
 
 class CustomerDashboardView(CustomerBaseView, generics.GenericAPIView):
@@ -791,26 +839,6 @@ class CustomerDeletionRequestView(CustomerBaseView, generics.GenericAPIView):
         Notification.objects.create(recipient=request.user, type="customer_account", title="درخواست حذف حساب ثبت شد", message="درخواست شما برای بررسی سالن ثبت شد.", target_url="/account/profile/")
         return Response(self.get_serializer(request_obj).data, status=status.HTTP_201_CREATED)
 
-    def patch(self, request):
-        appointment = self.find(request)
-        if not appointment:
-            return Response({"detail": "رزرو پیدا نشد."}, status=status.HTTP_404_NOT_FOUND)
-        if request.data.get("date") or request.data.get("start_time"):
-            item = appointment.items.first()
-            item.date = request.data.get("date", item.date)
-            item.start_time = request.data.get("start_time", item.start_time)
-            item.end_time = request.data.get("end_time", item.end_time)
-            item.full_clean()
-            item.save(update_fields=("date", "start_time", "end_time", "updated_at"))
-            from .notifications import notify_appointment_rescheduled
-            notify_appointment_rescheduled(appointment, actor=request.user)
-        if request.data.get("cancel"):
-            appointment.set_status("cancelled", reason=request.data.get("reason", "لغو توسط مشتری"))
-            from .notifications import notify_appointment_cancelled
-            notify_appointment_cancelled(appointment)
-        return Response(AppointmentSerializer(appointment, context={"request": request}).data)
-
-
 class CustomerHistoryView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = AppointmentSerializer
@@ -930,6 +958,9 @@ class AdminAppointmentViewSet(AdminModelViewSet):
         if status_value == "cancelled":
             from .notifications import notify_appointment_cancelled
             notify_appointment_cancelled(appointment, actor=self.request.user)
+        else:
+            from .notifications import notify_customer_status
+            notify_customer_status(appointment)
         appointment.refresh_from_db()
         serializer.instance = appointment
         AdminActionLog.objects.create(actor=self.request.user, action="update", model_name="Appointment", object_id=str(appointment.pk), details={"fields": ["status"]})
@@ -1436,7 +1467,9 @@ class CookieTokenView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         username = request.data.get("username", "")
         normalized = normalize_phone(username)
-        user = User.objects.filter(Q(username=username) | Q(phone=normalized) | Q(phone=username)).first()
+        user = User.objects.filter(username=username).first() or User.objects.filter(username=normalized).first()
+        if not user:
+            user = next((candidate for candidate in User.objects.filter(Q(phone=normalized) | Q(phone=username)).order_by("pk") if candidate.has_usable_password()), None)
         if user and is_locked(user):
             return Response({"detail": "حساب موقتاً قفل شده است."}, status=status.HTTP_429_TOO_MANY_REQUESTS)
         credentials = request.data.copy()
@@ -1454,7 +1487,7 @@ class CookieTokenView(TokenObtainPairView):
             return Response({"detail": "این حساب در حال حاضر فعال نیست."}, status=status.HTTP_403_FORBIDDEN)
         clear_failed_logins(user, username, request.META.get("REMOTE_ADDR"))
         response = Response({"access": serializer.validated_data["access"], "role": user.role})
-        response.set_cookie(settings.REFRESH_COOKIE_NAME, serializer.validated_data["refresh"], httponly=True, secure=settings.REFRESH_COOKIE_SECURE, samesite=settings.REFRESH_COOKIE_SAMESITE, max_age=7 * 24 * 3600)
+        set_refresh_cookie(response, serializer.validated_data["refresh"])
         response["X-CSRFToken"] = get_token(request)
         return response
 
@@ -1485,7 +1518,37 @@ class CookieRefreshView(TokenRefreshView):
             return self.invalid_session_response()
         response = Response({"access": token, "role": role})
         if "refresh" in serializer.validated_data:
-            response.set_cookie(settings.REFRESH_COOKIE_NAME, serializer.validated_data["refresh"], httponly=True, secure=settings.REFRESH_COOKIE_SECURE, samesite=settings.REFRESH_COOKIE_SAMESITE, max_age=7 * 24 * 3600)
+            set_refresh_cookie(response, serializer.validated_data["refresh"])
+        return response
+
+
+class CustomerRegistrationView(generics.GenericAPIView):
+    permission_classes = (AllowAny,)
+    throttle_scope = "login"
+    serializer_class = CustomerRegistrationSerializer
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        refresh = RefreshToken.for_user(user)
+        response = Response({"access": str(refresh.access_token), "role": user.role}, status=status.HTTP_201_CREATED)
+        set_refresh_cookie(response, refresh)
+        return response
+
+
+class CookieLogoutView(generics.GenericAPIView):
+    permission_classes = (AllowAny,)
+
+    def post(self, request):
+        refresh = request.COOKIES.get(settings.REFRESH_COOKIE_NAME)
+        if refresh:
+            try:
+                RefreshToken(refresh).blacklist()
+            except TokenError:
+                pass
+        response = Response(status=status.HTTP_204_NO_CONTENT)
+        response.delete_cookie(settings.REFRESH_COOKIE_NAME, samesite=settings.REFRESH_COOKIE_SAMESITE)
         return response
 
 
@@ -1507,7 +1570,8 @@ class PasswordResetRequestView(generics.GenericAPIView):
             from django.utils.http import urlsafe_base64_encode
             uid = urlsafe_base64_encode(force_bytes(user.pk))
             token = default_token_generator.make_token(user)
-            send_mail("Baharnaj password reset", f"Reset token: {uid}:{token}", settings.DEFAULT_FROM_EMAIL, [user.email])
+            reset_url = f"{settings.SITE_URL}/account/reset-password/{uid}/{token}"
+            send_mail("بازیابی رمز عبور بهارناژ", f"برای انتخاب رمز عبور جدید از این لینک استفاده کنید:\n{reset_url}", settings.DEFAULT_FROM_EMAIL, [user.email])
         return Response({"detail": "اگر حسابی با این ایمیل وجود داشته باشد، لینک بازیابی ارسال می‌شود."})
 
 
@@ -1521,8 +1585,12 @@ class PasswordResetConfirmView(generics.GenericAPIView):
         except (ValueError, TypeError, User.DoesNotExist):
             user = None
         password = request.data.get("new_password", "")
-        if not user or not default_token_generator.check_token(user, token) or len(password) < 8:
+        if not user or not default_token_generator.check_token(user, token):
             return Response({"detail": "لینک بازیابی یا رمز عبور معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            password_validation.validate_password(password, user)
+        except DjangoValidationError as error:
+            return Response({"new_password": list(error.messages)}, status=status.HTTP_400_BAD_REQUEST)
         user.set_password(password)
         user.save(update_fields=("password",))
         return Response({"detail": "رمز عبور تغییر کرد."})

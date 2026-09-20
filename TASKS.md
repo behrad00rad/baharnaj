@@ -170,6 +170,38 @@ See [verification and blockers](deploy/VERIFICATION.md) and [operator runbook](d
 
 **MVP recommendation:** launch only profile + upcoming appointment + history + cancel/reschedule + notification preferences. Add loyalty and online payment later.
 
+### Customer-account implementation status (2026-09-20)
+
+Completed in the current working tree:
+
+- [x] Add dedicated customer sign-up, login, forgot-password, and reset-password routes.
+- [x] Add a throttled customer registration API with normalized Iranian phone numbers, email recovery, terms acceptance, password confirmation, and Django password validation.
+- [x] Let a guest create an account during booking and sign in automatically after the booking succeeds.
+- [x] Validate booking names, phones, account email, password confirmation, and terms on the server rather than trusting browser validation.
+- [x] Prefer the explicit phone username/login-capable account when legacy guest users share a phone number.
+- [x] Add server logout, refresh-token blacklisting, refresh-cookie deletion, and connect all three panel logout actions.
+- [x] Restore guest booking cancellation to the correct `/customer/booking/` endpoint and respect the policy gate.
+- [x] Show the customer account link in public navigation and provide booking-confirmation links to the account or guest management page.
+- [x] Add customer password change, neighborhood editing, payment/refund summaries, save feedback, notification refresh, and a rescheduling slot picker.
+- [x] Refresh appointment cards after mutations and show a direct salon-contact action when self-service policy is unavailable.
+- [x] Create customer notifications for staff-driven status, rescheduling, and cancellation changes.
+- [x] Add focused backend tests for registration, duplicate legacy phones, password change, logout, and guest cancellation, plus frontend customer-auth tests.
+
+Required before enabling customer accounts in production:
+
+- [ ] Audit existing users grouped by normalized phone; classify login accounts versus legacy guest records and resolve username/email conflicts.
+- [ ] Design and test a verified claim/merge workflow for historical guest bookings. Never merge records based only on a typed phone number.
+- [ ] Add a database-backed canonical identity constraint that permits the chosen guest model while guaranteeing one active login account per phone.
+- [ ] Record terms/privacy acceptance version, timestamp, and source for standalone and booking-time registration.
+- [ ] Configure and test production SMTP, branded email templates, expiry messaging, and delivery-failure monitoring.
+- [ ] Choose a dependable Iranian SMS/OTP provider before phone verification, verified phone changes, or phone-based password recovery.
+- [ ] Approve cancellation/rescheduling deadlines and fees, expose them in settings, then set `CUSTOMER_APPOINTMENT_POLICY_CONFIGURED=true`.
+- [ ] Add server-side enforcement for the approved cancellation/rescheduling deadline and fee rules; the current gate is intentionally all-or-nothing.
+- [ ] Add an admin workflow for reviewing and completing account-deletion requests.
+- [ ] Add end-to-end coverage for booking-time account creation, standalone registration, login/logout persistence, password recovery email, rescheduling conflicts, notifications, and legacy account claiming.
+- [ ] Run the new Simple JWT blacklist migrations during deployment and verify refresh-token rotation/revocation in staging.
+- [ ] Perform a Persian copy, accessibility, mobile-device, slow-network, and session-expiry review of all customer account screens.
+
 ## Phase 7 — Admin and employee workflow verification
 
 - [ ] Verify employee profile photos render consistently across public and internal panels.

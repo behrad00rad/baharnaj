@@ -27,9 +27,9 @@ export function PublicLayout({ children }) {
   const { accessToken, role } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const panelPath =
-    role === "employee" ? "/employee" : role === "admin" ? "/admin" : null;
+    role === "customer" ? "/account" : role === "employee" ? "/employee" : role === "admin" ? "/admin" : null;
   const panelLabel =
-    role === "employee" ? "پنل کارمند" : role === "admin" ? "پنل مدیریت" : "";
+    role === "customer" ? "حساب من" : role === "employee" ? "پنل کارمند" : role === "admin" ? "پنل مدیریت" : "";
   const closeMenu = () => setMenuOpen(false);
   useEffect(() => {
     const resize = () => { if (window.innerWidth > 760) setMenuPath(null); };
@@ -71,8 +71,8 @@ export function PublicLayout({ children }) {
                 {panelLabel}
               </Link>
             ) : (
-              <Link className="panel-link" to="/login">
-                ورود کارکنان
+              <Link className="panel-link" to="/account/login">
+                ورود
               </Link>
             )}
             <Link className="nav-book" to="/book">
@@ -127,8 +127,8 @@ export function PublicLayout({ children }) {
                 {panelLabel}
               </Link>
             ) : (
-              <Link to="/login" onClick={closeMenu}>
-                ورود کارکنان
+              <Link to="/account/login" onClick={closeMenu}>
+                ورود
               </Link>
             )}
             <Link to="/book" onClick={closeMenu}>

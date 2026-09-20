@@ -63,6 +63,9 @@ def notify_appointment_rescheduled(appointment, actor=None):
 
     if not actor or getattr(actor, "role", None) != "admin":
         notify_users(admin_users(), type="appointment_rescheduled", title="تغییر زمان نوبت", message="زمان یک نوبت تغییر کرد.", target_url=f"/admin/appointments?appointment={appointment.pk}", appointment=appointment)
+    customer = appointment.customer.user
+    if not actor or customer.pk != getattr(actor, "pk", None):
+        notify_users([customer], type="appointment_rescheduled", title="زمان نوبت تغییر کرد", message=f"زمان نوبت شما به {when} تغییر کرد.", target_url=f"/account/appointments/{appointment.pk}", appointment=appointment)
 
 
 def notify_appointment_cancelled(appointment, actor=None, item=None):
@@ -73,12 +76,31 @@ def notify_appointment_cancelled(appointment, actor=None, item=None):
         employee = item.employee.user
         if not actor or employee.pk != actor.pk:
             notify_users([employee], type="appointment_cancelled", title="لغو سرویس نوبت", message="یک سرویس اختصاص‌یافته به شما لغو شد.", target_url=f"/employee/calendar?appointment={appointment.pk}", appointment=appointment, dedupe_key=f"appointment-item:{item.pk}:cancelled")
+        customer = appointment.customer.user
+        if not actor or customer.pk != getattr(actor, "pk", None):
+            notify_users([customer], type="appointment_cancelled", title="تغییر در نوبت", message="یکی از خدمات نوبت شما لغو شد.", target_url=f"/account/appointments/{appointment.pk}", appointment=appointment, dedupe_key=f"appointment-item:{item.pk}:customer-cancelled")
         return
     recipients = [user for user in appointment_employee_users(appointment) if not actor or user.pk != actor.pk]
     notify_users(recipients, type="appointment_cancelled", title="لغو نوبت", message="یک نوبت اختصاص‌یافته به شما لغو شد.", target_url=f"/employee/calendar?appointment={appointment.pk}", appointment=appointment, dedupe_key=f"appointment:{appointment.pk}:cancelled")
 
     if not actor or getattr(actor, "role", None) != "admin":
         notify_users(admin_users(), type="appointment_cancelled", title="لغو نوبت", message="یک نوبت لغو شد.", target_url=f"/admin/appointments?appointment={appointment.pk}", appointment=appointment, dedupe_key=f"appointment:{appointment.pk}:admin-cancelled")
+    customer = appointment.customer.user
+    if not actor or customer.pk != getattr(actor, "pk", None):
+        notify_users([customer], type="appointment_cancelled", title="نوبت لغو شد", message="نوبت شما لغو شد.", target_url=f"/account/appointments/{appointment.pk}", appointment=appointment, dedupe_key=f"appointment:{appointment.pk}:customer-cancelled")
+
+
+def notify_customer_status(appointment):
+    labels = {"pending": "در انتظار تأیید", "confirmed": "تأیید شده", "completed": "انجام شده", "cancelled": "لغو شده"}
+    notify_users(
+        [appointment.customer.user],
+        type="appointment_updated",
+        title="وضعیت نوبت به‌روزرسانی شد",
+        message=f"وضعیت نوبت شما: {labels.get(appointment.status, appointment.status)}.",
+        target_url=f"/account/appointments/{appointment.pk}",
+        appointment=appointment,
+        dedupe_key=f"appointment:{appointment.pk}:customer-status:{appointment.status}",
+    )
 
 
 def notify_payment_reported(payment):
