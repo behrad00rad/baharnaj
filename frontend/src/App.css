@@ -13,6 +13,8 @@
 .button { display:inline-flex; align-items:center; justify-content:center; gap:28px; min-height:54px; padding:14px 24px; border:1px solid var(--ink); border-radius:8px; background:var(--color-button-primary-bg); color:var(--color-button-primary-text); font-size: var(--text-small); font-weight:600; cursor:pointer; transition:background .2s,color .2s,transform .2s; }
 .button:hover { background:var(--clay); border-color:var(--clay); transform:translateY(-2px); }
 .button:disabled { opacity:.42; cursor:not-allowed; transform:none; }
+.button-secondary { background:transparent; color:var(--ink); }
+.button-secondary:hover { background:var(--paper-2); border-color:var(--ink); color:var(--ink); }
 .button-light { background:var(--acid); border-color:var(--acid); color:var(--ink); }
 .button-light:hover { background:var(--paper); border-color:var(--paper); color:var(--ink); }
 .text-link { display:inline-flex; align-items:center; gap:12px; width:max-content; border-bottom:1px solid currentColor; padding-bottom:5px; color:inherit; font-size: var(--text-small); font-weight:600; }

@@ -750,7 +750,7 @@ function Confirmation({ appointment, navigate }) {
       </div>
       <TelegramConnect receipt={appointment.telegram_receipt} compact />
       {appointment.account_created && <button className="button" onClick={() => navigate("/account")}>مشاهده نوبت در حساب من <span>←</span></button>}
-      {!appointment.account_created && <button className="secondary" onClick={() => navigate("/booking/manage")}>پیگیری یا مدیریت نوبت</button>}
+      {!appointment.account_created && <button className="button button-secondary" onClick={() => navigate("/booking/manage")}>پیگیری یا مدیریت نوبت</button>}
       <button className="button" onClick={() => navigate("/")}>
         بازگشت به خانه <span>←</span>
       </button>

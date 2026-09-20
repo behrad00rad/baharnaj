@@ -79,9 +79,6 @@ export function PublicLayout({ children }) {
             <Link className="nav-book" to="/book">
               رزرو نوبت<span>←</span>
             </Link>
-            <Link className="nav-track" to="/booking/manage">
-              پیگیری نوبت
-            </Link>
           </div>
           <button
             ref={menuButtonRef}
