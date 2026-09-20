@@ -1042,7 +1042,7 @@ function Profile() {
   const logout = async () => {
     await disableCurrentFirebaseDevice().catch(() => {});
     await logoutSession();
-    navigate("/login", { replace: true });
+    navigate("/staff/login", { replace: true });
   };
   const save = async (event) => {
     event.preventDefault();

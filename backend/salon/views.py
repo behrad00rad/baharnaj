@@ -694,8 +694,8 @@ class CustomerDashboardView(CustomerBaseView, generics.GenericAPIView):
     def get(self, request):
         appointments = self.customer_appointments().order_by("items__date", "items__start_time", "pk")
         upcoming = appointments.filter(status__in=("pending", "confirmed"), items__date__gte=timezone.localdate()).distinct().first()
-        recent = appointments.filter(status__in=("completed", "cancelled")).order_by("-items__date", "-pk")[:3]
-        return Response({"customer": CustomerProfileSerializer(self.customer_profile(), context={"request": request}).data, "next_appointment": CustomerAppointmentSerializer(upcoming, context={"request": request}).data if upcoming else None, "unread_notification_count": Notification.objects.filter(recipient=request.user, is_read=False).count(), "upcoming_count": appointments.filter(status__in=("pending", "confirmed"), items__date__gte=timezone.localdate()).distinct().count(), "recent_history_count": len(recent)})
+        history_count = appointments.filter(status__in=("completed", "cancelled")).distinct().count()
+        return Response({"customer": CustomerProfileSerializer(self.customer_profile(), context={"request": request}).data, "next_appointment": CustomerAppointmentSerializer(upcoming, context={"request": request}).data if upcoming else None, "unread_notification_count": Notification.objects.filter(recipient=request.user, is_read=False).count(), "upcoming_count": appointments.filter(status__in=("pending", "confirmed"), items__date__gte=timezone.localdate()).distinct().count(), "recent_history_count": history_count})
 
 
 class CustomerPagination(PageNumberPagination):
@@ -797,6 +797,7 @@ class CustomerAppointmentMutationView(CustomerBaseView, generics.GenericAPIView)
 class CustomerNotificationViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = (IsCustomer,)
     serializer_class = NotificationSerializer
+    pagination_class = CustomerPagination
 
     def get_queryset(self):
         return Notification.objects.filter(recipient=self.request.user).order_by("-created_at")

@@ -23,7 +23,7 @@ export default function EmployeeLayout() {
     return (
       <div className="employee-denied" dir="rtl">
         <strong>دسترسی متخصص لازم است.</strong>
-        <button onClick={() => navigate("/login")}>بازگشت به ورود</button>
+        <button onClick={() => navigate("/staff/login")}>بازگشت به ورود کارکنان</button>
       </div>
     );
   return (

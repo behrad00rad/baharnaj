@@ -75,6 +75,7 @@ export default function Login({ customerOnly = false }) {
           ورود <span>←</span>
         </button>
         {customerOnly && <><Link to="/account/forgot-password">رمز عبور را فراموش کرده‌اید؟</Link><p>حساب ندارید؟ <Link to="/account/signup">ساخت حساب مشتری</Link></p></>}
+        <Link className="login-switch" to={customerOnly ? "/staff/login" : "/account/login"}>{customerOnly ? "ورود کارکنان" : "ورود به حساب مشتری"}</Link>
       </form>
     </section>
     </>

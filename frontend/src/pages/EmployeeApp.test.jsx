@@ -177,7 +177,7 @@ describe("employee app", () => {
     fireEvent.click(await screen.findByRole("button", { name: "خروج از حساب" }));
     await waitFor(() => expect(disableCurrentFirebaseDevice).toHaveBeenCalled());
     expect(logoutSession).toHaveBeenCalled();
-    expect(navigate).toHaveBeenCalledWith("/login", { replace: true });
+    expect(navigate).toHaveBeenCalledWith("/staff/login", { replace: true });
   });
 
   it("submits the employee password change form", async () => {

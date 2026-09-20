@@ -1,0 +1,306 @@
+The core system is functional, but it is not “absolutely done” yet. Excluding deployment, Telegram, and SMS, I found several real product gaps and a larger UX-polish backlog.
+
+## Implementation progress
+
+- [x] Staff login discovery and login UX.
+- [x] Customer-dashboard redesign.
+- [x] Customer correctness fixes: full history count, pagination, payment labels, notification navigation, book-again specialist preservation, and rescheduling feedback/Jalali selection.
+- [ ] Continue with the cancellation/rescheduling policy engine.
+
+The first three items above have now been implemented; the remaining sections retain the original audit notes.
+
+## Current health
+
+- Frontend: 72 tests pass.
+- Frontend production build passes.
+- Backend core salon suite: 93 tests pass.
+- Django checks and migration-drift checks pass.
+- Lint succeeds but reports 13 warnings.
+- The full backend suite has one Telegram-only container fixture failure, which is outside the requested scope.
+- Current end-to-end coverage is mostly mocked and does not prove a complete real booking day.
+- [TASKS.md](/workspaces/baharnaj/TASKS.md) is substantially out of date: many completed customer features are still unchecked.
+
+## Must-fix product problems
+
+### 1. Make employee/admin login discoverable
+
+The staff login exists at `/login`, but every public “ورود” button currently links directly to customer login in [PublicLayout.jsx](/workspaces/baharnaj/frontend/src/components/PublicLayout.jsx:69).
+
+Recommended design:
+
+- “ورود” opens a small account-choice screen:
+  - حساب مشتری
+  - ورود کارکنان
+- Add `/staff/login` as the clear staff URL.
+- Add a discreet “ورود کارکنان” link in the footer.
+- Show the appropriate panel link when already authenticated.
+- Put employee logout in the header or navigation, not only inside Profile.
+
+This directly explains the second item in [todo.txt](/workspaces/baharnaj/todo.txt:2).
+
+### 2. Redesign the customer dashboard
+
+The customer dashboard works, but it currently looks like a thin administrative panel. Most of [CustomerApp.jsx](/workspaces/baharnaj/frontend/src/pages/CustomerApp.jsx:48) is compressed into basic cards with little hierarchy.
+
+The improved dashboard should have:
+
+- A prominent “next appointment” hero card.
+- Persian date, remaining time, specialist photo, services, duration and clear status.
+- One primary action per state: manage, contact salon, or book again.
+- A mobile bottom navigation rather than a horizontally scrolling menu.
+- Proper colored status chips for pending, confirmed, completed and cancelled.
+- A timeline in appointment details.
+- Better loading skeletons and retry buttons.
+- A notification badge in the navigation.
+- Separate “Personal information,” “Password and security,” “Preferences,” and “Delete account” sections.
+- The deletion controls inside a collapsed danger zone.
+- Confirmation dialogs instead of browser `window.confirm`.
+- Consistent rounded surfaces, spacing and typography matching the public website.
+- A proper receipt layout suitable for printing or saving.
+
+This should be treated as a redesign, not a few CSS tweaks.
+
+### 3. Complete cancellation and rescheduling rules
+
+Customer cancellation and rescheduling are still controlled by one global on/off flag in [views.py](/workspaces/baharnaj/backend/salon/views.py:762). There are no actual deadlines, fees, service exceptions or salon-configurable rules.
+
+Required:
+
+- Configurable cancellation deadline.
+- Configurable rescheduling deadline.
+- Optional cancellation/no-show fee.
+- Different rules by service if needed.
+- Server-side enforcement based on Tehran time.
+- Clear explanation before confirmation.
+- Show the exact deadline on each appointment.
+- Record the customer’s reason.
+- Audit every mutation.
+- Make the same policy apply to guest booking management.
+
+Until this exists, customer self-service is intentionally disabled.
+
+### 4. Repair customer identity integrity
+
+`User.phone` is not unique, partly because historical guest bookings can create multiple records. This creates long-term ambiguity.
+
+Required:
+
+- Normalize all existing Iranian phone numbers.
+- Distinguish login accounts from guest-only records.
+- Guarantee one active login-capable customer per normalized phone.
+- Build a verified historical-booking claim/merge process.
+- Never attach historical bookings based only on a typed phone number.
+- Provide an admin conflict-resolution screen.
+- Test duplicate phone, email and legacy record cases.
+
+This is the most important backend task before treating customer accounts as mature.
+
+### 5. Store legal acceptance properly
+
+Signup currently validates `accept_terms`, but then discards it. The system needs to store:
+
+- Terms version.
+- Privacy-policy version.
+- Acceptance timestamp.
+- Source: standalone signup or booking.
+- IP/user-agent if legally appropriate.
+- History when policies are updated.
+
+Marketing consent already has some audit fields, but account terms acceptance does not.
+
+### 6. Build the account-deletion admin workflow
+
+The customer can submit a request and the model supports statuses, but there is no admin workflow to process it. See [models.py](/workspaces/baharnaj/backend/salon/models.py:143).
+
+Add:
+
+- Admin deletion-request queue.
+- Pending/approved/rejected/completed states.
+- Processing notes and confirmation.
+- Defined anonymization rules.
+- Protection of required financial records.
+- Customer-visible request status.
+- Ability for the customer to cancel a still-pending request.
+- Audit log for every decision.
+
+### 7. Fix the admin customer list
+
+The “مدیریت مشتریان” screen calls `admin/users/`, whose backend queryset contains every user, including employees and admins:
+
+- Frontend: [AdminApp.jsx](/workspaces/baharnaj/frontend/src/pages/AdminApp.jsx:2213)
+- Backend: [views.py](/workspaces/baharnaj/backend/salon/views.py:886)
+
+It needs a customer-specific endpoint and interface showing:
+
+- Customer name and phone.
+- Account versus guest status.
+- Upcoming and previous visits.
+- Total confirmed spending.
+- No-show count.
+- Preferences and internal notes.
+- Identity conflicts.
+- Deletion requests.
+- Search, filters and pagination.
+
+### 8. Correct employee leave behavior
+
+The documentation says employee leave requires admin approval, but the implementation makes an employee-created `TimeOff` entry effective immediately. There is no approval status in the model, and the endpoint saves it directly in [views.py](/workspaces/baharnaj/backend/salon/views.py:1713).
+
+Choose and implement one truthful workflow:
+
+- Recommended: request → pending → admin approves/rejects → schedule is blocked.
+- Or explicitly allow employees to manage leave directly and update all wording.
+
+The approval workflow is safer for salon operations.
+
+## Customer-flow correctness issues
+
+These are smaller than the identity and policy work, but still necessary:
+
+- `recent_history_count` can never exceed three because the backend counts a sliced three-item queryset.
+- Appointments and notifications return paginated results, but the customer UI has no next/previous or infinite-loading controls.
+- Partial payment and partial refund states are incorrectly displayed as “در انتظار پرداخت”.
+- Payment methods and some statuses appear as raw backend values.
+- Notification `target_url` is returned but not used; clicking a notification should open the relevant appointment.
+- “Book again” returns preferred specialists, but the booking wizard ignores them.
+- Rescheduling uses a native Gregorian date field while the rest of the system uses Persian/Jalali selection.
+- Rescheduling shows “no times found” while availability may still be loading.
+- Booking employee selection shows “no specialist” before requests have necessarily completed.
+- The five-minute booking hold has no visible countdown or expiry recovery.
+- Expired holds should offer one-click rechecking instead of a generic failure.
+- The review screen needs edit links for service, specialist, time and contact details.
+- Booking confirmation should show specialists, formatted Persian date, price state and total duration.
+- Add copy/share/print actions for confirmation codes.
+- A refreshed guest confirmation page currently loses the original confirmation view.
+- The guest management title mentions changing a booking, but the screen only supports lookup, contact and conditional cancellation.
+
+## Authentication UX
+
+The authentication backend is generally sound, but the screens need completion:
+
+- Per-field errors instead of displaying only the first backend error.
+- Password requirements visible before submission.
+- Password-strength and matching feedback.
+- Loading and duplicate-submit protection on password recovery.
+- Error handling on failed password-recovery requests.
+- Expired/used reset-link screen with a clear restart action.
+- Redirect an already logged-in user away from irrelevant login/signup pages.
+- Show customers where to find staff login, and staff where to find customer login.
+- Write actual `AccountLogin` records; the model exists but is never used outside Django admin.
+- Add “recent account activity” and session-security behavior if desired.
+
+Email delivery configuration is operational, but the application should still have a branded HTML reset template and tests using Django’s in-memory email backend.
+
+## Employee-panel improvements
+
+The employee panel is relatively complete, but I would still add:
+
+- Visible employee name/photo in the header.
+- Header logout action.
+- Pending leave/approved/rejected states.
+- Ability to withdraw a pending leave request.
+- Better “today” timeline with current/next appointment emphasis.
+- One-tap arrival/start/complete flow with a visible progress sequence.
+- Confirmation dialog for destructive status changes.
+- Customer-call action that does not expose unnecessary details.
+- Clear offline/error banners and retry actions.
+- Unsaved-form protection for notes and profile editing.
+- Consistent Persian/Jalali display everywhere.
+- A clearer explanation of “revenue” versus “my commission.”
+
+## Admin-panel improvements
+
+Recommended completion work:
+
+- Customer-specific management described above.
+- Leave-approval queue.
+- Account-deletion queue.
+- Global search across appointments, customers and employees.
+- Pagination for large customer, appointment, finance and content datasets.
+- Consistent toast messages and field-level errors.
+- Replace remaining raw browser confirmation dialogs with accessible modals.
+- Prevent closing drawers/forms with unsaved changes.
+- Export printable daily schedule and finance summaries.
+- Add an operational “today” view: late appointments, unconfirmed requests, pending payments and staff absences.
+- Show audit history directly inside appointment/payment/customer drawers.
+- Add archive behavior where deletion would damage historical references.
+- Break the very large `AdminApp.jsx` into feature modules to reduce regression risk.
+
+## Public website and booking UX ideas
+
+To make the public site feel premium rather than merely complete:
+
+- Add a persistent mobile booking button.
+- Add service comparison by price type, duration and specialist.
+- Show “from,” “range,” and “consultation” pricing with consistent visual badges.
+- Add specialist profile pages with services and gallery work.
+- Allow “any available specialist” for faster booking.
+- Offer recommended adjacent services without obstructing checkout.
+- Add filters and search to services and gallery.
+- Add an FAQ section for pricing, preparation, cancellation and aftercare.
+- Improve image loading with responsive sizes and deliberate crops.
+- Add breadcrumbs consistently.
+- Add shareable service and article links.
+- Add a useful 404 page with service search and booking CTA.
+- Ensure every empty or failed API state has retry and contact options.
+- Use real salon content and remove every demo biography, placeholder image and test article.
+
+I could not inspect the current local content database because the backend container is stopped and no repository SQLite database exists, so the real-content review remains outstanding.
+
+## Testing still required
+
+The automated foundation is good, but coverage is uneven.
+
+Most importantly, the customer frontend currently has only one dashboard component test in [CustomerApp.test.jsx](/workspaces/baharnaj/frontend/src/pages/CustomerApp.test.jsx:16).
+
+Add tests for:
+
+- Customer appointments and filters.
+- Pagination.
+- Cancellation success/failure/duplicate submission.
+- Rescheduling conflicts.
+- Book-again specialist preservation.
+- Notification read/read-all/navigation.
+- Profile editing.
+- Password changes.
+- Deletion requests and status.
+- Partial payment/refund display.
+- Session expiry and automatic refresh.
+- Booking as guest, new account and logged-in customer.
+- Hold expiry and interrupted network recovery.
+- Employee leave approval.
+- Admin customer filtering and ownership boundaries.
+
+The current Playwright booking smoke test is also stale: it expects “خدمتت را انتخاب کن” while the UI says “سرویس‌ت را انتخاب کن” in [booking-flow.spec.js](/workspaces/baharnaj/e2e/booking-flow.spec.js:3).
+
+The project ultimately needs real API-backed E2E scenarios with PostgreSQL:
+
+1. Guest books an appointment.
+2. Customer creates an account during booking.
+3. Customer logs out and back in.
+4. Admin confirms the appointment.
+5. Employee starts and completes each service.
+6. Employee reports payment.
+7. Admin confirms payment.
+8. Refund is recorded.
+9. Customer sees the correct final history.
+10. Ownership tests prove another customer/employee cannot access it.
+
+Also clean the 13 lint warnings, especially state updates inside effects that can cause stale UI or unnecessary renders.
+
+## Recommended implementation order
+
+1. [Done] Staff login discovery and login UX.
+2. [Done] Customer-dashboard redesign.
+3. [Done] Fix customer correctness bugs: counts, pagination, statuses, book-again, notifications.
+4. Cancellation/rescheduling policy engine.
+5. Customer identity constraint and historical claim workflow.
+6. Terms/privacy acceptance audit.
+7. Admin customer management and deletion requests.
+8. Employee leave approval.
+9. Booking hold/loading/offline UX.
+10. Real end-to-end tests and lint cleanup.
+11. Accessibility, mobile-device and Persian-copy review.
+12. Final real-content and brand-asset pass.
+
+After those are complete, the non-deployment, non-Telegram/SMS portion of the project can reasonably be called finished. Loyalty, coupons and online payment should remain separate decision-gated features because they require approved commercial rules or an external payment provider.

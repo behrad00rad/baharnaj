@@ -60,8 +60,24 @@ class CustomerDashboardTests(TestCase):
         notification = Notification.objects.create(recipient=self.customer_user, type="appointment_updated", title="به‌روزرسانی", message="نوبت شما به‌روزرسانی شد.")
         listed = self.client.get("/api/v1/customer/notifications/")
         self.assertEqual(listed.status_code, 200)
-        self.assertEqual(listed.data[0]["id"], notification.pk)
+        self.assertEqual(listed.data["results"][0]["id"], notification.pk)
         self.assertEqual(self.client.post(f"/api/v1/customer/notifications/{notification.pk}/read/").status_code, 200)
+
+    def test_dashboard_history_count_is_not_limited_to_three(self):
+        for index in range(4):
+            appointment = Appointment.objects.create(customer=self.customer, status="completed")
+            AppointmentItem.objects.create(
+                appointment=appointment,
+                service=self.service,
+                employee=self.employee,
+                date=date(2025, 1, index + 1),
+                start_time=time(10),
+                end_time=time(11),
+            )
+
+        response = self.client.get("/api/v1/customer/dashboard/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["recent_history_count"], 4)
 
     @override_settings(CUSTOMER_APPOINTMENT_POLICY_CONFIGURED=False)
     def test_mutation_requires_configured_policy_and_idempotency_key(self):

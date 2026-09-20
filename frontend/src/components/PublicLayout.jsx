@@ -71,7 +71,7 @@ export function PublicLayout({ children }) {
                 {panelLabel}
               </Link>
             ) : (
-              <Link className="panel-link" to="/account/login">
+              <Link className="panel-link" to="/login">
                 ورود
               </Link>
             )}
@@ -127,7 +127,7 @@ export function PublicLayout({ children }) {
                 {panelLabel}
               </Link>
             ) : (
-              <Link to="/account/login" onClick={closeMenu}>
+              <Link to="/login" onClick={closeMenu}>
                 ورود
               </Link>
             )}
@@ -160,6 +160,7 @@ export function PublicLayout({ children }) {
               رزرو آنلاین <span>←</span>
             </Link>
             <a className="footer-instagram" href={siteConfig.instagram} target="_blank" rel="noopener noreferrer">Instagram بهارناژ ↗</a>
+            <Link className="footer-staff-login" to="/staff/login">ورود کارکنان</Link>
           </div>
           <div className="footer-map">
             <p>نشانی بهارناژ</p>

@@ -38,13 +38,13 @@ export default function AdminLayout() {
   const logout = async () => {
     await disableCurrentFirebaseDevice().catch(() => {});
     await logoutSession();
-    navigate("/login", { replace: true });
+    navigate("/staff/login", { replace: true });
   };
   if (role !== "admin")
     return (
       <div className="admin-denied" dir="rtl">
         <strong>دسترسی مدیر لازم است.</strong>
-        <button onClick={() => navigate("/login")}>بازگشت به ورود</button>
+        <button onClick={() => navigate("/staff/login")}>بازگشت به ورود کارکنان</button>
       </div>
     );
   return (

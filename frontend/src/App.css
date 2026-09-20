@@ -175,6 +175,23 @@
 .mobile-menu-close { float:left; min-height:44px; padding:8px 12px; border:1px solid var(--color-footer-muted); border-radius:8px; background:transparent; color:inherit; cursor:pointer; }
 
 .footer-brand { color:var(--color-footer-text); }
+.footer-staff-login { margin-top:8px;color:var(--color-footer-muted);font-size:var(--text-caption);text-decoration:underline;text-underline-offset:4px; }
+.login-choice { padding-block:clamp(70px,10vw,140px); }
+.login-choice>header { max-width:720px;margin-bottom:42px; }
+.login-choice h1 { margin:8px 0 18px;font-size:calc(clamp(2.25rem,5vw,4.75rem) * var(--text-scale));line-height:1.2; }
+.login-choice>header>p:last-child { max-width:600px;color:var(--muted);line-height:2; }
+.login-choice-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px; }
+.login-choice-card { min-height:320px;display:flex;flex-direction:column;justify-content:space-between;gap:30px;padding:32px;border:1px solid var(--line);background:var(--paper-2);transition:transform .2s,border-color .2s,box-shadow .2s; }
+.login-choice-card:hover,.login-choice-card:focus-visible { transform:translateY(-4px);border-color:var(--clay);box-shadow:0 18px 48px color-mix(in srgb,var(--ink) 10%,transparent); }
+.login-choice-card>span { display:grid;width:52px;height:52px;place-items:center;border-radius:50%;background:var(--ink);color:var(--paper);font-size:1.4rem; }
+.login-choice-card.staff>span { background:var(--clay);color:#fff; }
+.login-choice-card small { color:var(--clay); }
+.login-choice-card h2 { margin:7px 0 12px;font-size:calc(1.65rem * var(--text-scale)); }
+.login-choice-card p { max-width:420px;margin:0;color:var(--muted);line-height:1.9; }
+.login-choice-card>b { color:var(--clay); }
+.login-choice-help { margin-top:24px;color:var(--muted); }
+.login-choice-help a,.login-switch { color:var(--clay);text-decoration:underline;text-underline-offset:4px; }
+@media(max-width:760px) { .login-choice { padding-block:52px 90px; }.login-choice-grid { grid-template-columns:1fr; }.login-choice-card { min-height:250px;padding:24px; } }
 .public-site .category-groups h2,.public-site .employee-choices h2,.public-site .slot-heading h2 { font-size:var(--text-lead); line-height:1.8; }
 .public-site .wizard-aside { border-radius:12px; padding:20px; background:var(--color-surface-subtle); border:1px solid var(--line); }
 .public-site .service-choice-grid button,.public-site .employee-choice-grid button,.public-site .slot-grid button,.public-site .booking-summary,.public-site .date-modal { border-radius:12px; }

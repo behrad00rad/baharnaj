@@ -64,13 +64,19 @@ function EmptyLine({ text }) {
 export default function Booking() {
   const { role } = useAuth();
   const { services, state: servicesState } = useServices();
-  const params = new URLSearchParams(useLocation().search);
-  const initialServices = params.get("services")?.split(",").filter(Boolean) || (params.get("service") ? [params.get("service")] : []);
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const repeatedBooking = location.state?.bookAgain?.services || [];
+  const initialServices = repeatedBooking.length
+    ? repeatedBooking.map((item) => String(item.id))
+    : params.get("services")?.split(",").filter(Boolean) || (params.get("service") ? [params.get("service")] : []);
   const navigate = useNavigate();
   const [step, setStep] = useState(initialServices.length ? 1 : 0);
   const [selected, setSelected] = useState(initialServices);
   const [employees, setEmployees] = useState({});
-  const [employeeIds, setEmployeeIds] = useState({});
+  const [employeeIds, setEmployeeIds] = useState(() => Object.fromEntries(
+    repeatedBooking.filter((item) => item.preferred_employee).map((item) => [String(item.id), item.preferred_employee]),
+  ));
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [slots, setSlots] = useState([]);
@@ -176,12 +182,18 @@ export default function Booking() {
     },
     [hold],
   );
-  const toggleService = (id) =>
-    setSelected((current) =>
-      current.includes(String(id))
-        ? current.filter((value) => value !== String(id))
-        : [...current, String(id)],
-    );
+  const toggleService = (id) => {
+    const key = String(id);
+    setSelected((current) => {
+      if (!current.includes(key)) return [...current, key];
+      setEmployeeIds((assigned) => {
+        const next = { ...assigned };
+        delete next[key];
+        return next;
+      });
+      return current.filter((value) => value !== key);
+    });
+  };
   const reserveHold = async () => {
     setError("");
     setLoading(true);

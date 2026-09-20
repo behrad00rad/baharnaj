@@ -77,6 +77,22 @@ describe("booking wizard", () => {
     );
   });
 
+  it("preserves the previous specialist when booking again", async () => {
+    render(
+      <MemoryRouter initialEntries={[{
+        pathname: "/book",
+        state: { bookAgain: { services: [{ id: 1, preferred_employee: 7 }] } },
+      }]}>
+        <Booking />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("متخصصت را انتخاب کن.")).toBeInTheDocument();
+    const specialist = await screen.findByRole("button", { name: /متخصص/ });
+    expect(specialist).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /انتخاب تاریخ و ساعت/ })).toBeEnabled();
+  });
+
   it.each(["pending", "confirmed"])("submits sequential held items and reports server status %s", async (status) => {
     post.mockClear();
     post.mockImplementation((url) => Promise.resolve({ data: url === "appointments/" ? { confirmation_code: "ABC", status, items: [] } : { token: "hold", expires_at: "later" } }));
