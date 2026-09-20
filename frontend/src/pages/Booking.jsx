@@ -8,6 +8,7 @@ import { useAuth } from "../shared/auth";
 import { useServices } from "../shared/hooks";
 import { SEO } from "../components/SEO";
 import PasswordInput from "../components/PasswordInput";
+import { formatJalaliDate } from "../shared/date";
 const steps = ["سرویس‌ها", "متخصص", "زمان", "اطلاعات", "تأیید"];
 const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(
@@ -529,11 +530,7 @@ function TimeStep({
           className="date-trigger"
           onClick={() => setDateOpen(true)}
         >
-          {date
-            ? new Intl.DateTimeFormat("fa-IR", {
-                timeZone: "Asia/Tehran",
-              }).format(new Date(`${date}T00:00:00Z`))
-            : "انتخاب تاریخ"}
+          {formatJalaliDate(date, "انتخاب تاریخ")}
         </button>
       </label>
       {dateOpen && (
@@ -609,7 +606,7 @@ function BookingSummary({
       <div>
         <small>زمان</small>
         <span>
-          <b>{date}</b>
+          <b>{formatJalaliDate(date, "تاریخ نامشخص")}</b>
           <i>{time}</i>
         </span>
       </div>
@@ -746,7 +743,7 @@ function Confirmation({ appointment, navigate }) {
           <div key={item.id}>
             <b>{item.service_name || "سرویس بهارناژ"}</b>
             <span>
-              {item.date} · {item.start_time} تا {item.end_time}
+              {formatJalaliDate(item.date, "تاریخ نامشخص")} · {item.start_time} تا {item.end_time}
             </span>
           </div>
         ))}

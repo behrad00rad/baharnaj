@@ -11,6 +11,7 @@ import { api, toman } from "../shared/api";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { BlogEditor, BlogManagement, BlogPreview } from "./AdminBlog";
 import PasswordInput from "../components/PasswordInput";
+import { formatJalaliDate, formatJalaliDateTime } from "../shared/date";
 
 const today = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Tehran",
@@ -256,7 +257,10 @@ function DashboardHome() {
                   <span>
                     {item.action || "تغییر اطلاعات"}
                     <small>
-                      {item.changed_at || item.created_at || "اخیراً"}
+                      {formatJalaliDateTime(
+                        item.changed_at || item.created_at,
+                        "اخیراً",
+                      )}
                     </small>
                   </span>
                 </div>
@@ -456,11 +460,12 @@ function Appointments() {
       <section className="admin-panel calendar-panel">
         <div className="calendar-strip">
           <strong>
-            {new Intl.DateTimeFormat("fa-IR", {
+            {new Intl.DateTimeFormat("fa-IR-u-ca-persian-nu-arabext", {
               weekday: "long",
               month: "long",
               year: "numeric",
               day: "numeric",
+              timeZone: "Asia/Tehran",
             }).format(new Date(`${selectedDate}T12:00:00`))}
           </strong>
           <span>
@@ -633,7 +638,7 @@ function AppointmentCalendar({
                   {new Intl.NumberFormat("fa-IR").format(local.jd)}
                 </span>
                 <span className="calendar-day-weekday">
-                  {new Intl.DateTimeFormat("fa-IR", { weekday: "long" }).format(
+                  {new Intl.DateTimeFormat("fa-IR-u-ca-persian-nu-arabext", { weekday: "long", timeZone: "Asia/Tehran" }).format(
                     day,
                   )}
                 </span>
@@ -1013,8 +1018,8 @@ function AppointmentDrawer({ item, close, onSaved }) {
         <p className="drawer-meta">
           {item.customer?.phone || item.customer_phone || "شماره ثبت نشده"}
         </p>
-        <div className="appointment-summary-bar"><span className={`status ${item.status}`}>{labels[item.status]}</span><b>{item.items?.[0]?.date} · {item.items?.[0]?.start_time?.slice(0,5)}</b><span>{item.items?.length || 0} سرویس</span></div>
-        {isCancelled && <section className="cancellation-card"><span>لغو شده</span><h3>{item.status === "cancelled" ? "این نوبت لغو شده است" : `${cancelledLine?.service_name || "یک سرویس"} از این نوبت لغو شده است`}</h3><dl><div><dt>لغو توسط</dt><dd>{cancellation?.changed_by_name || "ثبت نشده"}{cancellation?.changed_by_role === "employee" ? " (متخصص)" : ""}</dd></div><div><dt>زمان لغو</dt><dd>{cancellation?.changed_at ? new Intl.DateTimeFormat("fa-IR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(cancellation.changed_at)) : "ثبت نشده"}</dd></div><div><dt>دلیل</dt><dd>{cancellation?.reason || "دلیلی ثبت نشده است."}</dd></div></dl></section>}
+        <div className="appointment-summary-bar"><span className={`status ${item.status}`}>{labels[item.status]}</span><b>{formatJalaliDate(item.items?.[0]?.date, "تاریخ نامشخص")} · {item.items?.[0]?.start_time?.slice(0,5)}</b><span>{item.items?.length || 0} سرویس</span></div>
+        {isCancelled && <section className="cancellation-card"><span>لغو شده</span><h3>{item.status === "cancelled" ? "این نوبت لغو شده است" : `${cancelledLine?.service_name || "یک سرویس"} از این نوبت لغو شده است`}</h3><dl><div><dt>لغو توسط</dt><dd>{cancellation?.changed_by_name || "ثبت نشده"}{cancellation?.changed_by_role === "employee" ? " (متخصص)" : ""}</dd></div><div><dt>زمان لغو</dt><dd>{formatJalaliDateTime(cancellation?.changed_at, "ثبت نشده")}</dd></div><div><dt>دلیل</dt><dd>{cancellation?.reason || "دلیلی ثبت نشده است."}</dd></div></dl></section>}
         {item.has_unresolved_prices && <p className="pricing-warning">قیمت برخی سرویس‌ها نهایی نشده است. پیش از پرداخت، قیمت نهایی را ثبت کنید.</p>}
         <div className="drawer-section">
           <h3>سرویس‌های رزرو</h3>
@@ -1023,7 +1028,7 @@ function AppointmentDrawer({ item, close, onSaved }) {
               <div className="drawer-item" key={line.id}>
                 <b>{line.service_name || `سرویس #${line.service}`}</b>
                 <span>
-                  {line.date} · {line.start_time} تا {line.end_time}
+                  {formatJalaliDate(line.date, "تاریخ نامشخص")} · {line.start_time} تا {line.end_time}
                 </span>
                 <ItemPricing item={line} role="admin" onSaved={onSaved} />
                 <span className={`status ${line.completion_status}`}>{labels[line.completion_status] || line.completion_status}</span>
@@ -1168,7 +1173,7 @@ function AppointmentDrawer({ item, close, onSaved }) {
             item.status_history.map((history) => (
               <p className="history-row" key={history.id}>
                 <b>{labels[history.status] || history.status}</b>
-                <span>{history.changed_by_name || "سیستم"} · {history.changed_at ? new Intl.DateTimeFormat("fa-IR", { dateStyle: "short", timeStyle: "short" }).format(new Date(history.changed_at)) : ""}<br />{history.reason || "بدون توضیح"}</span>
+                <span>{history.changed_by_name || "سیستم"} · {formatJalaliDateTime(history.changed_at)}<br />{history.reason || "بدون توضیح"}</span>
               </p>
             ))
           ) : (
@@ -2027,11 +2032,7 @@ const adminChartMetrics = { revenue: "درآمد خالص", payments: "تعدا�
 const employeeChartMetrics = { revenue: "درآمد خالص", payments: "تعداد پرداخت‌ها", appointments: "نوبت‌های تکمیل‌شده", commission: "کمیسیون", services: "سرویس‌های تکمیل‌شده" };
 
 function financeDate(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? "—"
-    : new Intl.DateTimeFormat("fa-IR", { dateStyle: "medium" }).format(date);
+  return formatJalaliDate(value, "—");
 }
 
 function financeRange(preset, customStart, customEnd) {
@@ -2058,13 +2059,13 @@ function FinanceChartControls({ grouping, onGrouping, metric, onMetric, metrics 
 function FinanceSeriesChart({ data, metric, metrics = adminChartMetrics, height = 300 }) {
   const monetary = ["revenue", "commission", "average_payment"].includes(metric);
   if (!data?.length) return <Empty title="داده‌ای برای نمودار نیست" />;
-  return <ResponsiveContainer width="100%" height={height}><BarChart data={data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><YAxis tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><Tooltip formatter={(value) => monetary ? toman(value) : new Intl.NumberFormat("fa-IR").format(value)} /><Bar name={metrics[metric]} dataKey={metric} fill="var(--color-chart-1)" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer>;
+  return <ResponsiveContainer width="100%" height={height}><BarChart data={data}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tickFormatter={(value) => formatJalaliDate(value)} tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><YAxis tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><Tooltip labelFormatter={(value) => formatJalaliDate(value)} formatter={(value) => monetary ? toman(value) : new Intl.NumberFormat("fa-IR").format(value)} /><Bar name={metrics[metric]} dataKey={metric} fill="var(--color-chart-1)" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer>;
 }
 
 function FinancePresetFilter({ preset, setPreset, customStart, setCustomStart, customEnd, setCustomEnd }) {
   return <div className="finance-modal-range">
     <div className="segmented">{[["day","امروز"],["week","این هفته"],["month","این ماه"],["last-month","ماه قبل"],["custom","بازه دلخواه"]].map(([value,label]) => <button type="button" key={value} className={preset === value ? "selected" : ""} onClick={() => setPreset(value)}>{label}</button>)}</div>
-    {preset === "custom" && <div className="finance-custom-range"><label>از<JalaliDatePicker value={customStart} onChange={setCustomStart} /></label><label>تا<JalaliDatePicker value={customEnd} onChange={setCustomEnd} /></label></div>}
+    {preset === "custom" && <div className="finance-custom-range"><label>از<JalaliDatePicker value={customStart} onChange={setCustomStart} minDate="" /></label><label>تا<JalaliDatePicker value={customEnd} onChange={setCustomEnd} minDate="" /></label></div>}
   </div>;
 }
 
@@ -2088,8 +2089,8 @@ function EmployeeFinanceModal({ employee, onClose }) {
       <div className="employee-finance-detail-grid">
         <section><h3>پرداخت‌ها</h3>{data.payments?.length ? data.payments.map((item) => <article key={item.id}><b>{toman(item.employee_amount)}</b><span>{item.customer} · {item.services?.join("، ")}</span><small>{financeDate(item.date)} · {paymentLabels[item.status] || item.status} · مبلغ کل پرداخت {toman(item.amount)}</small></article>) : <Empty />}</section>
         <section><h3>تراکنش‌ها</h3>{data.transactions?.length ? data.transactions.map((item) => <article key={item.id}><b>{transactionLabels[item.type] || item.type} · {toman(item.employee_amount)}</b><span>{item.customer} · {item.services?.join("، ")}</span><small>{financeDate(item.date)} · نوبت #{item.appointment}</small></article>) : <Empty />}</section>
-        <section><h3>نوبت‌ها</h3>{data.appointments?.length ? data.appointments.map((item) => <article key={item.id}><b>#{item.id} · {item.customer}</b><span>{item.services?.join("، ")}</span><small>{item.date || "—"} · {labels[item.status] || item.status} · {appointmentPaymentLabels[item.payment_status] || item.payment_status}</small></article>) : <Empty />}</section>
-        <section><h3>سرویس‌های انجام‌شده</h3>{data.services_performed?.length ? data.services_performed.map((item) => <article key={item.id}><b>{item.service} · {toman(item.amount)}</b><span>{item.customer} · کمیسیون {toman(item.commission)}</span><small>{item.date} · {labels[item.status] || item.status} · {appointmentPaymentLabels[item.payment_status] || item.payment_status}</small></article>) : <Empty />}</section>
+        <section><h3>نوبت‌ها</h3>{data.appointments?.length ? data.appointments.map((item) => <article key={item.id}><b>#{item.id} · {item.customer}</b><span>{item.services?.join("، ")}</span><small>{financeDate(item.date)} · {labels[item.status] || item.status} · {appointmentPaymentLabels[item.payment_status] || item.payment_status}</small></article>) : <Empty />}</section>
+        <section><h3>سرویس‌های انجام‌شده</h3>{data.services_performed?.length ? data.services_performed.map((item) => <article key={item.id}><b>{item.service} · {toman(item.amount)}</b><span>{item.customer} · کمیسیون {toman(item.commission)}</span><small>{financeDate(item.date)} · {labels[item.status] || item.status} · {appointmentPaymentLabels[item.payment_status] || item.payment_status}</small></article>) : <Empty />}</section>
       </div>
     </>}
   </section></div>;
@@ -2145,7 +2146,7 @@ function Finance() {
     <Header eyebrow="گزارش‌های قابل حسابرسی" title="مالی و پرداخت‌ها" action="ثبت پرداخت دستی" onAction={() => setManualOpen(true)} />
     <div className="finance-filters">
       <div className="segmented">{[["day","امروز"],["week","این هفته"],["month","این ماه"],["last-month","ماه قبل"],["custom","بازه دلخواه"]].map(([value,label]) => <button key={value} className={preset === value ? "selected" : ""} onClick={() => setPreset(value)}>{label}</button>)}</div>
-      {preset === "custom" && <div className="finance-custom-range"><label>از<JalaliDatePicker value={customStart} onChange={setCustomStart} /></label><label>تا<JalaliDatePicker value={customEnd} onChange={setCustomEnd} /></label></div>}
+      {preset === "custom" && <div className="finance-custom-range"><label>از<JalaliDatePicker value={customStart} onChange={setCustomStart} minDate="" /></label><label>تا<JalaliDatePicker value={customEnd} onChange={setCustomEnd} minDate="" /></label></div>}
       <select value={employee} onChange={(event) => setEmployee(event.target.value)}><option value="">همه کارکنان</option>{employees.data.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>
     </div>
     {overview.error && <div className="finance-message error">دریافت آمار مالی انجام نشد.</div>}

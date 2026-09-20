@@ -37,3 +37,11 @@ it('surfaces foreground messages and marks all notifications read', async () => 
   fireEvent.click(await screen.findByRole('button', {name:'خواندن همه'}))
   await waitFor(() => expect(api.post).toHaveBeenCalledWith('notifications/read-all/'))
 })
+it('shows notification timestamps in the Jalali calendar and Tehran time', async () => {
+  api.get.mockImplementation(url => Promise.resolve({data: url.includes('count') ? {count:1} : [{id:1,title:'نوبت جدید',message:'نوبت 2026-03-21 ثبت شد.',is_read:false,created_at:'2026-03-21T06:30:00Z',target_url:'/employee/calendar'}]}))
+  render(<MemoryRouter><NotificationBell /></MemoryRouter>)
+  fireEvent.click(screen.getByRole('button', {name:/اعلان‌ها،/}))
+  const timestamp = await screen.findByText('۱ فروردین ۱۴۰۵، ۱۰:۰۰')
+  expect(timestamp).toHaveAttribute('datetime', '2026-03-21T06:30:00Z')
+  expect(screen.getByText('نوبت ۱ فروردین ۱۴۰۵ ثبت شد.')).toBeVisible()
+})

@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import { MediaImage } from "./PublicUI";
+import { formatJalaliDate } from "../shared/date";
 
-const articleDate = (value) => value ? new Intl.DateTimeFormat("fa-IR", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Tehran" }).format(new Date(value)) : "";
+const articleDate = (value) => formatJalaliDate(value);
 
 export function BlogCard({ post, compact = false }) {
   return <article className={`blog-card ${compact ? "compact" : ""}`}>

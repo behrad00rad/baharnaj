@@ -5,8 +5,9 @@ import { SEO } from "../components/SEO";
 import { MediaImage, PublicState } from "../components/PublicUI";
 import { siteConfig, siteUrl } from "../shared/siteConfig";
 import { usePublicDetail } from "../shared/hooks";
+import { formatJalaliDate } from "../shared/date";
 
-const articleDate = (value) => value ? new Intl.DateTimeFormat("fa-IR", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Tehran" }).format(new Date(value)) : "";
+const articleDate = (value) => formatJalaliDate(value);
 
 export default function BlogArticle() {
   const { slug } = useParams();

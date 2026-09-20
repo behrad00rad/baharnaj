@@ -24,10 +24,9 @@ const toIso = (value) => {
 };
 const toMinDate = (value) => toJalaliValue(value);
 
-export function JalaliDatePicker({ value, onChange }) {
+export function JalaliDatePicker({ value, onChange, minDate = today(), allowEmpty = false }) {
   const input = useRef(null);
   const container = useRef(null);
-  const minimum = today();
   useEffect(() => {
     let active = true;
     import("@majidh1/jalalidatepicker").then(() => {
@@ -46,14 +45,66 @@ export function JalaliDatePicker({ value, onChange }) {
       <input
         ref={input}
         data-jdp
-        data-jdp-min-date={toMinDate(minimum)}
+        data-jdp-min-date={minDate ? toMinDate(minDate) : undefined}
         aria-label="تاریخ شمسی"
-        value={toJalaliValue(value || minimum)}
+        placeholder={allowEmpty ? "انتخاب تاریخ شمسی" : undefined}
+        value={value ? toJalaliValue(value) : allowEmpty ? "" : toJalaliValue(minDate || today())}
         onInput={(event) => {
+          if (allowEmpty && !event.currentTarget.value) {
+            onChange("");
+            return;
+          }
           const next = toIso(event.currentTarget.value);
-          if (next >= minimum) onChange(next);
+          if (next && (!minDate || next >= minDate)) onChange(next);
         }}
       />
+    </div>
+  );
+}
+
+const tehranParts = (value) => {
+  if (!value) return { date: "", time: "09:00" };
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Tehran",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(value)).map(({ type, value: part }) => [type, part]),
+  );
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}`,
+  };
+};
+
+export function JalaliDateTimePicker({ value, onChange, optional = true }) {
+  const parts = tehranParts(value);
+  const emit = (date, time) => {
+    if (!date) return;
+    onChange(`${date}T${time || "09:00"}:00+03:30`);
+  };
+  return (
+    <div className="jalali-datetime-picker">
+      <JalaliDatePicker
+        value={parts.date}
+        onChange={(date) => emit(date, parts.time)}
+        allowEmpty={optional}
+      />
+      <input
+        type="time"
+        aria-label="ساعت به وقت تهران"
+        value={parts.time}
+        onChange={(event) => emit(parts.date || today(), event.target.value)}
+      />
+      {optional && value && (
+        <button type="button" className="jalali-date-clear" onClick={() => onChange(null)}>
+          پاک‌کردن
+        </button>
+      )}
     </div>
   );
 }

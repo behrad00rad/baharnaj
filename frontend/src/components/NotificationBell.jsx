@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../shared/api";
 import { disableCurrentFirebaseDevice, enableFirebaseDevice, syncFirebaseDevice } from "../shared/firebasePush";
+import { formatJalaliDateTime, formatJalaliDatesInText } from "../shared/date";
 import {
   listenForForegroundMessages,
 } from "../shared/firebase";
@@ -185,12 +186,6 @@ export default function NotificationBell() {
       setError("به‌روزرسانی اعلان‌ها ممکن نیست.");
     }
   };
-  const date = (value) =>
-    new Intl.DateTimeFormat("fa-IR", {
-      dateStyle: "short",
-      timeStyle: "short",
-    }).format(new Date(value));
-
   const toggle = () => {
     if (!open) refreshList();
     setOpen((value) => !value);
@@ -239,8 +234,10 @@ export default function NotificationBell() {
                 key={item.id}
               >
                 <strong>{item.title}</strong>
-                <span>{item.message}</span>
-                <time>{date(item.created_at)}</time>
+                <span>{formatJalaliDatesInText(item.message)}</span>
+                <time dateTime={item.created_at}>
+                  {formatJalaliDateTime(item.created_at, "زمان نامشخص")}
+                </time>
               </button>
             ))}
           </div>

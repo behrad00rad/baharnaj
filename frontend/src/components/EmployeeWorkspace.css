@@ -1,0 +1,250 @@
+/* Employee workspace: phone-first overrides kept separate from the admin shell. */
+.employee-app .employee-header {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  box-sizing: border-box;
+  width: 100%;
+  height: 70px;
+  min-height: 70px;
+  padding: 10px clamp(14px, 4vw, 28px);
+  background: color-mix(in srgb, var(--color-surface) 94%, transparent);
+  backdrop-filter: blur(14px);
+}
+.employee-app .employee-brand > span { width: 40px; height: 40px; }
+.employee-app .employee-header-actions { gap: 7px; }
+.employee-app .employee-header-actions > button { flex: none; }
+.employee-app .employee-header-logout {
+  min-height: 40px;
+  padding: 7px 13px;
+  border-radius: 999px;
+}
+
+.employee-app .employee-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  max-width: 1240px;
+  min-height: calc(100vh - 70px);
+  margin: auto;
+}
+.employee-app .employee-layout > main {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 36px clamp(24px, 5vw, 58px) 54px;
+}
+.employee-app .employee-page { width: 100%; max-width: 920px; margin: auto; }
+.employee-app .employee-nav {
+  position: sticky;
+  top: 70px;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  align-self: start;
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+  min-height: calc(100vh - 70px);
+  padding: 28px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 5px;
+  overflow: visible;
+  border: 0;
+  border-left: 1px solid var(--color-border);
+  background: transparent;
+}
+.employee-app .employee-nav a {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 48px;
+  flex: none;
+  display: flex;
+  place-items: initial;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-align: right;
+}
+.employee-app .employee-nav a.active {
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  box-shadow: inset -3px 0 var(--color-brand-primary);
+}
+.employee-app .employee-site-link { margin-top: auto; }
+
+.employee-app .employee-card,
+.employee-app .employee-stat,
+.employee-app .employee-appointment {
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: var(--color-surface);
+}
+.employee-app .employee-card { padding: 22px; }
+.employee-app .next-card {
+  overflow: hidden;
+  border-color: var(--color-brand-primary);
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--color-brand-primary), color-mix(in srgb, var(--color-brand-primary) 78%, #000));
+  color: var(--color-brand-primary-text);
+}
+.employee-app .employee-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.employee-app .employee-stat { min-width: 0; min-height: 112px; padding: 16px; }
+.employee-app .employee-appointment {
+  grid-template-columns: 62px minmax(0, 1fr) auto;
+  gap: 12px;
+  min-height: 76px;
+  padding: 13px 15px;
+  border-right: 4px solid var(--color-brand-primary);
+}
+.employee-app .employee-appointment .appt-bar { display: none; }
+.employee-app .employee-appointment > span { min-width: 0; }
+.employee-app .employee-appointment small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.employee-app .employee-status { border-radius: 999px; }
+.employee-app .employee-page > .employee-action { margin: -12px 0 22px; }
+
+@media (max-width: 700px) {
+  .employee-app { padding-bottom: 0; }
+  .employee-app .employee-header {
+    height: 62px;
+    min-height: 62px;
+    padding: 8px 12px;
+  }
+  .employee-app .employee-brand { gap: 9px; }
+  .employee-app .employee-brand > span { width: 38px; height: 38px; }
+  .employee-app .employee-brand small { display: none; }
+  .employee-app .panel-theme-toggle,
+  .employee-app .notification-bell > button,
+  .employee-app .employee-header-logout {
+    min-width: 38px;
+    width: 38px;
+    min-height: 38px;
+    height: 38px;
+    padding: 0;
+  }
+  .employee-app .employee-header-logout {
+    width: auto;
+    min-width: 50px;
+    padding-inline: 9px;
+    font-size: var(--text-caption);
+  }
+  .employee-app .employee-layout { display: block; min-height: 0; }
+  .employee-app .employee-layout > main {
+    max-width: none;
+    padding: 18px 12px calc(94px + env(safe-area-inset-bottom));
+  }
+  .employee-app .employee-layout > main > .panel-guide {
+    max-width: none;
+    margin: 0 0 16px;
+    padding: 0;
+  }
+  .employee-app .employee-layout > main > .panel-guide > p { display: none; }
+  .employee-app .panel-guide .panel-disclosure { margin: 0; border-radius: 12px; }
+  .employee-app .panel-guide .panel-disclosure > summary { min-height: 44px; padding: 10px 13px; }
+  .employee-app .employee-page-title { margin: 4px 0 18px; font-size: 2rem; }
+  .employee-app .employee-page > .employee-action {
+    width: 100%;
+    min-height: 46px;
+    margin: -5px 0 16px;
+  }
+  .employee-app .employee-card { padding: 17px; margin-bottom: 12px; border-radius: 14px; }
+  .employee-app .next-card { padding: 19px; }
+  .employee-app .next-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .employee-app .next-actions button { width: 100%; min-width: 0; }
+  .employee-app .employee-stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+    margin: 12px 0 18px;
+  }
+  .employee-app .employee-stat {
+    min-height: 98px;
+    padding: 12px 10px;
+    border-radius: 12px;
+  }
+  .employee-app .employee-stat strong { margin-top: 9px; font-size: var(--text-lead); }
+  .employee-app .employee-stat span,
+  .employee-app .employee-stat small { line-height: 1.55; }
+  .employee-app .day-label { margin: 20px 2px 10px; }
+  .employee-app .employee-appointment {
+    grid-template-columns: 58px minmax(0, 1fr);
+    gap: 3px 11px;
+    min-height: 88px;
+    padding: 13px 12px;
+    border-radius: 12px;
+  }
+  .employee-app .employee-appointment time { grid-row: 1 / 3; align-self: center; font-weight: 700; }
+  .employee-app .employee-appointment > span { grid-column: 2; }
+  .employee-app .employee-appointment .employee-status {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+    padding: 4px 9px;
+  }
+  .employee-app .employee-appointment small { white-space: normal; line-height: 1.65; }
+  .employee-app .employee-nav {
+    position: fixed;
+    z-index: 40;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: calc(72px + env(safe-area-inset-bottom));
+    min-height: 72px;
+    padding: 6px 6px env(safe-area-inset-bottom);
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 2px;
+    overflow: visible;
+    border-top: 1px solid var(--color-border);
+    border-left: 0;
+    background: color-mix(in srgb, var(--color-surface) 96%, transparent);
+    box-shadow: 0 -10px 30px color-mix(in srgb, var(--color-text-primary) 7%, transparent);
+    backdrop-filter: blur(16px);
+  }
+  .employee-app .employee-nav a {
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    min-height: 60px;
+    height: 60px;
+    display: grid;
+    grid-template-rows: 27px 18px;
+    place-items: center;
+    align-content: center;
+    gap: 0;
+    padding: 4px 1px;
+    border-radius: 9px;
+    font-size: .7rem;
+    text-align: center;
+  }
+  .employee-app .employee-nav a i { width: auto; font-size: 1.2rem; line-height: 1; }
+  .employee-app .employee-nav a span { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .employee-app .employee-nav a.active { box-shadow: inset 0 -3px var(--color-brand-primary); }
+  .employee-app .employee-site-link { display: none; }
+  .employee-app .employee-detail { padding: 18px 12px calc(88px + env(safe-area-inset-bottom)); }
+  .employee-app .week-strip { gap: 4px; overflow-x: auto; }
+  .employee-app .week-strip button { min-width: 43px; min-height: 58px; padding-inline: 3px; }
+  .employee-app .calendar-toggle { overflow-x: auto; }
+  .employee-app .calendar-toggle button { min-width: max-content; padding-inline: 13px; }
+  .employee-app .weekly-schedule-row { padding-block: 14px; }
+  .employee-app .employee-finance-stat-grid { grid-template-columns: 1fr 1fr; }
+  .employee-app .employee-finance-chart { overflow: hidden; }
+}
+
+@media (max-width: 360px) {
+  .employee-app .employee-brand b { font-size: var(--text-small); }
+  .employee-app .employee-header-actions { gap: 4px; }
+  .employee-app .employee-header-logout { min-width: 44px; padding-inline: 6px; }
+  .employee-app .employee-stat-grid { grid-template-columns: 1fr; }
+  .employee-app .employee-stat { min-height: 82px; }
+}

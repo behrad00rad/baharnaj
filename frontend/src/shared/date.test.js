@@ -1,14 +1,29 @@
 import { describe, expect, it } from 'vitest'
-import { pad } from './date'
+import { formatJalaliDate, formatJalaliDateTime, formatJalaliDatesInText, formatJalaliYear } from './date'
 
-describe('Persian booking helpers', () => {
-  it('pads calendar values consistently', () => {
-    expect(pad(3)).toBe('03')
-    expect(pad(12)).toBe('12')
+describe('formatJalaliDateTime', () => {
+  it('formats server timestamps with the Persian calendar in Tehran time', () => {
+    expect(formatJalaliDateTime('2026-03-21T06:30:00Z')).toBe(
+      '۱ فروردین ۱۴۰۵، ۱۰:۰۰',
+    )
   })
 
-  it('formats Persian numbers with the Intl API', async () => {
-    const { toman } = await import('./api')
-    expect(toman(125000)).toContain('۱۲۵')
+  it('uses the supplied fallback for missing or invalid values', () => {
+    expect(formatJalaliDateTime(null, 'نامشخص')).toBe('نامشخص')
+    expect(formatJalaliDateTime('invalid', 'نامشخص')).toBe('نامشخص')
+  })
+
+  it('formats date-only API values without shifting their calendar day', () => {
+    expect(formatJalaliDate('2026-03-21')).toBe('۱ فروردین ۱۴۰۵')
+  })
+
+  it('converts ISO dates embedded in human-readable backend text', () => {
+    expect(formatJalaliDatesInText('نوبت 2026-03-21 ثبت شد.')).toBe(
+      'نوبت ۱ فروردین ۱۴۰۵ ثبت شد.',
+    )
+  })
+
+  it('returns the current calendar year in Jalali form', () => {
+    expect(formatJalaliYear('2026-03-21')).toBe('۱۴۰۵')
   })
 })

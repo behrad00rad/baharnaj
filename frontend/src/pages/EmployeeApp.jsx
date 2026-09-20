@@ -8,6 +8,7 @@ import { JalaliDatePicker } from "../components/DatePicker";
 import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import PasswordInput from "../components/PasswordInput";
+import { formatJalaliDate } from "../shared/date";
 
 const unwrap = (data) => data?.results || data || [];
 const statusNames = {
@@ -299,10 +300,11 @@ function NewAppointment() {
 const isoDate = (value) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(value);
 const jalaliDateLabel = (value) =>
-  new Intl.DateTimeFormat("fa-IR", {
+  new Intl.DateTimeFormat("fa-IR-u-ca-persian-nu-arabext", {
     weekday: "long",
     day: "numeric",
     month: "long",
+    timeZone: "Asia/Tehran",
   }).format(new Date(`${value}T12:00:00`));
 const addDays = (value, amount) => {
   const next = new Date(`${value}T12:00:00`);
@@ -503,7 +505,7 @@ function Availability() {
           timeOff.data.map((entry) => (
             <div className="time-off-row" key={entry.id}>
               <b>
-                {entry.start_date} تا {entry.end_date}
+                {formatJalaliDate(entry.start_date, "—")} تا {formatJalaliDate(entry.end_date, "—")}
               </b>
               <small>{entry.reason || "بدون توضیح"}</small>
             </div>
@@ -824,7 +826,7 @@ function Earnings() {
     const rows = [
       ["تاریخ", "سرویس", "مبنای کمیسیون", "کمیسیون", "وضعیت کمیسیون"],
       ...items.map((item) => [
-        item.date,
+        formatJalaliDate(item.date, "—"),
         item.service,
         item.amount ?? item.base_amount,
         item.commission ?? item.employee_commission,
@@ -855,7 +857,7 @@ function Earnings() {
             {label}
           </button>
         ))}</div>
-        {preset === "custom" && <div className="employee-custom-range"><label>از<JalaliDatePicker value={customStart} onChange={setCustomStart} /></label><label>تا<JalaliDatePicker value={customEnd} onChange={setCustomEnd} /></label></div>}
+        {preset === "custom" && <div className="employee-custom-range"><label>از<JalaliDatePicker value={customStart} onChange={setCustomStart} minDate="" /></label><label>تا<JalaliDatePicker value={customEnd} onChange={setCustomEnd} minDate="" /></label></div>}
       </div>
       {resource.loading && <Skeleton />}
       {resource.error && <div className="warning">{resource.error}</div>}
@@ -871,7 +873,7 @@ function Earnings() {
       <section className="employee-card employee-finance-chart">
         <div className="employee-finance-chart-head"><div><span className="employee-kicker">روند مالی</span><h2>{employeeFinanceMetrics[metric]}</h2></div><label>شاخص<select value={metric} onChange={(event) => setMetric(event.target.value)}>{Object.entries(employeeFinanceMetrics).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
         <div className="calendar-toggle">{Object.entries(employeeFinanceGroups).map(([value,label]) => <button key={value} className={grouping === value ? "active" : ""} onClick={() => setGrouping(value)}>{label}</button>)}</div>
-        {resource.data.series?.length ? <ResponsiveContainer width="100%" height={270}><BarChart data={resource.data.series}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><YAxis tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><Tooltip formatter={(value) => ["commission","revenue"].includes(metric) ? toman(value) : new Intl.NumberFormat("fa-IR").format(value)} /><Bar name={employeeFinanceMetrics[metric]} dataKey={metric} fill="var(--color-chart-1)" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer> : <Empty title="در این بازه داده‌ای برای نمودار نیست" />}
+        {resource.data.series?.length ? <ResponsiveContainer width="100%" height={270}><BarChart data={resource.data.series}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="date" tickFormatter={(value) => formatJalaliDate(value)} tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><YAxis tick={{ fontSize: "var(--text-caption)", fill: "var(--color-text-secondary)" }} /><Tooltip labelFormatter={(value) => formatJalaliDate(value)} formatter={(value) => ["commission","revenue"].includes(metric) ? toman(value) : new Intl.NumberFormat("fa-IR").format(value)} /><Bar name={employeeFinanceMetrics[metric]} dataKey={metric} fill="var(--color-chart-1)" radius={[4,4,0,0]} /></BarChart></ResponsiveContainer> : <Empty title="در این بازه داده‌ای برای نمودار نیست" />}
       </section>
       </PanelDisclosure>
       <section className="employee-card employee-service-performance"><div className="day-label"><h2>عملکرد سرویس‌های من</h2><span>بر اساس پرداخت تأییدشده</span></div>{resource.data.services?.length ? resource.data.services.slice(0,8).map((service) => <div key={service.id}><span><b>{service.name}</b><small>{service.paid_services} اجرای پرداخت‌شده</small></span><i><b style={{ width: `${service.share}%` }} /></i><strong>{toman(service.revenue)}</strong></div>) : <Empty title="سرویس پرداخت‌شده‌ای نیست" />}</section>
@@ -889,7 +891,7 @@ function Earnings() {
             <span>
               <b>{item.service}</b>
               <small>
-                {item.date} · {item.customer ? `${item.customer} · ` : ""}وضعیت: {statusNames[item.status] || item.status} · پرداخت: {paymentStatusNames[item.payment_status] || item.payment_status}
+                {formatJalaliDate(item.date, "—")} · {item.customer ? `${item.customer} · ` : ""}وضعیت: {statusNames[item.status] || item.status} · پرداخت: {paymentStatusNames[item.payment_status] || item.payment_status}
               </small>
             </span>
             <em>{toman(item.amount ?? item.base_amount)}</em>
@@ -899,7 +901,7 @@ function Earnings() {
       ) : (
         <Empty title="هنوز کمیسیونی ثبت نشده" />
       )}
-      {resource.data.payments?.length > 0 && <section className="employee-card employee-finance-list"><h2>پرداخت‌های مرتبط با کار من</h2>{resource.data.payments.slice(0,20).map((item) => <article key={item.id}><span><b>{item.customer}</b><small>{item.services?.join("، ")} · {item.date ? new Intl.DateTimeFormat("fa-IR", { dateStyle: "medium" }).format(new Date(item.date)) : "—"}</small></span><strong>{toman(item.employee_amount)}</strong><em>{paymentStatusNames[item.status] || item.status}</em></article>)}</section>}
+      {resource.data.payments?.length > 0 && <section className="employee-card employee-finance-list"><h2>پرداخت‌های مرتبط با کار من</h2>{resource.data.payments.slice(0,20).map((item) => <article key={item.id}><span><b>{item.customer}</b><small>{item.services?.join("، ")} · {formatJalaliDate(item.date, "—")}</small></span><strong>{toman(item.employee_amount)}</strong><em>{paymentStatusNames[item.status] || item.status}</em></article>)}</section>}
     </div>
   );
 }

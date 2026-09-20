@@ -1,4 +1,5 @@
 import logging
+import jdatetime
 
 from django.db import transaction
 
@@ -6,6 +7,13 @@ from .firebase import send_fcm_notification
 from .models import Notification, User
 
 logger = logging.getLogger(__name__)
+
+
+def _jalali_appointment_time(item):
+    if not item:
+        return ""
+    date = jdatetime.date.fromgregorian(date=item.date).strftime("%Y/%m/%d")
+    return f"{date} ساعت {item.start_time.strftime('%H:%M')}"
 
 
 def _safe_send_push(notification_id):
@@ -47,7 +55,7 @@ def appointment_employee_users(appointment):
 
 def notify_appointment_created(appointment, actor=None):
     first_item = appointment.items.order_by("date", "start_time").first()
-    when = f"{first_item.date} ساعت {first_item.start_time.strftime('%H:%M')}" if first_item else ""
+    when = _jalali_appointment_time(first_item)
     employees = list(appointment_employee_users(appointment))
     if actor and actor.role == "employee":
         employees = [user for user in employees if user.pk != actor.pk]
@@ -58,7 +66,7 @@ def notify_appointment_created(appointment, actor=None):
 
 def notify_appointment_rescheduled(appointment, actor=None):
     first_item = appointment.items.order_by("date", "start_time").first()
-    when = f"{first_item.date} ساعت {first_item.start_time.strftime('%H:%M')}" if first_item else "زمان جدید"
+    when = _jalali_appointment_time(first_item) or "زمان جدید"
     notify_users(appointment_employee_users(appointment), type="appointment_rescheduled", title="تغییر زمان نوبت", message=f"زمان نوبت به {when} تغییر کرد.", target_url=f"/employee/calendar?appointment={appointment.pk}", appointment=appointment)
 
     if not actor or getattr(actor, "role", None) != "admin":

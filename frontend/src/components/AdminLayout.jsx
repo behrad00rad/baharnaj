@@ -11,6 +11,7 @@ import { useTheme } from "../shared/theme";
 import "./Admin.css";
 import "./AdminEnhancements.css";
 import "./AdminMobileNav.css";
+import "./PanelRedesign.css";
 
 const links = [
   ["/", "نمای کلی", "⌂"],
@@ -51,51 +52,7 @@ export default function AdminLayout() {
     <>
     <SEO title="پنل مدیریت | بهارناژ" description="پنل داخلی بهارناژ." noindex />
     <div className="admin-app" dir="rtl">
-      <aside
-        className={`admin-sidebar ${menuOpen ? "admin-sidebar-open" : ""}`}
-        id="admin-navigation"
-        aria-label="منوی مدیریت"
-      >
-        <div className="admin-mark">
-          <span>ب</span>
-          <div>
-            <strong>بهارناژ</strong>
-            <small>مدیریت سالن</small>
-          </div>
-        </div>
-        <nav>
-          {links.map(([path, label, icon]) => (
-            <NavLink
-              end={path === "/"}
-              key={path}
-              to={`/admin${path}`}
-              onClick={() => setMenuOpen(false)}
-            >
-              <i>{icon}</i>
-              {label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="admin-sidebar-foot">
-          <NavLink to="/" aria-label="بازگشت به وب‌سایت" title="بازگشت به وب‌سایت">
-            <i aria-hidden="true">↗</i>
-            <span>وب‌سایت عمومی</span>
-          </NavLink>
-          <button onClick={logout} aria-label="خروج از حساب" title="خروج از حساب">
-            <i aria-hidden="true">↪</i>
-            <span>خروج از حساب</span>
-          </button>
-        </div>
-      </aside>
-      <button
-        className={`admin-menu-backdrop ${menuOpen ? "visible" : ""}`}
-        type="button"
-        aria-label="بستن منوی مدیریت"
-        tabIndex={menuOpen ? 0 : -1}
-        onClick={() => setMenuOpen(false)}
-      />
-      <main className="admin-main">
-        <header className="admin-topbar">
+      <header className="admin-topbar">
           <div className="admin-topbar-heading">
             <button
               className="admin-mobile-menu-button"
@@ -113,10 +70,11 @@ export default function AdminLayout() {
               <span className="admin-kicker">پنل مدیریت</span>
               <strong>
                 امروز،{" "}
-                {new Intl.DateTimeFormat("fa-IR", {
+                {new Intl.DateTimeFormat("fa-IR-u-ca-persian-nu-arabext", {
                   weekday: "long",
                   day: "numeric",
                   month: "long",
+                  timeZone: "Asia/Tehran",
                 }).format(new Date())}
               </strong>
             </div>
@@ -129,11 +87,57 @@ export default function AdminLayout() {
               <b>م</b>
             </div>
           </div>
-        </header>
-        <PanelGuide role="admin" />
-        <Outlet />
-        <footer className="panel-preferences"><TextSizeControl /></footer>
-      </main>
+      </header>
+      <div className="admin-layout">
+        <aside
+          className={`admin-sidebar ${menuOpen ? "admin-sidebar-open" : ""}`}
+          id="admin-navigation"
+          aria-label="منوی مدیریت"
+        >
+          <div className="admin-mark">
+            <span>ب</span>
+            <div>
+              <strong>بهارناژ</strong>
+              <small>مدیریت سالن</small>
+            </div>
+          </div>
+          <nav>
+            {links.map(([path, label, icon]) => (
+              <NavLink
+                end={path === "/"}
+                key={path}
+                to={`/admin${path}`}
+                onClick={() => setMenuOpen(false)}
+              >
+                <i>{icon}</i>
+                <span>{label}</span>
+              </NavLink>
+            ))}
+          </nav>
+          <div className="admin-sidebar-foot">
+            <NavLink to="/" aria-label="بازگشت به وب‌سایت" title="بازگشت به وب‌سایت">
+              <i aria-hidden="true">↗</i>
+              <span>وب‌سایت عمومی</span>
+            </NavLink>
+            <button onClick={logout} aria-label="خروج از حساب" title="خروج از حساب">
+              <i aria-hidden="true">↪</i>
+              <span>خروج از حساب</span>
+            </button>
+          </div>
+        </aside>
+        <button
+          className={`admin-menu-backdrop ${menuOpen ? "visible" : ""}`}
+          type="button"
+          aria-label="بستن منوی مدیریت"
+          tabIndex={menuOpen ? 0 : -1}
+          onClick={() => setMenuOpen(false)}
+        />
+        <main className="admin-main">
+          <PanelGuide role="admin" />
+          <Outlet />
+          <footer className="panel-preferences"><TextSizeControl /></footer>
+        </main>
+      </div>
     </div>
     </>
   );

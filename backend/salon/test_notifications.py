@@ -38,6 +38,14 @@ class NotificationTests(TestCase):
             self.assertEqual(Notification.objects.filter(recipient=user, type="appointment_assigned").count(), 1)
         self.assertEqual(Notification.objects.filter(recipient=self.admin, type="appointment_created").count(), 1)
 
+    def test_appointment_notification_content_uses_jalali_date(self):
+        notify_appointment_created(self.appointment, actor=self.appointment.created_by)
+        message = Notification.objects.filter(
+            recipient=self.employee_users[0], type="appointment_assigned"
+        ).get().message
+        self.assertIn("1405/06/14", message)
+        self.assertNotIn("2026-09-05", message)
+
     def test_notification_api_is_scoped_and_marks_read(self):
         mine = notify_users([self.employee_users[0]], type="appointment_updated", title="Mine", message="Only mine")[0]
         other = notify_users([self.employee_users[1]], type="appointment_updated", title="Other", message="Only other")[0]

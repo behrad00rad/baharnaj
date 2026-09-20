@@ -4,6 +4,7 @@ import { api } from "../shared/api";
 import { siteConfig } from "../shared/siteConfig";
 import { JalaliDatePicker } from "../components/DatePicker";
 import PasswordInput from "../components/PasswordInput";
+import { formatJalaliDateTime } from "../shared/date";
 
 const statusLabels = {
   pending: "در انتظار تأیید",
@@ -38,19 +39,11 @@ const priceLabels = {
 };
 const formatDate = (value) =>
   value
-    ? new Intl.DateTimeFormat("fa-IR", {
+    ? new Intl.DateTimeFormat("fa-IR-u-ca-persian-nu-arabext", {
         dateStyle: "full",
         timeZone: "Asia/Tehran",
       }).format(new Date(`${value}T12:00:00`))
     : "تاریخ مشخص نشده";
-const formatDateTime = (value) =>
-  value
-    ? new Intl.DateTimeFormat("fa-IR", {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: "Asia/Tehran",
-      }).format(new Date(value))
-    : "";
 const formatMoney = (value) =>
   value == null ? "" : `${new Intl.NumberFormat("fa-IR").format(value)} تومان`;
 const pageItems = (data) => data?.results || (Array.isArray(data) ? data : []);
@@ -625,6 +618,17 @@ function AppointmentDetail({ id }) {
   );
 }
 
+function BirthdayField({ initialValue }) {
+  const [value, setValue] = useState(initialValue || "");
+  return (
+    <label>
+      تاریخ تولد
+      <input type="hidden" name="birthday" value={value} />
+      <JalaliDatePicker value={value} onChange={setValue} minDate="" allowEmpty />
+    </label>
+  );
+}
+
 function Profile() {
   const request = useRequest("customer/profile/");
   const [message, setMessage] = useState("");
@@ -711,7 +715,7 @@ function Profile() {
             <label>نام<input name="first_name" defaultValue={request.data.first_name || ""} /></label>
             <label>نام خانوادگی<input name="last_name" defaultValue={request.data.last_name || ""} /></label>
           </div>
-          <label>تاریخ تولد<input name="birthday" type="date" defaultValue={request.data.birthday || ""} /></label>
+          <BirthdayField initialValue={request.data.birthday} />
           <label>محله<input name="neighborhood" defaultValue={request.data.neighborhood || ""} /></label>
           <label>ترجیحات خدمات<textarea name="service_preferences" defaultValue={request.data.service_preferences} maxLength="2000" /></label>
           <div className="customer-readonly-grid">
@@ -839,7 +843,7 @@ function Notifications() {
                 <div>
                   <h2>{item.title}</h2>
                   <p>{item.message}</p>
-                  <time dateTime={item.created_at}>{formatDateTime(item.created_at)}</time>
+                  <time dateTime={item.created_at}>{formatJalaliDateTime(item.created_at)}</time>
                 </div>
                 <button type="button" onClick={() => openNotification(item)}>
                   {item.target_url?.startsWith("/account") ? "مشاهده" : item.is_read ? "بستن" : "خواندم"}

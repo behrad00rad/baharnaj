@@ -7,5 +7,6 @@
 .notification-list>button span,.notification-list>button time,.push-message {color:var(--color-text-secondary)}
 .push-setting {grid-template-columns:1fr}.push-actions {flex-wrap:wrap}
 .notification-panel {max-height:calc(100dvh - 90px);overflow:auto}
+.notification-list>button time{direction:rtl;unicode-bidi:plaintext}
 .notification-toast {position:fixed;z-index:100;bottom:90px;inset-inline:16px;margin-inline:auto;max-width:420px;display:flex;padding:12px;background:var(--color-surface);color:var(--color-text-primary);border:1px solid var(--color-border);box-shadow:var(--shadow-raised);border-radius:8px}
 .notification-toast button {font:inherit;background:none;border:0;color:inherit;text-align:start}.notification-toast span {display:block}

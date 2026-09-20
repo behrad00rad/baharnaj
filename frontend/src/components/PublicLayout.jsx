@@ -5,6 +5,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../shared/auth";
 import { useTheme } from "../shared/theme";
 import { siteConfig } from "../shared/siteConfig";
+import { formatJalaliYear } from "../shared/date";
 
 const publicLinks = [
   ["/", "خانه"],
@@ -177,9 +178,7 @@ export function PublicLayout({ children }) {
           <TextSizeControl />
           <span>
             ©{" "}
-            {new Intl.NumberFormat("fa-IR", { useGrouping: false }).format(
-              new Date().getFullYear(),
-            )}{" "}
+            {formatJalaliYear()}{" "}
             بهارناژ
           </span>
           <div>
