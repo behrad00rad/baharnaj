@@ -16,7 +16,7 @@ export default function ServiceDetail() {
   const { items: articles } = usePublicList(service?.id ? `blog/posts/?service=${service.id}&page_size=3` : "blog/posts/?service=none");
 
   if (state === "loading") {
-    return <><SEO title="در حال دریافت سرویس | بهارناژ" description="جزئیات خدمات سالن بهارناژ در رشت." noindex /><section className="container detail-state"><PublicState state="loading" empty="" /></section></>;
+    return <><SEO title="در حال دریافت سرویس | بهارناژ" description="جزئیات سرویس‌های سالن بهارناژ در رشت." noindex /><section className="container detail-state"><PublicState state="loading" empty="" /></section></>;
   }
   if (state !== "ready" || !service) {
     return <><SEO title="سرویس پیدا نشد | بهارناژ" description="این سرویس در فهرست فعلی بهارناژ پیدا نشد." noindex /><section className="container detail-state"><PublicState state={state === "error" ? "error" : "ready"} empty="این سرویس پیدا نشد یا دیگر قابل رزرو نیست." /><Link className="text-link" to="/services">مشاهده همه سرویس‌ها <span>←</span></Link></section></>;
@@ -55,12 +55,12 @@ export default function ServiceDetail() {
         </div>
       </header>
       {(service.description || images.length > 1 || service.employees?.length > 0) && <div className="service-article-body">
-        {service.description && <section className="service-copy"><p className="eyebrow">دربارهٔ خدمات</p><h2>درباره {name}</h2>{service.description.split(/\n+/).filter(Boolean).map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</section>}
+        {service.description && <section className="service-copy"><p className="eyebrow">دربارهٔ سرویس</p><h2>درباره {name}</h2>{service.description.split(/\n+/).filter(Boolean).map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</section>}
         {service.employees?.length > 0 && <aside className="service-specialists"><span>متخصصان قابل انتخاب</span><div>{service.employees.map((employee) => <b key={employee.id}>{employee.name || "متخصص بهارناژ"}</b>)}</div></aside>}
       </div>}
       {images.length > 1 && <section className="service-photo-gallery" aria-labelledby="service-gallery-title"><p className="eyebrow">نمونه‌کارها</p><h2 id="service-gallery-title">تصاویر {name}</h2><div>{images.slice(1).map((image) => <MediaImage key={image.id} src={image.image_url} alt={image.alt_text || `تصویر ${name} در بهارناژ`} />)}</div></section>}
     </article>
-    {related.length > 0 && <section className="related-services container" aria-labelledby="related-services-title"><p className="eyebrow">خدمات دیگر در {category}</p><h2 id="related-services-title">سرویس‌های مرتبط</h2><div>{related.map((item) => <Link key={item.id} to={`/services/${item.slug || item.id}`}>{serviceName(item)} <span>{formatServicePrice(item)} · ←</span></Link>)}</div></section>}
+    {related.length > 0 && <section className="related-services container" aria-labelledby="related-services-title"><p className="eyebrow">سرویس‌های دیگر در {category}</p><h2 id="related-services-title">سرویس‌های مرتبط</h2><div>{related.map((item) => <Link key={item.id} to={`/services/${item.slug || item.id}`}>{serviceName(item)} <span>{formatServicePrice(item)} · ←</span></Link>)}</div></section>}
     {articles.length > 0 && <section className="article-related container" aria-labelledby="service-articles-title"><p className="eyebrow">پیش از رزرو بخوانید</p><h2 id="service-articles-title">مطالب مرتبط با {name}</h2><div>{articles.map((post) => <BlogCard key={post.id} post={post} compact />)}</div></section>}
   </>;
 }

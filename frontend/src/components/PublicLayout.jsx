@@ -9,7 +9,7 @@ import { formatJalaliYear } from "../shared/date";
 
 const publicLinks = [
   ["/", "خانه"],
-  ["/services", "خدمات"],
+  ["/services", "سرویس‌ها"],
   ["/gallery", "گالری"],
   ["/blog", "مجله"],
   ["/team", "تیم"],

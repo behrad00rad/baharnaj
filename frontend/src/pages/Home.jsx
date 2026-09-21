@@ -62,9 +62,9 @@ export default function Home() {
         <div className="container">
           <SectionHeader
             eyebrow="انتخاب شما"
-            title="خدمات بهارناژ"
-            text="خدمات و جزئیات هزینه را ببین و با توجه به سلیقه‌ات انتخاب کن."
-            action={<ArrowLink to="/services">همهٔ خدمات</ArrowLink>}
+            title="سرویس‌های بهارناژ"
+            text="سرویس‌ها و جزئیات هزینه را ببین و با توجه به سلیقه‌ات انتخاب کن."
+            action={<ArrowLink to="/services">همهٔ سرویس‌ها</ArrowLink>}
           />
           <ServiceGrid services={services.slice(0, 3)} state={serviceState} />
         </div>

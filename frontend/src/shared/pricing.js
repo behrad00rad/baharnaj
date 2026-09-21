@@ -16,7 +16,7 @@ export function bookingPriceSummary(services) {
   const fixedTotal = fixed.reduce((sum,service) => sum + Number(service.price || 0),0)
   const unresolved = services.length !== fixed.length
   if (!unresolved) return toman(fixedTotal)
-  return `${fixed.length ? `مبلغ قطعی خدمات ثابت: ${toman(fixedTotal)} · ` : ''}قیمت نهایی برخی خدمات پس از مشاوره مشخص می‌شود`
+  return `${fixed.length ? `مبلغ قطعی سرویس‌های ثابت: ${toman(fixedTotal)} · ` : ''}قیمت نهایی برخی سرویس‌ها پس از مشاوره مشخص می‌شود`
 }
 export function formatItemPrice(item) {
   if (item.is_price_final === false) return item.price_status === 'estimated' ? 'قیمت تقریبی؛ هنوز نهایی نشده' : 'قیمت مشخص نشده'

@@ -14,7 +14,7 @@ export default function Blog() {
   const featured = posts.find((post) => post.is_featured) || posts[0];
   const remaining = posts.filter((post) => post.id !== featured?.id);
   return <>
-    <SEO title="مجله زیبایی بهارناژ | راهنما و ترندهای مو، ناخن و میکاپ" description="مجله بهارناژ؛ راهنماهای کاربردی و مطالب تخصصی زیبایی برای انتخاب آگاهانه‌تر خدمات مو، ناخن، میکاپ و مراقبت." canonicalPath="/blog" />
+    <SEO title="مجله زیبایی بهارناژ | راهنما و ترندهای مو، ناخن و میکاپ" description="مجله بهارناژ؛ راهنماهای کاربردی و مطالب تخصصی زیبایی برای انتخاب آگاهانه‌تر سرویس‌های مو، ناخن، میکاپ و مراقبت." canonicalPath="/blog" />
     <header className="blog-index-head container"><p className="eyebrow">مجلهٔ بهارناژ</p><div><h1>مجله<br /><em>بهارناژ</em></h1><p>راهنمای انتخاب، مراقبت و ترندهای زیبایی؛ نوشته‌هایی برای تصمیم‌های شخصی‌تر و نتیجه‌ای که بیشتر شبیه خودت باشد.</p></div></header>
     <nav className="blog-category-filter container" aria-label="دسته‌بندی مقالات"><button aria-pressed={!category} className={!category ? "active" : ""} onClick={() => setParams({})}>همه مطالب</button>{categories.map((item) => <button aria-pressed={category === item.slug} className={category === item.slug ? "active" : ""} key={item.id} onClick={() => setParams({ category: item.slug })}>{item.name}<small>{new Intl.NumberFormat("fa-IR").format(item.post_count)}</small></button>)}</nav>
     <div className="blog-index container">

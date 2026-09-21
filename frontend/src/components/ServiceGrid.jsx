@@ -27,7 +27,7 @@ export function ServiceCard({ service, index = 0 }) {
         {service.duration > 0 && <span>{new Intl.NumberFormat("fa-IR").format(service.duration)} دقیقه</span>}
       </div>
       <div className="service-card-actions">
-        <Link to={`/services/${service.slug || service.id}`}>جزئیات خدمات</Link>
+        <Link to={`/services/${service.slug || service.id}`}>جزئیات سرویس</Link>
         <Link to={`/book?service=${service.id}`}>
           رزرو <span>←</span>
         </Link>

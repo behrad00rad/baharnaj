@@ -275,7 +275,7 @@ function Dashboard() {
         <section className="customer-panel customer-empty customer-empty-hero">
           <span aria-hidden="true">✦</span>
           <h2>هنوز نوبت آینده‌ای ندارید</h2>
-          <p>خدمت، متخصص و زمان مناسب را در چند مرحله انتخاب کنید.</p>
+          <p>سرویس، متخصص و زمان مناسب را در چند مرحله انتخاب کنید.</p>
           <Link className="customer-primary" to="/book">
             شروع رزرو
           </Link>
@@ -513,7 +513,7 @@ function AppointmentDetail({ id }) {
             <span className="customer-kicker">تغییر برنامه</span>
             <h2>انتخاب زمان جدید</h2>
             <p className="customer-readonly">
-              تمام خدمات با همان ترتیب و متخصصان فعلی جابه‌جا می‌شوند.
+              همه سرویس‌ها با همان ترتیب و متخصصان فعلی جابه‌جا می‌شوند.
             </p>
           </div>
           <label>
@@ -741,7 +741,7 @@ function Profile() {
           </div>
           <BirthdayField initialValue={request.data.birthday} />
           <label>محله<input name="neighborhood" defaultValue={request.data.neighborhood || ""} /></label>
-          <label>ترجیحات خدمات<textarea name="service_preferences" defaultValue={request.data.service_preferences} maxLength="2000" /></label>
+          <label>ترجیحات سرویس‌ها<textarea name="service_preferences" defaultValue={request.data.service_preferences} maxLength="2000" /></label>
           <div className="customer-readonly-grid">
             <div><small>شماره تماس</small><strong>{request.data.phone || "ثبت نشده"}</strong></div>
             <div><small>ایمیل بازیابی</small><strong>{request.data.email || "ثبت نشده"}</strong></div>

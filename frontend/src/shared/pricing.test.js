@@ -12,7 +12,7 @@ it('shows fixed-only totals and distinguishes mixed/unresolved bookings',()=>{
  expect(bookingPriceSummary([{price:450},{price:550}])).toBe('۱٬۰۰۰ تومان')
  const variable={pricing_type:'VARIABLE',minimum_price:2000}
  expect(bookingPriceSummary([variable])).not.toContain('۰ تومان')
- expect(bookingPriceSummary([{price:450},variable])).toContain('مبلغ قطعی خدمات ثابت: ۴۵۰ تومان')
+ expect(bookingPriceSummary([{price:450},variable])).toContain('مبلغ قطعی سرویس‌های ثابت: ۴۵۰ تومان')
  expect(bookingPriceSummary([{price:450},variable])).not.toContain('۲٬۴۵۰')
 })
 it('uses agreed item prices while keeping old snapshots working',()=>{
