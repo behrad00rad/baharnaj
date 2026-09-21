@@ -350,6 +350,11 @@ function CalendarWorkspace() {
     setVisibleMonth(value);
     setSelectedDate(value);
   };
+  const moveWeek = (direction) => {
+    const value = addDays(selectedDate, direction * 7);
+    setSelectedDate(value);
+    setVisibleMonth(`${value.slice(0, 7)}-01`);
+  };
   const selectToday = () => {
     const value = isoDate(new Date());
     setSelectedDate(value);
@@ -369,7 +374,8 @@ function CalendarWorkspace() {
       <section className="employee-card employee-month-calendar">
         <div className="employee-calendar-head">
           <div><small>تقویم شمسی</small><h2>{new Intl.NumberFormat("fa-IR").format(monthJalali.jy)} / {new Intl.NumberFormat("fa-IR").format(monthJalali.jm)}</h2></div>
-          <div><button type="button" aria-label="ماه قبل" onClick={() => moveMonth(-1)}>‹</button><button type="button" onClick={selectToday}>امروز</button><button type="button" aria-label="ماه بعد" onClick={() => moveMonth(1)}>›</button></div>
+          <div className="employee-calendar-month-actions"><button type="button" aria-label="ماه قبل" onClick={() => moveMonth(-1)}>‹</button><button type="button" onClick={selectToday}>امروز</button><button type="button" aria-label="ماه بعد" onClick={() => moveMonth(1)}>›</button></div>
+          <div className="employee-calendar-week-actions"><button type="button" aria-label="هفته قبل" onClick={() => moveWeek(-1)}>‹</button><button type="button" onClick={selectToday}>این هفته</button><button type="button" aria-label="هفته بعد" onClick={() => moveWeek(1)}>›</button></div>
         </div>
         <div className="employee-calendar-weekdays">{["ی", "د", "س", "چ", "پ", "ج", "ش"].map((day) => <b key={day}>{day}</b>)}</div>
         {appointments.loading ? <Skeleton /> : appointments.error ? <div className="schedule-message">{appointments.error}</div> : <div className="employee-calendar-days">

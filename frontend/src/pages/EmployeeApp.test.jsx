@@ -92,6 +92,23 @@ describe("employee app", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it("moves the employee calendar forward by one week", async () => {
+    render(
+      <MemoryRouter initialEntries={["/calendar"]}>
+        <EmployeeApp />
+      </MemoryRouter>,
+    );
+    await screen.findByText("برای این روز نوبتی ندارید");
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(new Date());
+    const nextWeek = new Date(`${today}T12:00:00`);
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    const nextWeekValue = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(nextWeek);
+
+    fireEvent.click(screen.getByRole("button", { name: "هفته بعد" }));
+
+    expect(screen.getByRole("button", { name: nextWeekValue })).toHaveClass("selected");
+  });
+
   it("uses the employee schedule endpoint for weekly hours", async () => {
     render(
       <MemoryRouter initialEntries={["/availability"]}>
