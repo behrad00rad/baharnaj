@@ -12,6 +12,7 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
+    allowedHosts: ['baharnaj.ir', 'www.baharnaj.ir'],
     proxy: {
       '/api': { target: proxyTarget, changeOrigin: true },
       '/media': { target: proxyTarget, changeOrigin: true },
