@@ -1100,6 +1100,29 @@ class AdminGalleryCategoryView(generics.ListCreateAPIView):
     serializer_class = GalleryCategorySerializer
 
 
+class AdminGalleryCategoryDetailView(generics.DestroyAPIView):
+    """Remove a gallery category without removing the gallery entries in it."""
+
+    permission_classes = (IsAdmin,)
+    queryset = GalleryCategory.objects.all()
+    serializer_class = GalleryCategorySerializer
+
+    def perform_destroy(self, instance):
+        from django.db import transaction
+
+        with transaction.atomic():
+            GalleryAsset.objects.filter(category=instance).update(category=None)
+            category_id = instance.pk
+            instance.delete()
+            AdminActionLog.objects.create(
+                actor=self.request.user,
+                action="delete",
+                model_name="GalleryCategory",
+                object_id=str(category_id),
+                details={"assets_moved_to_uncategorized": True},
+            )
+
+
 class AdminEmployeeViewSet(AdminModelViewSet):
     queryset = EmployeeProfile.objects.select_related("user")
     serializer_class = AdminEmployeeSerializer

@@ -5,8 +5,6 @@ import { useAuth } from "../shared/auth";
 import NotificationBell from "./NotificationBell";
 import { SEO } from "./SEO";
 import { useTheme } from "../shared/theme";
-import { logoutSession } from "../shared/api";
-import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
 import "./Employee.css";
 import "./EmployeeEnhancements.css";
 import "./PanelRedesign.css";
@@ -23,11 +21,6 @@ export default function EmployeeLayout() {
   const navigate = useNavigate();
   const { role } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const logout = async () => {
-    await disableCurrentFirebaseDevice().catch(() => {});
-    await logoutSession();
-    navigate("/staff/login", { replace: true });
-  };
   if (role !== "employee")
     return (
       <div className="employee-denied" dir="rtl">
@@ -47,7 +40,7 @@ export default function EmployeeLayout() {
             <small>روز کاری من</small>
           </div>
         </div>
-        <div className="employee-header-actions"><button className="panel-theme-toggle" type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "فعال‌کردن حالت روشن" : "فعال‌کردن حالت تاریک"}>{theme === "dark" ? "☀" : "☾"}</button><NotificationBell /><button className="employee-header-logout" type="button" onClick={logout}>خروج</button></div>
+        <div className="employee-header-actions"><button className="panel-theme-toggle" type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "فعال‌کردن حالت روشن" : "فعال‌کردن حالت تاریک"}>{theme === "dark" ? "☀" : "☾"}</button><NotificationBell /><NavLink className="employee-header-site" to="/">بازگشت به سایت</NavLink></div>
       </header>
       <div className="employee-layout">
         <nav className="employee-nav" aria-label="منوی پنل متخصص">
@@ -57,10 +50,6 @@ export default function EmployeeLayout() {
               <span>{label}</span>
             </NavLink>
           ))}
-          <NavLink className="employee-site-link" to="/">
-            <i>↙</i>
-            <span>بازگشت به سایت</span>
-          </NavLink>
         </nav>
         <main>
           <PanelGuide role="employee" />

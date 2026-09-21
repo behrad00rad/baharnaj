@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { api } from "../shared/api";
+import { api, logoutSession } from "../shared/api";
 import { siteConfig } from "../shared/siteConfig";
 import { JalaliDatePicker } from "../components/DatePicker";
 import PasswordInput from "../components/PasswordInput";
@@ -630,6 +630,7 @@ function BirthdayField({ initialValue }) {
 }
 
 function Profile() {
+  const navigate = useNavigate();
   const request = useRequest("customer/profile/");
   const deletionRequest = useRequest("customer/account/deletion-request/");
   const [message, setMessage] = useState("");
@@ -724,6 +725,10 @@ function Profile() {
       );
     }
   };
+  const logout = async () => {
+    await logoutSession();
+    navigate("/account/login", { replace: true });
+  };
 
   return (
     <>
@@ -776,6 +781,10 @@ function Profile() {
           {deletionRequest.data?.status === "pending" ? <button className="customer-secondary" type="button" onClick={cancelDeletion}>لغو درخواست حذف</button> : (!deletionRequest.data || ["rejected", "cancelled"].includes(deletionRequest.data.status)) && <button className="customer-danger-button" type="button" onClick={requestDeletion}>ثبت درخواست حذف حساب</button>}
         </div>
       </details>
+      <section className="customer-panel customer-logout">
+        <div><span className="customer-kicker">خروج از حساب</span><h2>پایان نشست</h2><p>برای ورود دوباره باید اطلاعات حساب خود را وارد کنید.</p></div>
+        <button className="customer-secondary" type="button" onClick={logout}>خروج از حساب</button>
+      </section>
     </>
   );
 }

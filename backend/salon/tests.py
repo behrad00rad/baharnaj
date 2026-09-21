@@ -501,6 +501,20 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(duplicate.status_code, 400)
         self.assertEqual(public.data[0]["name"], "ناخن")
 
+    def test_admin_can_delete_gallery_category_without_deleting_assets(self):
+        admin = User.objects.create_user(username="gallery-delete-admin", role="admin")
+        category = GalleryCategory.objects.create(name="رنگ مو")
+        asset = GalleryAsset.objects.create(title="نمونه", category=category, image_url="https://cdn.example.test/example.jpg")
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.delete(f"/api/v1/admin/gallery-categories/{category.pk}/")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(GalleryCategory.objects.filter(pk=category.pk).exists())
+        asset.refresh_from_db()
+        self.assertIsNone(asset.category)
+
     def test_employee_can_change_only_own_password(self):
         self.employee.user.set_password("old-password-8472")
         self.employee.user.save()

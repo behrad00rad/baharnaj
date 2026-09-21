@@ -1,6 +1,6 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from .views import (AdminAppointmentViewSet, AdminBlogCategoryViewSet, AdminBlogMediaViewSet, AdminBlogPostViewSet, AdminBlogTagViewSet, AdminEmployeeViewSet, AdminGalleryCategoryView, AdminServiceViewSet,
+from .views import (AdminAppointmentViewSet, AdminBlogCategoryViewSet, AdminBlogMediaViewSet, AdminBlogPostViewSet, AdminBlogTagViewSet, AdminEmployeeViewSet, AdminGalleryCategoryDetailView, AdminGalleryCategoryView, AdminServiceViewSet,
 					AdminUserViewSet, AdminDeletionRequestViewSet, AdminCustomerOptionsView, AdminEmployeeEligibleUsersView, AdminEmployeeFinanceView, AdminRevenueView, AdminServiceCategoryViewSet, AdminTransactionTypesView, BookingHoldDeleteView,
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView, BookingHoldView,
 										EmployeeAppointmentsView, EmployeeCustomerOptionsView, EmployeeListView, EmployeeSelfBookingView, EmployeeSelfServiceListView, EmployeeStatisticsView, GalleryCategoryListView,
@@ -78,6 +78,7 @@ urlpatterns = [
 	path("employee/earnings/", EmployeeEarningsView.as_view(), name="employee-earnings"),
 	path("admin/statistics/", AdminStatisticsView.as_view(), name="admin-statistics"),
 	path("admin/gallery-categories/", AdminGalleryCategoryView.as_view(), name="admin-gallery-category-list"),
+	path("admin/gallery-categories/<int:pk>/", AdminGalleryCategoryDetailView.as_view(), name="admin-gallery-category-detail"),
 	path("admin/employee-eligible-users/", AdminEmployeeEligibleUsersView.as_view(), name="admin-employee-eligible-users"),
 	path("admin/customer-options/", AdminCustomerOptionsView.as_view(), name="admin-customer-options"),
 	path("admin/transaction-types/", AdminTransactionTypesView.as_view(), name="admin-transaction-types"),

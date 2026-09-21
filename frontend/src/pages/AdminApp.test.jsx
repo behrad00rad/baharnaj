@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import AdminRouter from "./AdminApp";
 
-const { get, post, mockState } = vi.hoisted(() => ({
+const { get, post, delete: remove, mockState } = vi.hoisted(() => ({
   mockState: { pendingPayment: false },
   get: vi.fn((endpoint) => {
     if (mockState.pendingPayment && endpoint.startsWith("admin/payments/?"))
@@ -163,10 +163,11 @@ const { get, post, mockState } = vi.hoisted(() => ({
         endpoint === "admin/gallery-categories/" ? { id: 6, name: "ناخن" } : {},
     }),
   ),
+  delete: vi.fn(() => Promise.resolve({ data: {} })),
 }));
 
 vi.mock("../shared/api", () => ({
-  api: { get, post, patch: vi.fn(), delete: vi.fn() },
+  api: { get, post, patch: vi.fn(), delete: remove },
   toman: (value) => `${value} تومان`,
 }));
 
@@ -253,6 +254,16 @@ describe("admin CRUD forms", () => {
       "6",
     );
     expect(screen.getByRole("combobox").value).toBe("6");
+  });
+
+  it("removes a gallery category while keeping its gallery items available", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<MemoryRouter initialEntries={["/content"]}><AdminRouter /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: /افزودن بخش محتوا/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "حذف دسته‌بندی مو" }));
+
+    await waitFor(() => expect(remove).toHaveBeenCalledWith("admin/gallery-categories/5/"));
+    expect(screen.queryByRole("option", { name: "مو" })).not.toBeInTheDocument();
   });
 
   it("shows customer visit and spending summaries in the customer directory", async () => {

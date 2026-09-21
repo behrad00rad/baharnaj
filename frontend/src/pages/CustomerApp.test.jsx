@@ -3,15 +3,15 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import CustomerApp from "./CustomerApp";
 
-const { get, post } = vi.hoisted(() => ({ get: vi.fn(() => Promise.resolve({ data: {
+const { get, post, logoutSession } = vi.hoisted(() => ({ get: vi.fn(() => Promise.resolve({ data: {
   customer: { display_name: "سارا", phone: "09121234567" },
   next_appointment: null,
   unread_notification_count: 0,
   upcoming_count: 0,
   recent_history_count: 0,
-} })), post: vi.fn(() => Promise.resolve({ data: {} })) }));
+} })), post: vi.fn(() => Promise.resolve({ data: {} })), logoutSession: vi.fn(() => Promise.resolve()) }));
 
-vi.mock("../shared/api", () => ({ api: { get, post, patch: vi.fn() } }));
+vi.mock("../shared/api", () => ({ api: { get, post, patch: vi.fn() }, logoutSession }));
 
 describe("customer dashboard", () => {
   beforeEach(() => {

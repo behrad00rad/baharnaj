@@ -1248,6 +1248,27 @@ function CrudPage({
       setOptionSaving({ ...optionSaving, [field.name]: false });
     }
   };
+  const removeOption = async (field, option) => {
+    const label = field.optionLabel ? field.optionLabel(option) : option.name;
+    if (!window.confirm(`دسته‌بندی «${label}» حذف شود؟ آیتم‌های گالری حذف نمی‌شوند و بدون دسته‌بندی باقی می‌مانند.`)) return;
+    setOptionSaving({ ...optionSaving, [field.name]: true });
+    setOptionErrors({ ...optionErrors, [field.name]: "" });
+    try {
+      await api.delete(`${field.deleteEndpoint}${option.id}/`);
+      setOptions({
+        ...options,
+        [field.name]: (options[field.name] || []).filter(({ id }) => id !== option.id),
+      });
+      if (String(form[field.name]) === String(option.id)) {
+        setForm({ ...form, [field.name]: "" });
+      }
+      setToast("دسته‌بندی حذف شد؛ آیتم‌های آن بدون دسته‌بندی باقی ماندند.");
+    } catch (error) {
+      setOptionErrors({ ...optionErrors, [field.name]: firstError(error, "حذف دسته‌بندی انجام نشد") });
+    } finally {
+      setOptionSaving({ ...optionSaving, [field.name]: false });
+    }
+  };
   const submit = async (event) => {
     event.preventDefault();
     if (saving) return;
@@ -1436,6 +1457,16 @@ function CrudPage({
                             </small>
                           )}
                         </span>
+                      )}
+                      {field.deleteEndpoint && (options[field.name] || []).length > 0 && (
+                        <div className="admin-option-list" aria-label="دسته‌بندی‌های گالری">
+                          {(options[field.name] || []).map((option) => (
+                            <span key={option.id}>
+                              {field.optionLabel ? field.optionLabel(option) : option.name}
+                              <button type="button" className="admin-option-delete" disabled={optionSaving[field.name]} onClick={() => removeOption(field, option)} aria-label={`حذف دسته‌بندی ${option.name}`}>×</button>
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </>
                   ) : field.type === "textarea" ? (
@@ -2193,6 +2224,7 @@ function Content() {
           type: "select",
           optionsEndpoint: "admin/gallery-categories/",
           createEndpoint: "admin/gallery-categories/",
+          deleteEndpoint: "admin/gallery-categories/",
         },
         ["image", "تصویر", "file"],
         ["description", "توضیحات"],
