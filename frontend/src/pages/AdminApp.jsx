@@ -2201,6 +2201,82 @@ function Content() {
     />
   );
 }
+const closureKinds = {
+  holiday: "تعطیلی",
+  maintenance: "تعمیرات",
+  private_event: "مراسم خصوصی",
+  other: "سایر",
+};
+
+function SalonClosures() {
+  const closures = useResource("admin/closures/");
+  const [form, setForm] = useState({ start_date: today, end_date: today, kind: "holiday", reason: "" });
+  const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const reset = () => {
+    setForm({ start_date: today, end_date: today, kind: "holiday", reason: "" });
+    setEditing(null);
+  };
+  const submit = async (event) => {
+    event.preventDefault();
+    setMessage("");
+    setSaving(true);
+    try {
+      if (editing) await api.patch(`admin/closures/${editing}/`, form);
+      else await api.post("admin/closures/", form);
+      setMessage(editing ? "روز تعطیل ویرایش شد." : "روز تعطیل ثبت شد.");
+      reset();
+      closures.reload();
+    } catch (error) {
+      setMessage(firstError(error, "ثبت روز تعطیل انجام نشد."));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const beginEdit = (item) => {
+    setEditing(item.id);
+    setForm({ start_date: item.start_date, end_date: item.end_date, kind: item.kind, reason: item.reason || "" });
+    setMessage("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const remove = async () => {
+    try {
+      await api.delete(`admin/closures/${deleting.id}/`);
+      setDeleting(null);
+      setMessage("روز تعطیل حذف شد.");
+      closures.reload();
+    } catch (error) {
+      setMessage(firstError(error, "حذف روز تعطیل انجام نشد."));
+    }
+  };
+  return <div className="admin-page salon-closures-page">
+    <Header eyebrow="کنترل ظرفیت سالن" title="روزهای تعطیل" />
+    <p className="admin-page-description">در این بازه‌ها هیچ مشتری نمی‌تواند نوبت تازه بگیرد و روز در تقویم رزرو با وضعیت تعطیل نمایش داده می‌شود.</p>
+    {message && <Toast message={message} type={message.includes("نشد") || message.includes("هم‌پوشانی") ? "error" : "success"} />}
+    <section className="admin-panel closure-form-panel">
+      <div className="panel-title"><div><span>{editing ? "ویرایش" : "ثبت جدید"}</span><h2>{editing ? "ویرایش بازه تعطیلی" : "افزودن روز یا بازه تعطیل"}</h2></div></div>
+      <form className="closure-form" onSubmit={submit}>
+        <label>از تاریخ<JalaliDatePicker value={form.start_date} onChange={(start_date) => setForm((current) => ({ ...current, start_date, end_date: current.end_date < start_date ? start_date : current.end_date }))} minDate="" /></label>
+        <label>تا تاریخ<JalaliDatePicker value={form.end_date} onChange={(end_date) => setForm((current) => ({ ...current, end_date }))} minDate={form.start_date} /></label>
+        <label>نوع تعطیلی<select value={form.kind} onChange={(event) => setForm((current) => ({ ...current, kind: event.target.value }))}>{Object.entries(closureKinds).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
+        <label className="closure-reason">توضیح برای مشتری <small>(اختیاری)</small><input value={form.reason} maxLength={255} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} placeholder="مثلاً تعطیلات رسمی یا تکمیل ظرفیت" /></label>
+        <div className="closure-form-actions"><button className="admin-primary" disabled={saving}>{saving ? "در حال ثبت..." : editing ? "ذخیره تغییرات" : "ثبت تعطیلی"}</button>{editing && <button type="button" className="admin-secondary" onClick={reset}>انصراف</button>}</div>
+      </form>
+    </section>
+    <section className="admin-panel">
+      <div className="panel-title"><div><span>تقویم سالن</span><h2>تعطیلی‌های ثبت‌شده</h2></div><b>{new Intl.NumberFormat("fa-IR").format(closures.data.length)} مورد</b></div>
+      {closures.loading ? <Skeleton /> : closures.data.length ? <div className="closure-list">{closures.data.map((item) => <article key={item.id}>
+        <span className="closure-date"><b>{formatJalaliDate(item.start_date)}</b>{item.end_date !== item.start_date && <small>تا {formatJalaliDate(item.end_date)}</small>}</span>
+        <span><b>{closureKinds[item.kind] || "تعطیلی"}</b><small>{item.reason || "بدون توضیح"}</small></span>
+        <div><button className="admin-ghost" onClick={() => beginEdit(item)}>ویرایش</button><button className="admin-danger" onClick={() => setDeleting(item)}>حذف</button></div>
+      </article>)}</div> : <Empty title="روز تعطیلی ثبت نشده" text="سالن در تمام روزهای دارای برنامه کاری قابل رزرو است." />}
+    </section>
+    {deleting && <div className="modal-backdrop" onMouseDown={() => setDeleting(null)}><section className="admin-modal closure-delete-modal" role="dialog" aria-modal="true" aria-labelledby="closure-delete-title" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setDeleting(null)}>×</button><span className="admin-kicker">حذف تعطیلی</span><h2 id="closure-delete-title">این روز دوباره قابل رزرو شود؟</h2><p>{formatJalaliDate(deleting.start_date)}{deleting.end_date !== deleting.start_date ? ` تا ${formatJalaliDate(deleting.end_date)}` : ""}</p><div className="drawer-actions"><button className="admin-danger" onClick={remove}>حذف تعطیلی</button><button className="admin-secondary" onClick={() => setDeleting(null)}>انصراف</button></div></section></div>}
+  </div>;
+}
+
 function CustomerManagement() {
   const customers = useResource("admin/users/");
   const deletions = useResource("admin/deletion-requests/");
@@ -2235,6 +2311,7 @@ function AdminRouter() {
     <Routes>
       <Route index element={<DashboardHome />} />
       <Route path="appointments" element={<Appointments />} />
+      <Route path="off-days" element={<SalonClosures />} />
       <Route path="employees" element={<EmployeeManagement />} />
       <Route
         path="services"

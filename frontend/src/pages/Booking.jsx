@@ -81,6 +81,7 @@ export default function Booking() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [slots, setSlots] = useState([]);
+  const [availabilityState, setAvailabilityState] = useState(null);
   const [dateOpen, setDateOpen] = useState(false);
   const [contact, setContact] = useState({
     name: "",
@@ -139,6 +140,10 @@ export default function Booking() {
       };
     });
   }, [chosenServices, employeeIds, date, time]);
+  const availabilityItems = useMemo(() => chosenServices.map((service) => ({
+    service: service.id,
+    employee: employeeIds[service.id],
+  })).filter((item) => item.employee), [chosenServices, employeeIds]);
   useEffect(() => {
     if (role !== "customer") return;
     api.get("customer/profile/").then(({ data }) => setContact((current) => ({ ...current, name: data.display_name || "", phone: data.phone || "", account: false }))).catch(() => {});
@@ -166,17 +171,19 @@ export default function Booking() {
       Object.keys(employeeIds).length !== selected.length
     )
       return;
-    const items = chosenServices.map((service) => ({
-      service: service.id,
-      employee: employeeIds[service.id],
-    }));
     api
       .get(
-        `availability/?date=${date}&items=${encodeURIComponent(JSON.stringify(items))}`,
+        `availability/?date=${date}&items=${encodeURIComponent(JSON.stringify(availabilityItems))}`,
       )
-      .then(({ data }) => setSlots(data.slots || []))
-      .catch(() => setSlots([]));
-  }, [date, selected, employeeIds, chosenServices]);
+      .then(({ data }) => {
+        setSlots(data.slots || []);
+        setAvailabilityState(data);
+      })
+      .catch(() => {
+        setSlots([]);
+        setAvailabilityState(null);
+      });
+  }, [date, selected, employeeIds, chosenServices, availabilityItems]);
   useEffect(
     () => () => {
       if (hold) api.delete(`booking-holds/${hold.token}/`).catch(() => {});
@@ -306,10 +313,13 @@ export default function Booking() {
                 setDate(value);
                 setTime("");
                 setSlots([]);
+                setAvailabilityState(null);
               }}
               dateOpen={dateOpen}
               setDateOpen={setDateOpen}
               slots={slots}
+              availabilityState={availabilityState}
+              availabilityItems={availabilityItems}
               time={time}
               setTime={setTime}
               onBack={() => setStep(1)}
@@ -515,6 +525,8 @@ function TimeStep({
   dateOpen,
   setDateOpen,
   slots,
+  availabilityState,
+  availabilityItems,
   time,
   setTime,
   onBack,
@@ -538,6 +550,7 @@ function TimeStep({
           value={date || today()}
           onChange={setDate}
           onClose={() => setDateOpen(false)}
+          availabilityItems={availabilityItems}
         />
       )}
       {date && (
@@ -561,7 +574,7 @@ function TimeStep({
               ))}
             </div>
           ) : (
-            <EmptyLine text="در این تاریخ ساعتی پیدا نشد. تاریخ دیگری را امتحان کنید." />
+            <EmptyLine text={availabilityState?.status === "holiday" ? `سالن در این روز تعطیل است.${availabilityState.reason ? ` ${availabilityState.reason}` : ""}` : availabilityState?.status === "full" ? "تمام وقت‌های این روز پر شده است. تاریخ دیگری را انتخاب کنید." : availabilityState?.status === "unavailable" ? "متخصص انتخاب‌شده در این روز برنامه کاری ندارد." : "در این تاریخ ساعتی پیدا نشد. تاریخ دیگری را امتحان کنید."} />
           )}
         </>
       )}

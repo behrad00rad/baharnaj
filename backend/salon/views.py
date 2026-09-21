@@ -25,10 +25,10 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import AdminActionLog, Appointment, AppointmentItem, AppointmentStatusHistory, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerAccountDeletionRequest, CustomerCommunicationPreference, CustomerIdentityClaim, CustomerMutationRequest, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
+from .models import AdminActionLog, Appointment, AppointmentItem, AppointmentStatusHistory, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerAccountDeletionRequest, CustomerCommunicationPreference, CustomerIdentityClaim, CustomerMutationRequest, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, SalonClosure, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsCustomer, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, normalize_phone, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, CustomerAppointmentSerializer, CustomerDeletionRequestSerializer, CustomerPasswordChangeSerializer, CustomerPreferenceSerializer, CustomerProfileSerializer, CustomerRegistrationSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, CustomerAppointmentSerializer, CustomerDeletionRequestSerializer, CustomerPasswordChangeSerializer, CustomerPreferenceSerializer, CustomerProfileSerializer, CustomerRegistrationSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, SalonClosureSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 def set_refresh_cookie(response, refresh):
@@ -377,54 +377,154 @@ class EmployeeListView(generics.ListAPIView):
         return queryset
 
 
-class AvailabilityView(generics.ListAPIView):
+def parse_availability_items(request):
+    raw_items = request.query_params.get("items")
+    if raw_items:
+        try:
+            selected_items = json.loads(raw_items)
+        except (json.JSONDecodeError, TypeError):
+            raise ValidationError({"detail": "جزئیات خدمات نامعتبر است."})
+    else:
+        selected_items = [
+            {"service": value, "employee": request.query_params.get("employee")}
+            for value in request.query_params.get("service", "").split(",")
+            if value
+        ]
+    if not isinstance(selected_items, list) or not selected_items:
+        raise ValidationError({"detail": "انتخاب خدمت و متخصص الزامی است."})
+    segments = []
+    for selected in selected_items:
+        if not isinstance(selected, dict):
+            raise ValidationError({"detail": "جزئیات خدمات نامعتبر است."})
+        service = Service.objects.filter(pk=selected.get("service"), is_active=True, is_bookable=True).first()
+        employee = EmployeeProfile.objects.filter(pk=selected.get("employee"), is_active=True).first()
+        if not service or not employee or not EmployeeService.objects.filter(employee=employee, service=service, is_active=True).exists():
+            raise ValidationError({"detail": "خدمت یا متخصص انتخاب‌شده معتبر نیست."})
+        segments.append((service, employee))
+    return segments
+
+
+def salon_closure_on(selected_date):
+    return SalonClosure.objects.filter(start_date__lte=selected_date, end_date__gte=selected_date).order_by("start_date", "pk").first()
+
+
+def availability_context(start_date, end_date, segments):
+    employee_ids = {employee.pk for _, employee in segments}
+    schedules = {}
+    for entry in WorkingSchedule.objects.filter(employee_id__in=employee_ids, is_active=True).values("employee_id", "weekday", "start_time", "end_time"):
+        schedules.setdefault((entry["employee_id"], entry["weekday"]), []).append((entry["start_time"], entry["end_time"]))
+    time_off = {}
+    for entry in TimeOff.objects.filter(employee_id__in=employee_ids, start_date__lte=end_date, end_date__gte=start_date).values("employee_id", "start_date", "end_date"):
+        time_off.setdefault(entry["employee_id"], []).append((entry["start_date"], entry["end_date"]))
+    appointments = {}
+    for entry in AppointmentItem.objects.filter(employee_id__in=employee_ids, date__range=(start_date, end_date), appointment__status__in=("pending", "confirmed")).values("employee_id", "date", "start_time", "end_time"):
+        appointments.setdefault((entry["employee_id"], entry["date"]), []).append((entry["start_time"], entry["end_time"]))
+    holds = {}
+    for entry in BookingHoldItem.objects.filter(employee_id__in=employee_ids, date__range=(start_date, end_date), hold__expires_at__gt=timezone.now()).values("employee_id", "date", "start_time", "end_time"):
+        holds.setdefault((entry["employee_id"], entry["date"]), []).append((entry["start_time"], entry["end_time"]))
+    closures = {}
+    for closure in SalonClosure.objects.filter(start_date__lte=end_date, end_date__gte=start_date).order_by("start_date", "pk"):
+        current_date = max(start_date, closure.start_date)
+        while current_date <= min(end_date, closure.end_date):
+            closures.setdefault(current_date, closure)
+            current_date += timedelta(days=1)
+    return {"schedules": schedules, "time_off": time_off, "appointments": appointments, "holds": holds, "closures": closures}
+
+
+def availability_for_date(selected_date, segments, context=None):
+    if selected_date < timezone.localdate():
+        return {"status": "past", "slots": []}
+    closure = context["closures"].get(selected_date) if context else salon_closure_on(selected_date)
+    if closure:
+        return {"status": "holiday", "slots": [], "reason": closure.reason, "closure_kind": closure.kind}
+    slots = []
+    current = datetime.combine(selected_date, time(8))
+    closing = datetime.combine(selected_date, time(20))
+    had_capacity = False
+    while current < closing:
+        segment_start = current
+        available = True
+        candidate_has_capacity = True
+        for service, employee in segments:
+            segment_end = segment_start + timedelta(minutes=service.duration)
+            if context:
+                schedule = any(start <= segment_start.time() and end >= segment_end.time() for start, end in context["schedules"].get((employee.pk, selected_date.weekday()), ()))
+                employee_absent = any(start <= selected_date <= end for start, end in context["time_off"].get(employee.pk, ()))
+            else:
+                schedule = employee.working_schedules.filter(
+                    weekday=selected_date.weekday(), is_active=True,
+                    start_time__lte=segment_start.time(), end_time__gte=segment_end.time(),
+                ).exists()
+                employee_absent = employee.time_off.filter(start_date__lte=selected_date, end_date__gte=selected_date).exists()
+            if not schedule or employee_absent:
+                candidate_has_capacity = False
+                available = False
+            else:
+                if context:
+                    appointment_conflict = any(start < segment_end.time() and end > segment_start.time() for start, end in context["appointments"].get((employee.pk, selected_date), ()))
+                    hold_conflict = any(start < segment_end.time() and end > segment_start.time() for start, end in context["holds"].get((employee.pk, selected_date), ()))
+                else:
+                    appointment_conflict = AppointmentItem.objects.filter(
+                        employee=employee, date=selected_date,
+                        appointment__status__in=("pending", "confirmed"),
+                        start_time__lt=segment_end.time(), end_time__gt=segment_start.time(),
+                    ).exists()
+                    hold_conflict = BookingHoldItem.objects.filter(
+                        employee=employee, date=selected_date, hold__expires_at__gt=timezone.now(),
+                        start_time__lt=segment_end.time(), end_time__gt=segment_start.time(),
+                    ).exists()
+                if appointment_conflict or hold_conflict:
+                    available = False
+            segment_start = segment_end
+        had_capacity = had_capacity or candidate_has_capacity
+        if available:
+            slots.append(current.strftime("%H:%M"))
+        current += timedelta(minutes=30)
+    return {"status": "available" if slots else ("full" if had_capacity else "unavailable"), "slots": slots}
+
+
+class AvailabilityView(generics.GenericAPIView):
     permission_classes = (AllowAny,)
     throttle_scope = "guest_booking"
-    def list(self, request, *args, **kwargs):
-        raw_items = request.query_params.get("items")
-        if raw_items:
-            try:
-                selected_items = json.loads(raw_items)
-            except json.JSONDecodeError:
-                return Response({"detail": "جزئیات خدمات نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            selected_items = [{"service": value, "employee": request.query_params.get("employee")} for value in request.query_params.get("service", "").split(",") if value]
-        service_values = [value for value in request.query_params.get("service", "").split(",") if value]
+
+    def get(self, request):
         date_value = request.query_params.get("date")
-        if not selected_items or not date_value:
-            return Response({"detail": "خدمت، متخصص و تاریخ الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
+        if not date_value:
+            return Response({"detail": "تاریخ الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            appointment_date = datetime.strptime(date_value, "%Y-%m-%d").date()
-            segments = []
-            for selected in selected_items:
-                service = Service.objects.filter(pk=selected["service"], is_active=True, is_bookable=True).first()
-                employee = EmployeeProfile.objects.filter(pk=selected["employee"], is_active=True).first()
-                if not service or not employee or not EmployeeService.objects.filter(employee=employee, service=service, is_active=True).exists():
-                    return Response({"date": date_value, "slots": []})
-                segments.append((service, employee))
+            selected_date = date_type.fromisoformat(date_value)
         except ValueError:
-            return Response({"date": date_value, "slots": []})
-        if appointment_date < timezone.localdate():
-            return Response({"date": date_value, "slots": []})
-        slots = []
-        current = datetime.combine(appointment_date, time(8))
-        closing = datetime.combine(appointment_date, time(20))
-        while current < closing:
-            segment_start = current
-            available = True
-            for service, employee in segments:
-                segment_end = segment_start + timedelta(minutes=service.duration)
-                schedule = employee.working_schedules.filter(weekday=appointment_date.weekday(), is_active=True, start_time__lte=segment_start.time(), end_time__gte=segment_end.time()).first()
-                appointment_conflict = AppointmentItem.objects.filter(employee=employee, date=appointment_date, appointment__status__in=("pending", "confirmed"), start_time__lt=segment_end.time(), end_time__gt=segment_start.time()).exists()
-                hold_conflict = BookingHoldItem.objects.filter(employee=employee, date=appointment_date, hold__expires_at__gt=timezone.now(), start_time__lt=segment_end.time(), end_time__gt=segment_start.time()).exists()
-                if not schedule or employee.time_off.filter(start_date__lte=appointment_date, end_date__gte=appointment_date).exists() or appointment_conflict or hold_conflict:
-                    available = False
-                    break
-                segment_start = segment_end
-            if available:
-                slots.append(current.strftime("%H:%M"))
-            current += timedelta(minutes=30)
-        return Response({"date": date_value, "slots": slots})
+            return Response({"detail": "تاریخ نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+        result = availability_for_date(selected_date, parse_availability_items(request))
+        return Response({"date": date_value, **result})
+
+
+class AvailabilityCalendarView(generics.GenericAPIView):
+    permission_classes = (AllowAny,)
+    throttle_scope = "guest_booking"
+
+    def get(self, request):
+        try:
+            start_date = date_type.fromisoformat(request.query_params.get("start", ""))
+            end_date = date_type.fromisoformat(request.query_params.get("end", ""))
+        except ValueError:
+            return Response({"detail": "بازه تاریخ نامعتبر است."}, status=status.HTTP_400_BAD_REQUEST)
+        if end_date < start_date or (end_date - start_date).days > 62:
+            return Response({"detail": "بازه تقویم باید حداکثر ۶۳ روز باشد."}, status=status.HTTP_400_BAD_REQUEST)
+        segments = parse_availability_items(request)
+        context = availability_context(start_date, end_date, segments)
+        dates = []
+        current_date = start_date
+        while current_date <= end_date:
+            result = availability_for_date(current_date, segments, context)
+            dates.append({
+                "date": current_date.isoformat(),
+                "status": result["status"],
+                "slots_count": len(result["slots"]),
+                **({"reason": result.get("reason", "")} if result["status"] == "holiday" else {}),
+            })
+            current_date += timedelta(days=1)
+        return Response({"dates": dates})
 
 
 class EmployeeAppointmentsView(generics.ListAPIView):
@@ -596,6 +696,12 @@ class BookingHoldView(generics.CreateAPIView):
         held_items = serializer.validated_data["items"]
         from .validators import validate_no_employee_overlap
         for item in held_items:
+            closure = salon_closure_on(item["date"])
+            if closure:
+                detail = "سالن در این تاریخ تعطیل است."
+                if closure.reason:
+                    detail = f"{detail} {closure.reason}"
+                return Response({"code": "salon_closed", "detail": detail}, status=status.HTTP_409_CONFLICT)
             if not item["employee"].working_schedules.filter(weekday=item["date"].weekday(), is_active=True, start_time__lte=item["start_time"], end_time__gte=item["end_time"]).exists():
                 return Response({"detail": "زمان انتخاب‌شده خارج از ساعات کاری متخصص است."}, status=status.HTTP_400_BAD_REQUEST)
             if item["employee"].time_off.filter(start_date__lte=item["date"], end_date__gte=item["date"]).exists():
@@ -774,6 +880,12 @@ class CustomerAppointmentMutationView(CustomerBaseView, generics.GenericAPIView)
                 target_start = datetime.strptime(request.data.get("start_time", ""), "%H:%M").time()
             except (TypeError, ValueError):
                 return Response({"code": "invalid_datetime", "detail": "تاریخ یا زمان معتبر نیست."}, status=status.HTTP_400_BAD_REQUEST)
+            closure = salon_closure_on(target_date)
+            if closure:
+                detail = "سالن در این تاریخ تعطیل است."
+                if closure.reason:
+                    detail = f"{detail} {closure.reason}"
+                return Response({"code": "salon_closed", "detail": detail}, status=status.HTTP_409_CONFLICT)
             items = sorted(appointment.items.all(), key=lambda item: (item.date, item.start_time, item.pk))
             base_minutes = items[0].start_time.hour * 60 + items[0].start_time.minute
             for item in items:
@@ -897,6 +1009,31 @@ class CustomerHistoryView(generics.ListAPIView):
 
 class AdminModelViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAdmin,)
+
+
+class AdminSalonClosureViewSet(AdminModelViewSet):
+    queryset = SalonClosure.objects.select_related("created_by", "updated_by")
+    serializer_class = SalonClosureSerializer
+
+    def perform_create(self, serializer):
+        closure = serializer.save(created_by=self.request.user, updated_by=self.request.user)
+        AdminActionLog.objects.create(
+            actor=self.request.user, action="create", model_name="SalonClosure", object_id=str(closure.pk),
+            details={"start_date": closure.start_date.isoformat(), "end_date": closure.end_date.isoformat(), "kind": closure.kind},
+        )
+
+    def perform_update(self, serializer):
+        closure = serializer.save(updated_by=self.request.user)
+        AdminActionLog.objects.create(
+            actor=self.request.user, action="update", model_name="SalonClosure", object_id=str(closure.pk),
+            details={"fields": list(serializer.validated_data)},
+        )
+
+    def perform_destroy(self, instance):
+        closure_id = str(instance.pk)
+        details = {"start_date": instance.start_date.isoformat(), "end_date": instance.end_date.isoformat()}
+        instance.delete()
+        AdminActionLog.objects.create(actor=self.request.user, action="delete", model_name="SalonClosure", object_id=closure_id, details=details)
 
 
 class AdminServiceViewSet(AdminModelViewSet):

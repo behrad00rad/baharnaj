@@ -13,7 +13,7 @@ from .models import (
     AccountLogin, AdminActionLog, Appointment, AppointmentItem, CustomerProfile, EmployeeCommission, EmployeeProfile,
     EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, ServiceImage,
     BlogCategory, BlogMedia, BlogPost, BlogPostRevision, BlogTag, BookingHold, BookingHoldItem, FirebaseDevice,
-    Notification, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
+    Notification, SalonClosure, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
     CustomerCommunicationPreference, CustomerAccountDeletionRequest, CustomerLegalAcceptance,
 )
 from .validators import validate_no_employee_overlap
@@ -872,6 +872,12 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if not items:
             raise serializers.ValidationError("حداقل یک خدمت برای نوبت الزامی است.")
         first_date = items[0]["date"]
+        closure = SalonClosure.objects.filter(start_date__lte=first_date, end_date__gte=first_date).first()
+        if closure:
+            detail = "سالن در این تاریخ تعطیل است."
+            if closure.reason:
+                detail = f"{detail} {closure.reason}"
+            raise serializers.ValidationError(detail)
         for position, item in enumerate(items):
             start = datetime.combine(first_date, item["start_time"])
             if item["date"] != first_date or datetime.combine(first_date, item["end_time"]) - start != timedelta(minutes=item["service"].duration):
@@ -1288,6 +1294,26 @@ class TimeOffSerializer(serializers.ModelSerializer):
         model = TimeOff
         fields = "__all__"
         read_only_fields = ("employee", "created_by", "updated_by", "created_at", "updated_at")
+
+
+class SalonClosureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SalonClosure
+        fields = ("id", "start_date", "end_date", "kind", "reason", "created_by", "updated_by", "created_at", "updated_at")
+        read_only_fields = ("id", "created_by", "updated_by", "created_at", "updated_at")
+
+    def validate(self, attrs):
+        start = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        if start and end and end < start:
+            raise serializers.ValidationError({"end_date": "تاریخ پایان نمی‌تواند قبل از شروع باشد."})
+        if start and end:
+            overlap = SalonClosure.objects.filter(start_date__lte=end, end_date__gte=start)
+            if self.instance:
+                overlap = overlap.exclude(pk=self.instance.pk)
+            if overlap.exists():
+                raise serializers.ValidationError({"start_date": "این بازه با یک تعطیلی ثبت‌شده هم‌پوشانی دارد."})
+        return attrs
 
 
 class AdminActionLogSerializer(serializers.ModelSerializer):

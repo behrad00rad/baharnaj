@@ -1,6 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { JalaliDatePicker, JalaliDateTimePicker } from "./DatePicker";
+import { DateModal, JalaliDatePicker, JalaliDateTimePicker } from "./DatePicker";
+
+const { get } = vi.hoisted(() => ({ get: vi.fn() }));
+vi.mock("../shared/api", () => ({ api: { get } }));
 
 describe("Jalali date controls", () => {
   it("shows and returns Jalali dates while keeping the API value Gregorian", () => {
@@ -33,5 +36,23 @@ describe("Jalali date controls", () => {
     expect(onChange).toHaveBeenCalledWith(
       expect.stringMatching(/^2026-09-20T11:15:00\+03:30$/),
     );
+  });
+
+  it("shows full and holiday days and only selects an available date", async () => {
+    get.mockResolvedValueOnce({ data: { dates: [
+      { date: "2026-09-21", status: "available", slots_count: 4 },
+      { date: "2026-09-22", status: "holiday", slots_count: 0, reason: "تعطیلات رسمی" },
+      { date: "2026-09-23", status: "full", slots_count: 0 },
+    ] } });
+    const onChange = vi.fn();
+    render(<DateModal value="2026-09-21" availabilityItems={[{ service: 1, employee: 2 }]} onChange={onChange} onClose={vi.fn()} />);
+
+    const holiday = await screen.findByRole("button", { name: /تعطیل.*تعطیلات رسمی/ });
+    const full = screen.getByRole("button", { name: /پر/ });
+    expect(holiday).toBeDisabled();
+    expect(full).toBeDisabled();
+    const available = screen.getByRole("button", { name: /۴ وقت/ });
+    fireEvent.click(available);
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith("2026-09-21"));
   });
 });

@@ -522,6 +522,25 @@ class TimeOff(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class SalonClosure(models.Model):
+    KIND_CHOICES = [("holiday", "Holiday"), ("maintenance", "Maintenance"), ("private_event", "Private event"), ("other", "Other")]
+    start_date = models.DateField()
+    end_date = models.DateField()
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="holiday")
+    reason = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="created_salon_closures")
+    updated_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="updated_salon_closures")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("start_date",)
+
+    def clean(self):
+        if self.end_date < self.start_date:
+            raise ValidationError({"end_date": "End date cannot be before start date."})
+
+
 class Appointment(SoftDeleteModel):
     STATUS_CHOICES = [("pending", "Pending"), ("confirmed", "Confirmed"), ("completed", "Completed"), ("cancelled", "Cancelled")]
     customer = models.ForeignKey(CustomerProfile, on_delete=models.PROTECT, related_name="appointments")

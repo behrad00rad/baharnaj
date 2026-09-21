@@ -16,6 +16,7 @@ import "./PanelRedesign.css";
 const links = [
   ["/", "نمای کلی", "⌂"],
   ["/appointments", "نوبت‌ها", "◷"],
+  ["/off-days", "روزهای تعطیل", "⊘"],
   ["/employees", "کارمندان", "♙"],
   ["/services", "سرویس‌ها", "✦"],
   ["/customers", "مشتریان", "◌"],

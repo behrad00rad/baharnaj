@@ -6,8 +6,8 @@ from .views import (AdminAppointmentViewSet, AdminBlogCategoryViewSet, AdminBlog
 										EmployeeAppointmentsView, EmployeeCustomerOptionsView, EmployeeListView, EmployeeSelfBookingView, EmployeeSelfServiceListView, EmployeeStatisticsView, GalleryCategoryListView,
 					ServiceDetailView, ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
 					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
-					PaymentViewSet, FirebaseDeviceViewSet, NotificationViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
-					EmployeeEarningsView, EmployeeAppointmentPaymentReportView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView,
+					PaymentViewSet, FirebaseDeviceViewSet, NotificationViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, AdminSalonClosureViewSet, EmployeeTimeOffViewSet,
+					EmployeeEarningsView, EmployeeAppointmentPaymentReportView, GalleryListView, AdminGalleryViewSet, WaitlistView, AvailabilityCalendarView, CustomerBookingView, CustomerHistoryView,
 					BlogCategoryListView, BlogPostDetailView, BlogPostListView, CustomerAppointmentDetailView, CustomerAppointmentListView, CustomerBookAgainView, CustomerDashboardView, CustomerDeletionRequestView, CustomerIdentityClaimView, CustomerNotificationViewSet, CustomerPasswordChangeView, CustomerPreferencesView, CustomerProfileView, CustomerAppointmentMutationView)
 
 router = DefaultRouter()
@@ -15,6 +15,7 @@ router.register("admin/services", AdminServiceViewSet, basename="admin-service")
 router.register("admin/gallery", AdminGalleryViewSet, basename="admin-gallery")
 router.register("admin/employees", AdminEmployeeViewSet, basename="admin-employee")
 router.register("admin/users", AdminUserViewSet, basename="admin-user")
+router.register("admin/closures", AdminSalonClosureViewSet, basename="admin-closure")
 router.register("admin/deletion-requests", AdminDeletionRequestViewSet, basename="admin-deletion-request")
 router.register("admin/service-categories", AdminServiceCategoryViewSet, basename="admin-service-category")
 router.register("admin/appointments", AdminAppointmentViewSet, basename="admin-appointment")
@@ -47,6 +48,7 @@ urlpatterns = [
 	path("blog/categories/", BlogCategoryListView.as_view(), name="blog-category-list"),
 	path("employees/", EmployeeListView.as_view(), name="employee-list"),
 	path("availability/", AvailabilityView.as_view(), name="availability-list"),
+	path("availability/calendar/", AvailabilityCalendarView.as_view(), name="availability-calendar"),
 	path("appointments/", AppointmentCreateView.as_view(), name="appointment-create"),
 	path("booking-holds/", BookingHoldView.as_view(), name="booking-hold-create"),
 	path("booking-holds/<uuid:token>/", BookingHoldDeleteView.as_view(), name="booking-hold-delete"),

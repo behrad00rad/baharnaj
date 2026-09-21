@@ -1,7 +1,8 @@
 import { useFocusScope } from "../shared/useFocusScope";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toGregorian, toJalaali } from "jalaali-js";
 import { pad } from "../shared/date";
+import { api } from "../shared/api";
 import "@majidh1/jalalidatepicker/dist/jalalidatepicker.css";
 
 const today = () =>
@@ -109,7 +110,88 @@ export function JalaliDateTimePicker({ value, onChange, optional = true }) {
   );
 }
 
-export function DateModal({ value, onChange, onClose }) {
+const persianMonths = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"];
+const weekdayNames = ["ش", "ی", "د", "س", "چ", "پ", "ج"];
+const isoFromUtcDate = (value) => `${value.getUTCFullYear()}-${pad(value.getUTCMonth() + 1)}-${pad(value.getUTCDate())}`;
+const shiftJalaliMonth = ({ jy, jm }, amount) => {
+  const total = jy * 12 + jm - 1 + amount;
+  return { jy: Math.floor(total / 12), jm: ((total % 12) + 12) % 12 + 1 };
+};
+
+function AvailabilityCalendar({ value, items, onChange }) {
+  const initial = jalaliFor(value || today());
+  const [month, setMonth] = useState({ jy: initial.jy, jm: initial.jm });
+  const [availability, setAvailability] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const days = useMemo(() => {
+    const firstGregorian = toGregorian(month.jy, month.jm, 1);
+    const first = new Date(Date.UTC(firstGregorian.gy, firstGregorian.gm - 1, firstGregorian.gd));
+    const offset = (first.getUTCDay() + 1) % 7;
+    return Array.from({ length: 42 }, (_, index) => {
+      const current = new Date(first);
+      current.setUTCDate(first.getUTCDate() + index - offset);
+      const iso = isoFromUtcDate(current);
+      const jalali = toJalaali(current.getUTCFullYear(), current.getUTCMonth() + 1, current.getUTCDate());
+      return { iso, jalali, currentMonth: jalali.jy === month.jy && jalali.jm === month.jm };
+    });
+  }, [month]);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+    const query = encodeURIComponent(JSON.stringify(items));
+    api.get(`availability/calendar/?start=${days[0].iso}&end=${days[days.length - 1].iso}&items=${query}`)
+      .then(({ data }) => {
+        if (active) setAvailability(Object.fromEntries((data.dates || []).map((item) => [item.date, item])));
+      })
+      .catch(() => {
+        if (active) {
+          setAvailability({});
+          setError("دریافت وضعیت روزها انجام نشد. دوباره تلاش کنید.");
+        }
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [days, items]);
+  const goToToday = () => {
+    const current = jalaliFor(today());
+    setMonth({ jy: current.jy, jm: current.jm });
+  };
+  return <div className="availability-calendar">
+    <div className="availability-calendar-nav">
+      <button type="button" onClick={() => setMonth((current) => shiftJalaliMonth(current, -1))} aria-label="ماه قبل">→</button>
+      <strong>{persianMonths[month.jm - 1]} {new Intl.NumberFormat("fa-IR", { useGrouping: false }).format(month.jy)}</strong>
+      <button type="button" onClick={() => setMonth((current) => shiftJalaliMonth(current, 1))} aria-label="ماه بعد">←</button>
+      <button type="button" className="calendar-today" onClick={goToToday}>امروز</button>
+    </div>
+    <div className="availability-weekdays">{weekdayNames.map((name) => <span key={name}>{name}</span>)}</div>
+    <div className={`availability-days ${loading ? "loading" : ""}`} aria-busy={loading}>
+      {days.map((day) => {
+        const info = availability[day.iso];
+        const dayStatus = info?.status || (loading ? "loading" : "unavailable");
+        const selectable = day.currentMonth && dayStatus === "available";
+        const statusLabel = { available: `${new Intl.NumberFormat("fa-IR").format(info?.slots_count || 0)} وقت`, full: "پر", holiday: "تعطیل", unavailable: "بسته", past: "گذشته" }[dayStatus];
+        return <button
+          type="button"
+          key={day.iso}
+          className={`${dayStatus} ${day.currentMonth ? "" : "outside"} ${value === day.iso ? "selected" : ""}`}
+          disabled={!selectable}
+          onClick={() => onChange(day.iso)}
+          title={info?.reason || statusLabel || ""}
+          aria-label={`${new Intl.NumberFormat("fa-IR").format(day.jalali.jd)} ${persianMonths[day.jalali.jm - 1]}، ${statusLabel || "در حال بررسی"}${info?.reason ? `، ${info.reason}` : ""}`}
+        >
+          <b>{new Intl.NumberFormat("fa-IR").format(day.jalali.jd)}</b>
+          {day.currentMonth && statusLabel && <small>{statusLabel}</small>}
+        </button>;
+      })}
+    </div>
+    <div className="availability-legend"><span className="available">آزاد</span><span className="full">تکمیل ظرفیت</span><span className="holiday">تعطیل</span><span className="unavailable">بدون برنامه</span></div>
+    {error && <p className="error availability-calendar-error">{error}</p>}
+  </div>;
+}
+
+export function DateModal({ value, onChange, onClose, availabilityItems }) {
   const dialogRef = useRef(null);
   useFocusScope(true, dialogRef, onClose);
   useEffect(() => () => window.jalaliDatepicker?.hide(), []);
@@ -129,13 +211,7 @@ export function DateModal({ value, onChange, onClose }) {
             ×
           </button>
         </div>
-        <JalaliDatePicker
-          value={value}
-          onChange={(date) => {
-            onChange(date);
-            onClose();
-          }}
-        />
+        {availabilityItems?.length ? <AvailabilityCalendar value={value} items={availabilityItems} onChange={(date) => { onChange(date); onClose(); }} /> : <JalaliDatePicker value={value} onChange={(date) => { onChange(date); onClose(); }} />}
       </div>
     </div>
   );
