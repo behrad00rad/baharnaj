@@ -1,3 +1,4 @@
+import AdminOverlay from "../components/AdminOverlay";
 import { PanelDisclosure } from "../components/PanelGuide";
 import AdminTelegram from "./AdminTelegram";
 import ServicePricingFields from "../components/ServicePricingFields";
@@ -773,7 +774,7 @@ function AdminAppointmentForm({ close, onCreated }) {
     }
   };
   return (
-    <div className="modal-backdrop" onMouseDown={close}>
+    <AdminOverlay className="modal-backdrop" onMouseDown={close}>
       <form
         className="admin-modal"
         onSubmit={submit}
@@ -956,7 +957,7 @@ function AdminAppointmentForm({ close, onCreated }) {
           ثبت نوبت
         </button>
       </form>
-    </div>
+    </AdminOverlay>
   );
 }
 function AppointmentDrawer({ item, close, onSaved }) {
@@ -1005,7 +1006,7 @@ function AppointmentDrawer({ item, close, onSaved }) {
     }
   };
   return (
-    <div className="drawer-backdrop" onMouseDown={close}>
+    <AdminOverlay className="drawer-backdrop" onMouseDown={close}>
       <aside
         className={`admin-drawer appointment-drawer ${isCancelled ? "is-cancelled" : ""}`}
         onMouseDown={(event) => event.stopPropagation()}
@@ -1181,7 +1182,7 @@ function AppointmentDrawer({ item, close, onSaved }) {
           )}
         </PanelDisclosure>
       </aside>
-    </div>
+    </AdminOverlay>
   );
 }
 
@@ -1376,9 +1377,9 @@ function CrudPage({
         )}
       </section>
       {open && (
-        <div className="modal-backdrop" onMouseDown={() => setOpen(false)}>
+        <AdminOverlay className="modal-backdrop" onMouseDown={() => setOpen(false)}>
           <form
-            className="admin-modal"
+            className="admin-modal admin-entity-form"
             onSubmit={submit}
             onMouseDown={(event) => event.stopPropagation()}
           >
@@ -1402,7 +1403,7 @@ function CrudPage({
                   }
                 : definition;
               return (
-                <label key={field.name}>
+                <label key={field.name} className={field.type === "textarea" || field.type === "file" || field.createEndpoint ? "admin-field-wide" : undefined}>
                   {field.label}
                   {field.type === "select" ? (
                     <>
@@ -1504,7 +1505,7 @@ function CrudPage({
               {saving ? "در حال ذخیره..." : "ذخیره تغییرات"}
             </button>
           </form>
-        </div>
+        </AdminOverlay>
       )}
       <Toast
         message={toast}
@@ -1574,7 +1575,7 @@ function EmployeeScheduleModal({ employee, close }) {
     }
   };
   return (
-    <div className="modal-backdrop" onMouseDown={close}>
+    <AdminOverlay className="modal-backdrop" onMouseDown={close}>
       <section
         className="admin-modal admin-schedule-modal"
         onMouseDown={(event) => event.stopPropagation()}
@@ -1637,7 +1638,7 @@ function EmployeeScheduleModal({ employee, close }) {
         )}
         {message && <small className="admin-schedule-message">{message}</small>}
       </section>
-    </div>
+    </AdminOverlay>
   );
 }
 
@@ -1747,9 +1748,9 @@ function EmployeeManagement() {
         )}
       </section>
       {open && (
-        <div className="modal-backdrop" onMouseDown={() => setOpen(false)}>
+        <AdminOverlay className="modal-backdrop" onMouseDown={() => setOpen(false)}>
           <form
-            className="admin-modal"
+            className="admin-modal admin-entity-form"
             onSubmit={submit}
             onMouseDown={(event) => event.stopPropagation()}
           >
@@ -1938,7 +1939,7 @@ function EmployeeManagement() {
                   : "ایجاد کارمند"}
             </button>
           </form>
-        </div>
+        </AdminOverlay>
       )}
       {scheduleEmployee && (
         <EmployeeScheduleModal
@@ -2037,23 +2038,23 @@ function ServiceManagement() {
         <button className="admin-secondary" onClick={() => { setForm(service); setFiles([]); setImageAlt(""); setCategoryDraft(""); setCategoryError(""); setMessage(""); }}>ویرایش صفحه</button>
       </article>)}</div>}
     </section>
-    {form && <div className="modal-backdrop" onMouseDown={() => setForm(null)}><form className="admin-modal service-editor" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
+    {form && <AdminOverlay className="modal-backdrop" onMouseDown={() => setForm(null)}><form className="admin-modal service-editor" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
       <button type="button" className="drawer-close" onClick={() => setForm(null)}>×</button>
       <span className="admin-kicker">{form.id ? "ویرایش سرویس" : "سرویس جدید"}</span><h2>{form.persian_name || "محتوای سرویس"}</h2>
       <fieldset><legend>اطلاعات اصلی</legend><div className="service-editor-grid">
         <label>نام فارسی<input required value={form.persian_name || ""} onChange={(event) => update("persian_name", event.target.value)} /></label>
         <label>نام داخلی<input required value={form.name || ""} onChange={(event) => update("name", event.target.value)} /></label>
-        <label>دسته‌بندی<select required value={form.category || ""} onChange={(event) => update("category", event.target.value)}><option value="">انتخاب کنید</option>{categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><span className="admin-inline-option"><input aria-label="نام دسته‌بندی جدید سرویس" placeholder="نام دسته‌بندی جدید" value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} /><button type="button" disabled={categorySaving} onClick={createCategory}>{categorySaving ? "در حال ذخیره..." : "+ افزودن دسته‌بندی جدید"}</button>{categoryError && <small className="admin-field-error">{categoryError}</small>}</span></label>
+        <label>دسته‌بندی<select required value={form.category || ""} onChange={(event) => update("category", event.target.value)}><option value="">انتخاب کنید</option>{categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><details className="admin-option-create"><summary>+ دسته‌بندی جدید</summary><span className="admin-inline-option"><input aria-label="نام دسته‌بندی جدید سرویس" placeholder="نام دسته‌بندی جدید" value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} /><button type="button" disabled={categorySaving} onClick={createCategory}>{categorySaving ? "در حال ذخیره..." : "+ افزودن دسته‌بندی جدید"}</button>{categoryError && <small className="admin-field-error">{categoryError}</small>}</span></details></label>
         <label>نشانی صفحه سرویس<input dir="ltr" value={form.slug || ""} onChange={(event) => update("slug", event.target.value)} /><small>تغییر این مقدار، آدرس عمومی سرویس را تغییر می‌دهد.</small></label>
       </div></fieldset>
-      <fieldset><legend>محتوای صفحه سرویس</legend><label>معرفی کوتاه<textarea maxLength="320" value={form.short_description || ""} onChange={(event) => update("short_description", event.target.value)} /></label><label>توضیحات کامل سرویس<textarea className="service-article-input" value={form.description || ""} onChange={(event) => update("description", event.target.value)} /></label></fieldset>
-      <fieldset><legend>تصاویر</legend>{form.images?.length > 0 && <div className="service-image-admin-grid">{form.images.map((image) => <div key={image.id}><img src={image.image_url} alt={image.alt_text || ""} /><span>{image.alt_text || "بدون متن جایگزین"}</span><button type="button" className="admin-danger" onClick={() => removeImage(image.id)}>حذف تصویر</button></div>)}</div>}<label>افزودن تصاویر<input type="file" accept="image/*" multiple onChange={(event) => setFiles([...event.target.files])} /></label><label>توضیح تصاویر جدید<input value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} placeholder="مثلاً نمونه مانیکور در بهارناژ" /></label></fieldset>
+      <PanelDisclosure title="محتوای صفحه سرویس"><label>معرفی کوتاه<textarea maxLength="320" value={form.short_description || ""} onChange={(event) => update("short_description", event.target.value)} /></label><label>توضیحات کامل سرویس<textarea className="service-article-input" value={form.description || ""} onChange={(event) => update("description", event.target.value)} /></label></PanelDisclosure>
+      <PanelDisclosure title="تصاویر سرویس">{form.images?.length > 0 && <div className="service-image-admin-grid">{form.images.map((image) => <div key={image.id}><img src={image.image_url} alt={image.alt_text || ""} /><span>{image.alt_text || "بدون متن جایگزین"}</span><button type="button" className="admin-danger" onClick={() => removeImage(image.id)}>حذف تصویر</button></div>)}</div>}<label>افزودن تصاویر<input type="file" accept="image/*" multiple onChange={(event) => setFiles([...event.target.files])} /></label><label>توضیح تصاویر جدید<input value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} placeholder="مثلاً نمونه مانیکور در بهارناژ" /></label></PanelDisclosure>
       <ServicePricingFields form={form} onChange={update} />
       <p>قابل رزرو بودن را فقط برای سرویس‌هایی روشن کنید که مشتری می‌تواند وقت آن‌ها را آنلاین بگیرد.</p>
       <PanelDisclosure title="نمایش در گوگل (اختیاری)"><p>عنوان و توضیح کوتاه برای نتیجه جست‌وجو؛ اطلاعات رزرو را تغییر نمی‌دهد.</p><label>عنوان سئو<input value={form.seo_title || ""} onChange={(event) => update("seo_title", event.target.value)} /></label><label>توضیحات سئو<textarea value={form.seo_description || ""} onChange={(event) => update("seo_description", event.target.value)} /></label></PanelDisclosure>
       <fieldset><legend>وضعیت انتشار</legend><div className="service-status-controls"><label><input type="checkbox" checked={Boolean(form.is_active)} onChange={(event) => update("is_active", event.target.checked)} /> فعال</label><label><input type="checkbox" checked={Boolean(form.is_bookable)} onChange={(event) => update("is_bookable", event.target.checked)} /> قابل رزرو</label><label><input type="checkbox" checked={Boolean(form.is_featured)} onChange={(event) => update("is_featured", event.target.checked)} /> ویژه</label></div></fieldset>
       {message && <small className="admin-field-error">{message}</small>}<button className="admin-primary" disabled={saving}>{saving ? "در حال ذخیره…" : "ذخیره صفحه سرویس"}</button>
-    </form></div>}
+    </form></AdminOverlay>}
   </div>;
 }
 
@@ -2114,7 +2115,7 @@ function EmployeeFinanceModal({ employee, onClose }) {
   const report = useResource(`admin/employees/${employee.id}/finance/?period=custom&start_date=${range.start}&end_date=${range.end}&group_by=${grouping}`);
   const data = report.data && !Array.isArray(report.data) ? report.data : {};
   const profile = data.employee || employee;
-  return <div className="modal-backdrop employee-finance-backdrop" onMouseDown={onClose}><section className="admin-modal employee-finance-modal" role="dialog" aria-modal="true" aria-labelledby="employee-finance-title" onMouseDown={(event) => event.stopPropagation()}>
+  return <AdminOverlay className="modal-backdrop employee-finance-backdrop" onMouseDown={onClose}><section className="admin-modal employee-finance-modal" role="dialog" aria-modal="true" aria-labelledby="employee-finance-title" onMouseDown={(event) => event.stopPropagation()}>
     <button type="button" className="drawer-close" onClick={onClose}>×</button>
     <header className="employee-finance-profile">{profile.profile_photo_url ? <img src={profile.profile_photo_url} alt={`تصویر ${profile.name}`} /> : <span>{profile.name?.[0] || "م"}</span>}<div><small>گزارش مالی متخصص</small><h2 id="employee-finance-title">{profile.name}</h2><p>{profile.specialty || "متخصص بهارناژ"}</p></div></header>
     <FinancePresetFilter {...{ preset, setPreset, customStart, setCustomStart, customEnd, setCustomEnd }} />
@@ -2128,7 +2129,7 @@ function EmployeeFinanceModal({ employee, onClose }) {
         <section><h3>سرویس‌های انجام‌شده</h3>{data.services_performed?.length ? data.services_performed.map((item) => <article key={item.id}><b>{item.service} · {toman(item.amount)}</b><span>{item.customer} · کمیسیون {toman(item.commission)}</span><small>{financeDate(item.date)} · {labels[item.status] || item.status} · {appointmentPaymentLabels[item.payment_status] || item.payment_status}</small></article>) : <Empty />}</section>
       </div>
     </>}
-  </section></div>;
+  </section></AdminOverlay>;
 }
 
 function Finance() {
@@ -2206,8 +2207,8 @@ function Finance() {
     <section className="admin-panel finance-employees"><div className="panel-title"><div><span>تفکیک عملکرد</span><h2>درآمد تأییدشده و کمیسیون کارکنان</h2></div></div><div className="finance-employee-grid">{metrics.employees?.map((item) => <button type="button" className="finance-employee-card" key={item.id} onClick={() => setSelectedEmployee(item)}>{item.profile_photo_url ? <img src={item.profile_photo_url} alt="" /> : <i>{item.name?.[0] || "م"}</i>}<span><b>{item.name}</b><small>{new Intl.NumberFormat("fa-IR").format(item.completed_services)} سرویس · {item.payments} پرداخت</small></span><strong>{toman(item.confirmed_revenue)}</strong><small>کمیسیون: {toman(item.commission)}</small></button>)}</div>{!metrics.employees?.length && <Empty />}</section>
 
     <PanelDisclosure title="سوابق تراکنش‌ها و کمیسیون‌ها">    <div className="admin-grid-two"><section className="admin-panel"><div className="panel-title"><div><span>سوابق مالی</span><h2>آخرین تراکنش‌ها</h2></div></div><div className="finance-ledger">{transactions.data.slice(0,8).map((item) => <div key={item.id}><span className={`finance-badge ${item.type}`}>{transactionLabels[item.type] || item.type}</span><b>{toman(item.amount)}</b><small>{item.customer_name || item.description || `نوبت #${item.appointment}`}</small></div>)}</div></section><section className="admin-panel"><div className="panel-title"><div><span>کارکنان</span><h2>آخرین کمیسیون‌ها</h2></div></div><div className="finance-ledger">{commissions.data.slice(0,8).map((item) => <div key={item.id}><span>{item.employee_name}</span><b>{toman(item.commission_amount)}</b><small>{item.service_name} · {item.status}</small></div>)}</div></section></div></PanelDisclosure>
-    {selected && <div className="drawer-backdrop" onMouseDown={() => setSelected(null)}><aside className="admin-drawer finance-detail" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" onClick={() => setSelected(null)}>×</button><span className="admin-kicker">پرداخت #{selected.id}</span><h2>{toman(selected.amount)}</h2><div className="finance-detail-summary"><span className={`finance-badge ${selected.status}`}>{paymentLabels[selected.status]}</span><p>نوبت #{selected.appointment} · {selected.customer_name || "مشتری"}</p><p>روش: {methodLabels[selected.payment_method]} · گزارش‌دهنده: {selected.reporter_name || "مدیریت"}</p>{selected.reviewed_by_name && <p>بررسی‌کننده: {selected.reviewed_by_name}</p>}</div><section><h3>سرویس‌ها و متخصصان</h3>{selected.appointment_items?.map((item) => <div className="finance-detail-line" key={item.id}><b>{item.service}</b><span>{item.employee}</span></div>)}</section>{selected.notes && <section><h3>یادداشت</h3><p>{selected.notes}</p></section>}{selected.refunds?.length > 0 && <section><h3>بازپرداخت‌های ثبت‌شده</h3>{selected.refunds.map((item) => <div className="finance-detail-line" key={item.id}><b>{toman(item.amount)}</b><span>{item.reason || "بدون توضیح"}</span></div>)}</section>}{selected.has_unresolved_prices && <p className="pricing-warning">قیمت برخی سرویس‌ها نهایی نشده است. پیش از تأیید پرداخت، قیمت نهایی نوبت را ثبت کنید.</p>}{selected.status === "pending" && <div className="finance-review-actions"><button className="admin-success" disabled={busy || selected.has_unresolved_prices} onClick={() => reviewPayment(selected,"confirm")}>تأیید گزارش</button><button className="admin-danger" disabled={busy} onClick={() => reviewPayment(selected,"reject")}>رد گزارش</button></div>}{["paid","refunded"].includes(selected.status) && selected.refundable_total > 0 && <form className="finance-refund-form" onSubmit={createRefund}><h3>ثبت بازپرداخت</h3><label>مبلغ<input required type="number" min="1" max={selected.refundable_total} value={refund.amount} onChange={(event) => setRefund({ ...refund, amount: event.target.value })} /></label><label>دلیل<textarea value={refund.reason} onChange={(event) => setRefund({ ...refund, reason: event.target.value })} /></label><button className="admin-danger" disabled={busy}>ثبت بازپرداخت</button></form>}</aside></div>}
-    {manualOpen && <div className="modal-backdrop" onMouseDown={() => setManualOpen(false)}><form className="admin-modal" onSubmit={createPayment} onMouseDown={(event) => event.stopPropagation()}><button type="button" className="drawer-close" onClick={() => setManualOpen(false)}>×</button><span className="admin-kicker">ثبت توسط مدیریت</span><h2>پرداخت دستی</h2><label>نوبت<select required value={manual.appointment} onChange={(event) => setManual({ ...manual, appointment: event.target.value })}><option value="">انتخاب نوبت</option>{appointments.data.filter((item) => item.remaining_total > 0 && !item.has_unresolved_prices && item.status !== "cancelled").map((item) => <option key={item.id} value={item.id}>#{item.id} · {item.customer_name} · مانده {toman(item.remaining_total)}</option>)}</select></label><label>مبلغ<input required min="1" type="number" value={manual.amount} onChange={(event) => setManual({ ...manual, amount: event.target.value })} /></label><label>روش<select value={manual.payment_method} onChange={(event) => setManual({ ...manual, payment_method: event.target.value })}>{Object.entries(methodLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>یادداشت<textarea value={manual.notes} onChange={(event) => setManual({ ...manual, notes: event.target.value })} /></label><button className="admin-primary" disabled={busy}>ثبت پرداخت</button></form></div>}
+    {selected && <AdminOverlay className="drawer-backdrop" onMouseDown={() => setSelected(null)}><aside className="admin-drawer finance-detail" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" onClick={() => setSelected(null)}>×</button><span className="admin-kicker">پرداخت #{selected.id}</span><h2>{toman(selected.amount)}</h2><div className="finance-detail-summary"><span className={`finance-badge ${selected.status}`}>{paymentLabels[selected.status]}</span><p>نوبت #{selected.appointment} · {selected.customer_name || "مشتری"}</p><p>روش: {methodLabels[selected.payment_method]} · گزارش‌دهنده: {selected.reporter_name || "مدیریت"}</p>{selected.reviewed_by_name && <p>بررسی‌کننده: {selected.reviewed_by_name}</p>}</div><section><h3>سرویس‌ها و متخصصان</h3>{selected.appointment_items?.map((item) => <div className="finance-detail-line" key={item.id}><b>{item.service}</b><span>{item.employee}</span></div>)}</section>{selected.notes && <section><h3>یادداشت</h3><p>{selected.notes}</p></section>}{selected.refunds?.length > 0 && <section><h3>بازپرداخت‌های ثبت‌شده</h3>{selected.refunds.map((item) => <div className="finance-detail-line" key={item.id}><b>{toman(item.amount)}</b><span>{item.reason || "بدون توضیح"}</span></div>)}</section>}{selected.has_unresolved_prices && <p className="pricing-warning">قیمت برخی سرویس‌ها نهایی نشده است. پیش از تأیید پرداخت، قیمت نهایی نوبت را ثبت کنید.</p>}{selected.status === "pending" && <div className="finance-review-actions"><button className="admin-success" disabled={busy || selected.has_unresolved_prices} onClick={() => reviewPayment(selected,"confirm")}>تأیید گزارش</button><button className="admin-danger" disabled={busy} onClick={() => reviewPayment(selected,"reject")}>رد گزارش</button></div>}{["paid","refunded"].includes(selected.status) && selected.refundable_total > 0 && <form className="finance-refund-form" onSubmit={createRefund}><h3>ثبت بازپرداخت</h3><label>مبلغ<input required type="number" min="1" max={selected.refundable_total} value={refund.amount} onChange={(event) => setRefund({ ...refund, amount: event.target.value })} /></label><label>دلیل<textarea value={refund.reason} onChange={(event) => setRefund({ ...refund, reason: event.target.value })} /></label><button className="admin-danger" disabled={busy}>ثبت بازپرداخت</button></form>}</aside></AdminOverlay>}
+    {manualOpen && <AdminOverlay className="modal-backdrop" onMouseDown={() => setManualOpen(false)}><form className="admin-modal" onSubmit={createPayment} onMouseDown={(event) => event.stopPropagation()}><button type="button" className="drawer-close" onClick={() => setManualOpen(false)}>×</button><span className="admin-kicker">ثبت توسط مدیریت</span><h2>پرداخت دستی</h2><label>نوبت<select required value={manual.appointment} onChange={(event) => setManual({ ...manual, appointment: event.target.value })}><option value="">انتخاب نوبت</option>{appointments.data.filter((item) => item.remaining_total > 0 && !item.has_unresolved_prices && item.status !== "cancelled").map((item) => <option key={item.id} value={item.id}>#{item.id} · {item.customer_name} · مانده {toman(item.remaining_total)}</option>)}</select></label><label>مبلغ<input required min="1" type="number" value={manual.amount} onChange={(event) => setManual({ ...manual, amount: event.target.value })} /></label><label>روش<select value={manual.payment_method} onChange={(event) => setManual({ ...manual, payment_method: event.target.value })}>{Object.entries(methodLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>یادداشت<textarea value={manual.notes} onChange={(event) => setManual({ ...manual, notes: event.target.value })} /></label><button className="admin-primary" disabled={busy}>ثبت پرداخت</button></form></AdminOverlay>}
     {selectedEmployee && <EmployeeFinanceModal employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} />}
   </div>;
 }
@@ -2309,7 +2310,7 @@ function SalonClosures() {
         <div><button className="admin-ghost" onClick={() => beginEdit(item)}>ویرایش</button><button className="admin-danger" onClick={() => setDeleting(item)}>حذف</button></div>
       </article>)}</div> : <Empty title="روز تعطیلی ثبت نشده" text="سالن در تمام روزهای دارای برنامه کاری قابل رزرو است." />}
     </section>
-    {deleting && <div className="modal-backdrop" onMouseDown={() => setDeleting(null)}><section className="admin-modal closure-delete-modal" role="dialog" aria-modal="true" aria-labelledby="closure-delete-title" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setDeleting(null)}>×</button><span className="admin-kicker">حذف تعطیلی</span><h2 id="closure-delete-title">این روز دوباره قابل رزرو شود؟</h2><p>{formatJalaliDate(deleting.start_date)}{deleting.end_date !== deleting.start_date ? ` تا ${formatJalaliDate(deleting.end_date)}` : ""}</p><div className="drawer-actions"><button className="admin-danger" onClick={remove}>حذف تعطیلی</button><button className="admin-secondary" onClick={() => setDeleting(null)}>انصراف</button></div></section></div>}
+    {deleting && <AdminOverlay className="modal-backdrop" onMouseDown={() => setDeleting(null)}><section className="admin-modal closure-delete-modal" role="dialog" aria-modal="true" aria-labelledby="closure-delete-title" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setDeleting(null)}>×</button><span className="admin-kicker">حذف تعطیلی</span><h2 id="closure-delete-title">این روز دوباره قابل رزرو شود؟</h2><p>{formatJalaliDate(deleting.start_date)}{deleting.end_date !== deleting.start_date ? ` تا ${formatJalaliDate(deleting.end_date)}` : ""}</p><div className="drawer-actions"><button className="admin-danger" onClick={remove}>حذف تعطیلی</button><button className="admin-secondary" onClick={() => setDeleting(null)}>انصراف</button></div></section></AdminOverlay>}
   </div>;
 }
 
@@ -2345,7 +2346,7 @@ function TimeOffManagement() {
     {message && <Toast message={message} type={message.includes("نشد") || message.includes("نوبت فعال") ? "error" : "success"} />}
     <section className="admin-panel"><div className="panel-title"><div><span>نیازمند اقدام</span><h2>در انتظار بررسی</h2></div><b>{new Intl.NumberFormat("fa-IR").format(pending.length)} درخواست</b></div>{requests.loading ? <Skeleton /> : pending.length ? rows(pending) : <Empty title="درخواست بازی وجود ندارد" />}</section>
     <section className="admin-panel"><div className="panel-title"><div><span>سابقه</span><h2>درخواست‌های بررسی‌شده</h2></div></div>{reviewed.length ? rows(reviewed) : <Empty title="سابقه‌ای وجود ندارد" />}</section>
-    {selected && <div className="modal-backdrop" onMouseDown={() => setSelected(null)}><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="leave-review-title" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setSelected(null)}>×</button><span className="admin-kicker">بررسی مرخصی</span><h2 id="leave-review-title">{selected.employee_name}</h2><p>{formatJalaliDate(selected.start_date)} تا {formatJalaliDate(selected.end_date)}</p><p>{selected.reason || "دلیلی ثبت نشده است."}</p><label>یادداشت برای کارمند<textarea value={reviewNotes} maxLength={500} onChange={(event) => setReviewNotes(event.target.value)} /></label><div className="drawer-actions"><button className="admin-success" disabled={busy} onClick={() => review("approve")}>تأیید مرخصی</button><button className="admin-danger" disabled={busy} onClick={() => review("reject")}>رد درخواست</button></div></section></div>}
+    {selected && <AdminOverlay className="modal-backdrop" onMouseDown={() => setSelected(null)}><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="leave-review-title" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setSelected(null)}>×</button><span className="admin-kicker">بررسی مرخصی</span><h2 id="leave-review-title">{selected.employee_name}</h2><p>{formatJalaliDate(selected.start_date)} تا {formatJalaliDate(selected.end_date)}</p><p>{selected.reason || "دلیلی ثبت نشده است."}</p><label>یادداشت برای کارمند<textarea value={reviewNotes} maxLength={500} onChange={(event) => setReviewNotes(event.target.value)} /></label><div className="drawer-actions"><button className="admin-success" disabled={busy} onClick={() => review("approve")}>تأیید مرخصی</button><button className="admin-danger" disabled={busy} onClick={() => review("reject")}>رد درخواست</button></div></section></AdminOverlay>}
   </div>;
 }
 
@@ -2406,8 +2407,8 @@ function CustomerManagement() {
     </section>
     {conflictGroups.length > 0 && <section className="admin-panel"><div className="panel-title"><div><span>نیازمند بررسی</span><h2>تعارض هویت مشتریان</h2></div></div>{conflictGroups.map((group) => { const canonical = group.find((item) => !item.is_guest) || group[0]; return <div className="identity-conflict" key={canonical.normalized_phone}><div><b>{canonical.normalized_phone}</b><small>{group.length} رکورد با این شماره</small></div>{group.filter((item) => item.id !== canonical.id).map((legacy) => <button className="admin-secondary" key={legacy.id} onClick={() => mergeIdentity(canonical, legacy)}>ادغام {legacy.name} در حساب اصلی</button>)}</div>; })}</section>}
     <section className="admin-panel"><div className="panel-title"><div><span>حریم خصوصی</span><h2>درخواست‌های حذف حساب</h2></div></div>{deletions.loading ? <Skeleton /> : deletions.data.length ? <div className="entity-list">{deletions.data.map((item) => <article key={item.id}><span className="entity-avatar">×</span><span><b>{item.customer_name || "مشتری"}</b><small>{item.customer_phone || "شماره حذف شده"} · {formatJalaliDateTime(item.requested_at)} · {{pending:"در انتظار",approved:"تأیید اولیه",rejected:"رد شده",completed:"تکمیل شده",cancelled:"لغو مشتری"}[item.status]}</small></span>{["pending","approved"].includes(item.status) && <button className="admin-ghost" onClick={() => { setSelectedDeletion(item); setNotes(""); }}>بررسی</button>}</article>)}</div> : <Empty title="درخواست حذفی ثبت نشده" />}</section>
-    {selectedCustomer && <div className="drawer-backdrop" onMouseDown={() => setSelectedCustomer(null)}><aside className="admin-drawer customer-drawer" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setSelectedCustomer(null)}>×</button><span className="admin-kicker">پرونده مشتری</span><h2>{selectedCustomer.name}</h2><p className="drawer-meta">{selectedCustomer.phone || "بدون شماره"} · {selectedCustomer.is_guest ? "مهمان" : "حساب ورود"}</p><div className="customer-metrics"><span><small>کل نوبت‌ها</small><b>{new Intl.NumberFormat("fa-IR").format(selectedCustomer.appointment_count)}</b></span><span><small>پرداخت تأییدشده</small><b>{toman(selectedCustomer.total_spending)}</b></span><span><small>عدم حضور</small><b>{new Intl.NumberFormat("fa-IR").format(selectedCustomer.no_show_count)}</b></span></div><div className="drawer-section"><h3>رفتار و ترجیحات</h3><p>یادآوری عملیاتی: {selectedCustomer.preferences?.operational_reminders ? "فعال" : "غیرفعال"} · پیام تبلیغاتی: {selectedCustomer.preferences?.promotional_messages ? "فعال" : "غیرفعال"}</p></div><form className="customer-notes-form" onSubmit={saveCustomer}><label>محله<input value={customerForm.neighborhood} onChange={(event) => setCustomerForm({ ...customerForm, neighborhood: event.target.value })} /></label><label>ترجیحات سرویس‌ها<textarea value={customerForm.service_preferences} onChange={(event) => setCustomerForm({ ...customerForm, service_preferences: event.target.value })} /></label><label>یادداشت داخلی<textarea value={customerForm.notes} onChange={(event) => setCustomerForm({ ...customerForm, notes: event.target.value })} /></label><label>برچسب‌ها<input value={customerForm.tags} onChange={(event) => setCustomerForm({ ...customerForm, tags: event.target.value })} /></label><label>تعداد عدم حضور<input type="number" min="0" value={customerForm.no_show_count} onChange={(event) => setCustomerForm({ ...customerForm, no_show_count: Number(event.target.value) })} /></label><button className="admin-primary">ذخیره پرونده</button></form></aside></div>}
-    {selectedDeletion && <div className="modal-backdrop" onMouseDown={() => setSelectedDeletion(null)}><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="deletion-review-title" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setSelectedDeletion(null)}>×</button><span className="admin-kicker">درخواست حذف حساب</span><h2 id="deletion-review-title">{selectedDeletion.customer_name}</h2><p>{selectedDeletion.reason || "دلیلی ثبت نشده است."}</p><label>یادداشت پردازش<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="دلیل تصمیم یا شرح ناشناس‌سازی" /></label><div className="drawer-actions">{selectedDeletion.status === "pending" && <><button className="admin-success" onClick={() => decide("approve")}>تأیید اولیه</button><button className="admin-danger" disabled={!notes.trim()} onClick={() => decide("reject")}>رد درخواست</button></>}{selectedDeletion.status === "approved" && <><button className="admin-danger" disabled={!notes.trim()} onClick={() => decide("complete")}>ناشناس‌سازی و تکمیل</button><button className="admin-secondary" disabled={!notes.trim()} onClick={() => decide("reject")}>بازگرداندن / رد</button></>}</div></section></div>}
+    {selectedCustomer && <AdminOverlay className="drawer-backdrop" onMouseDown={() => setSelectedCustomer(null)}><aside className="admin-drawer customer-drawer" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setSelectedCustomer(null)}>×</button><span className="admin-kicker">پرونده مشتری</span><h2>{selectedCustomer.name}</h2><p className="drawer-meta">{selectedCustomer.phone || "بدون شماره"} · {selectedCustomer.is_guest ? "مهمان" : "حساب ورود"}</p><div className="customer-metrics"><span><small>کل نوبت‌ها</small><b>{new Intl.NumberFormat("fa-IR").format(selectedCustomer.appointment_count)}</b></span><span><small>پرداخت تأییدشده</small><b>{toman(selectedCustomer.total_spending)}</b></span><span><small>عدم حضور</small><b>{new Intl.NumberFormat("fa-IR").format(selectedCustomer.no_show_count)}</b></span></div><div className="drawer-section"><h3>رفتار و ترجیحات</h3><p>یادآوری عملیاتی: {selectedCustomer.preferences?.operational_reminders ? "فعال" : "غیرفعال"} · پیام تبلیغاتی: {selectedCustomer.preferences?.promotional_messages ? "فعال" : "غیرفعال"}</p></div><form className="customer-notes-form" onSubmit={saveCustomer}><label>محله<input value={customerForm.neighborhood} onChange={(event) => setCustomerForm({ ...customerForm, neighborhood: event.target.value })} /></label><label>ترجیحات سرویس‌ها<textarea value={customerForm.service_preferences} onChange={(event) => setCustomerForm({ ...customerForm, service_preferences: event.target.value })} /></label><label>یادداشت داخلی<textarea value={customerForm.notes} onChange={(event) => setCustomerForm({ ...customerForm, notes: event.target.value })} /></label><label>برچسب‌ها<input value={customerForm.tags} onChange={(event) => setCustomerForm({ ...customerForm, tags: event.target.value })} /></label><label>تعداد عدم حضور<input type="number" min="0" value={customerForm.no_show_count} onChange={(event) => setCustomerForm({ ...customerForm, no_show_count: Number(event.target.value) })} /></label><button className="admin-primary">ذخیره پرونده</button></form></aside></AdminOverlay>}
+    {selectedDeletion && <AdminOverlay className="modal-backdrop" onMouseDown={() => setSelectedDeletion(null)}><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="deletion-review-title" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setSelectedDeletion(null)}>×</button><span className="admin-kicker">درخواست حذف حساب</span><h2 id="deletion-review-title">{selectedDeletion.customer_name}</h2><p>{selectedDeletion.reason || "دلیلی ثبت نشده است."}</p><label>یادداشت پردازش<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="دلیل تصمیم یا شرح ناشناس‌سازی" /></label><div className="drawer-actions">{selectedDeletion.status === "pending" && <><button className="admin-success" onClick={() => decide("approve")}>تأیید اولیه</button><button className="admin-danger" disabled={!notes.trim()} onClick={() => decide("reject")}>رد درخواست</button></>}{selectedDeletion.status === "approved" && <><button className="admin-danger" disabled={!notes.trim()} onClick={() => decide("complete")}>ناشناس‌سازی و تکمیل</button><button className="admin-secondary" disabled={!notes.trim()} onClick={() => decide("reject")}>بازگرداندن / رد</button></>}</div></section></AdminOverlay>}
   </div>;
 }
 function AdminRouter() {

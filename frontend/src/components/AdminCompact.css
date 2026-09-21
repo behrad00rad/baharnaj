@@ -1,0 +1,77 @@
+/* Layout only: retain the shared colors, typography and editorial edges. */
+.admin-app > :is(.modal-backdrop, .drawer-backdrop) {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  animation: none;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+.admin-app > .modal-backdrop { display: flex; align-items: flex-start; justify-content: center; }
+.admin-app > .modal-backdrop > .admin-modal {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 0;
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  margin: auto 0;
+  overflow: auto;
+  padding: 24px;
+  gap: 12px;
+  scroll-padding-block: 16px;
+}
+.admin-app .admin-modal :is(label, fieldset, .service-editor-grid, .admin-inline-option) { min-width: 0; }
+.admin-app .admin-modal :is(input, select, textarea) { min-width: 0; max-width: 100%; }
+.admin-app .admin-modal h2 { padding-inline-end: 40px; margin-block: 0 6px; }
+.admin-app .admin-modal > p { margin-block: 4px; }
+.admin-app .admin-modal .drawer-close { top: 8px; left: 8px; min-width: 44px; }
+.admin-app .admin-entity-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.admin-entity-form > :not(label), .admin-entity-form > .admin-field-wide { grid-column: 1 / -1; }
+.admin-entity-form > label:has(textarea, input[type=file], .password-input-wrap, select) { grid-column: 1 / -1; }
+.admin-app .service-editor fieldset { padding: 14px; gap: 10px; }
+.admin-app .service-editor fieldset + fieldset { margin-top: 0; }
+.admin-app .service-editor .service-article-input { min-height: 120px; }
+.admin-app .admin-modal textarea { resize: vertical; }
+.admin-app .admin-modal .panel-disclosure { margin: 0; }
+.admin-app .admin-modal .panel-disclosure > summary { min-height: 44px; padding: 10px 12px; }
+.admin-app .admin-option-create > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+
+@media (max-width: 650px) {
+  .admin-app .admin-page { padding: 18px 12px 28px; }
+  .admin-app .admin-main > .panel-guide { margin-top: 10px; padding-inline: 12px; }
+  .admin-app .admin-page-head { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  .admin-app .admin-page-head h1 { font-size: 1.65rem; margin-block: 4px 0; }
+  .admin-app .admin-page-head .admin-primary { width: auto; padding: 9px 12px; }
+  .admin-app .admin-panel { padding: 12px; }
+  .admin-app .admin-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .admin-app .admin-stat { min-height: 92px; padding: 12px; }
+  .admin-app .admin-stat strong { margin-top: 10px; font-size: var(--text-lead); }
+  .admin-app .panel-title { margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  .admin-app .list-toolbar { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .admin-app .admin-list-search { flex: 1 1 180px; }
+  .admin-app .toolbar { flex-direction: row; flex-wrap: wrap; overflow: visible; gap: 8px; }
+  .admin-app .toolbar :is(input, select) { min-width: 0; max-width: 100%; flex: 1 1 140px; }
+  .admin-app .segmented { max-width: 100%; overflow-x: auto; }
+  .admin-app .segmented button { flex-shrink: 0; }
+  .admin-app > .modal-backdrop > .admin-modal { padding: 18px 14px; gap: 10px; }
+  .admin-app .admin-modal :is(input:not([type=checkbox]):not([type=radio]), select, textarea) { width: 100%; padding: 8px; font-size: 16px; }
+  .admin-app .admin-modal :is(input:not([type=checkbox]):not([type=radio]), select) { min-height: 44px; }
+  .admin-app .admin-modal label { gap: 4px; }
+  .admin-app .admin-modal h2 { margin-block: 0 6px; }
+  .admin-app .service-editor { width: 100%; }
+  .admin-app .service-editor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .admin-app .service-editor-grid > label:has(.admin-inline-option) { grid-column: 1 / -1; }
+  .admin-app .service-editor-grid > label:has(> input[dir=ltr]) { grid-column: 1 / -1; }
+  .admin-app .service-editor fieldset { padding: 10px; }
+  .admin-app .service-status-controls { gap: 10px 16px; }
+  .admin-app .service-status-controls label { min-height: 44px; }
+  .admin-app .entity-list article { min-width: 0; }
+  .admin-app .entity-list article > div { min-width: 0; }
+  .admin-app .entity-list article > button { grid-column: auto; width: auto; min-height: 44px; }
+  .admin-app .entity-list small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .admin-app .panel-preferences { padding: 12px; margin-top: 0; }
+}
+@media (max-width: 359px) {
+  .admin-app .admin-entity-form, .admin-app .service-editor-grid { grid-template-columns: minmax(0, 1fr); }
+}

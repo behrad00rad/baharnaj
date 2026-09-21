@@ -12,6 +12,7 @@ import "./Admin.css";
 import "./AdminEnhancements.css";
 import "./AdminMobileNav.css";
 import "./PanelRedesign.css";
+import "./AdminCompact.css";
 
 const links = [
   ["/", "نمای کلی", "⌂"],
