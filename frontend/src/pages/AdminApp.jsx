@@ -122,7 +122,7 @@ function DashboardHome() {
   const statValue = (value) =>
     stats.loading ? "…" : stats.error ? "—" : value || 0;
   return (
-    <div className="admin-page">
+    <div className="admin-page dashboard-page">
       <Header
         eyebrow="مرکز فرماندهی"
         title="نمای کلی سالن"
@@ -148,7 +148,8 @@ function DashboardHome() {
           value={statValue(todayStats.pending)}
         />
       </div>
-      <div className="admin-stat-grid">
+      <PanelDisclosure title="آمار مالی و تأییدها">
+      <div className="admin-stat-grid dashboard-secondary-stats">
         <Stat
           label="درآمد خالص امروز"
           value={stats.loading ? "…" : toman(stats.data.revenue?.today)}
@@ -164,6 +165,7 @@ function DashboardHome() {
         />
         <Stat label="تأییدشده امروز" value={statValue(todayStats.confirmed)} />
       </div>
+      </PanelDisclosure>
       <div className="admin-grid-two">
         <section className="admin-panel">
           <div className="panel-title">
@@ -217,7 +219,8 @@ function DashboardHome() {
           </div>
         </section>
       </div>
-      <div className="admin-grid-two">
+      <PanelDisclosure title="گزارش‌های تکمیلی سالن">
+      <div className="admin-grid-two dashboard-secondary-reports">
         <section className="admin-panel">
           <div className="panel-title">
             <div>
@@ -275,6 +278,7 @@ function DashboardHome() {
           )}
         </section>
       </div>
+      </PanelDisclosure>
       <div className="quick-actions">
         <Link to="/admin/appointments">＋ افزودن نوبت</Link>
         <Link to="/admin/employees">＋ افزودن کارمند</Link>
@@ -1356,16 +1360,18 @@ function CrudPage({
                       ? "غیرفعال"
                       : "فعال"}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForm(item);
-                    setOpen(true);
-                  }}
-                >
-                  ویرایش
-                </button>
-                {deletable && <button type="button" className="admin-danger" onClick={() => remove(item)}>حذف</button>}
+                <div className="entity-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm(item);
+                      setOpen(true);
+                    }}
+                  >
+                    ویرایش
+                  </button>
+                  {deletable && <button type="button" className="admin-danger" onClick={() => remove(item)}>حذف</button>}
+                </div>
               </article>
             ))}
           </div>

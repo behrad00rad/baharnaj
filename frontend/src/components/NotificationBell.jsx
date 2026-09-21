@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { api } from "../shared/api";
 import { disableCurrentFirebaseDevice, enableFirebaseDevice, syncFirebaseDevice } from "../shared/firebasePush";
@@ -98,8 +99,17 @@ export default function NotificationBell() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const root = useRef(null);
+  const panel = useRef(null);
   const [enabled, setEnabled] = useState(false);
   const [foreground, setForeground] = useState(null);
+  const [mobileDocked, setMobileDocked] = useState(() => window.matchMedia?.("(max-width: 650px)").matches || false);
+  useEffect(() => {
+    const media = window.matchMedia?.("(max-width: 650px)");
+    if (!media) return undefined;
+    const update = () => setMobileDocked(media.matches);
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
   useEffect(() => {
     let active = true;
     const sync = () => syncFirebaseDevice().then(value => { if (active) setEnabled(value); }).catch(() => { if (active) setEnabled(false); });
@@ -158,11 +168,17 @@ export default function NotificationBell() {
   }, [open, refreshCount, refreshList]);
   useEffect(() => {
     const close = (event) => {
-      if (!root.current?.contains(event.target)) setOpen(false);
+      if (!root.current?.contains(event.target) && !panel.current?.contains(event.target)) setOpen(false);
     };
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, []);
+  useEffect(() => {
+    if (!open || !mobileDocked) return undefined;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = overflow; };
+  }, [mobileDocked, open]);
 
   const select = async (notification) => {
     if (!notification.is_read) {
@@ -194,7 +210,7 @@ export default function NotificationBell() {
     refreshList();
     refreshCount();
   };
-  return (
+  const content = (
     <div className="notification-root" ref={root}>
       <button
         className="notification-bell"
@@ -204,21 +220,21 @@ export default function NotificationBell() {
         aria-expanded={open}
         onClick={toggle}
       >
-        ◔
+        <span className="notification-bell-icon" aria-hidden="true">◔</span>
+        <span className="notification-bell-label">اعلان‌ها</span>
         {unread > 0 && (
           <b>{unread > 99 ? "۹۹+" : unread.toLocaleString("fa-IR")}</b>
         )}
       </button>
-      {foreground && <div className="notification-toast" role="status"><button onClick={() => { setOpen(true); refreshList(); setForeground(null); }}>{foreground.title}<span>{foreground.body}</span></button><button aria-label="بستن اعلان" onClick={() => setForeground(null)}>×</button></div>}
+      {foreground && createPortal(<div className="notification-toast" role="status"><button onClick={() => { setOpen(true); refreshList(); setForeground(null); }}>{foreground.title}<span>{foreground.body}</span></button><button aria-label="بستن اعلان" onClick={() => setForeground(null)}>×</button></div>, document.querySelector(".admin-app") || document.body)}
       {open && (
-        <section className="notification-panel">
+        createPortal(<section className="notification-panel" ref={panel}>
           <header>
             <strong>اعلان‌ها</strong>
-            {unread > 0 && (
-              <button type="button" onClick={readAll}>
-                خواندن همه
-              </button>
-            )}
+            <div>
+              {unread > 0 && <button type="button" onClick={readAll}>خواندن همه</button>}
+              <button className="notification-close" type="button" aria-label="بستن اعلان‌ها" onClick={() => setOpen(false)}>×</button>
+            </div>
           </header>
           <div className="notification-list">
             {loading && <p>در حال دریافت…</p>}
@@ -242,8 +258,9 @@ export default function NotificationBell() {
             ))}
           </div>
           <PushPermissionButton onNotificationSent={notificationSent} enabled={enabled} onEnabled={setEnabled} />
-        </section>
+        </section>, document.querySelector(".admin-app") || document.body)
       )}
     </div>
   );
+  return mobileDocked ? createPortal(content, document.querySelector(".admin-app") || document.body) : content;
 }

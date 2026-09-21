@@ -36,14 +36,24 @@
 .admin-app .admin-modal .panel-disclosure { margin: 0; }
 .admin-app .admin-modal .panel-disclosure > summary { min-height: 44px; padding: 10px 12px; }
 .admin-app .admin-option-create > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.admin-app .status { border-radius: 2px; }
+.admin-app .status small { display: inline; }
+.admin-app .entity-list article { grid-template-columns: 42px minmax(0, 1fr) 110px auto; }
+.admin-app .entity-actions { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+.admin-app .entity-actions button { min-width: max-content; min-height: 40px; padding: 7px 9px; border: 0; background: transparent; color: var(--teal); cursor: pointer; }
+.admin-app .entity-actions .admin-danger { color: var(--color-error-text); }
+.dashboard-page > .panel-disclosure { margin-bottom: 18px; }
+.dashboard-page > .panel-disclosure .admin-stat-grid,
+.dashboard-page > .panel-disclosure .admin-grid-two { margin-bottom: 0; }
 
 @media (max-width: 650px) {
-  .admin-app .admin-page { padding: 18px 12px 28px; }
-  .admin-app .admin-main > .panel-guide { margin-top: 10px; padding-inline: 12px; }
+  .admin-app .admin-main { padding-bottom: 64px; }
+  .admin-app .admin-page { padding: 20px 16px 32px; }
+  .admin-app .admin-main > .panel-guide { margin-top: 12px; padding-inline: 16px; }
   .admin-app .admin-page-head { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
   .admin-app .admin-page-head h1 { font-size: 1.65rem; margin-block: 4px 0; }
   .admin-app .admin-page-head .admin-primary { width: auto; padding: 9px 12px; }
-  .admin-app .admin-panel { padding: 12px; }
+  .admin-app .admin-panel { padding: 15px; }
   .admin-app .admin-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .admin-app .admin-stat { min-height: 92px; padding: 12px; }
   .admin-app .admin-stat strong { margin-top: 10px; font-size: var(--text-lead); }
@@ -66,12 +76,29 @@
   .admin-app .service-editor fieldset { padding: 10px; }
   .admin-app .service-status-controls { gap: 10px 16px; }
   .admin-app .service-status-controls label { min-height: 44px; }
-  .admin-app .entity-list article { min-width: 0; }
+  .admin-app .entity-list article { min-width: 0; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; }
   .admin-app .entity-list article > div { min-width: 0; }
-  .admin-app .entity-list article > button { grid-column: auto; width: auto; min-height: 44px; }
+  .admin-app .entity-list article > span { display: none; }
+  .admin-app .entity-actions { grid-column: 3; grid-row: 1; align-self: center; }
+  .admin-app .entity-actions button { min-height: 44px; padding-inline: 7px; }
   .admin-app .entity-list small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .admin-app .service-admin-list article { grid-template-columns: 52px minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: 4px 10px; padding: 10px 0; }
+  .admin-app .service-admin-thumb { grid-row: 1 / 3; width: 52px; height: 52px; }
+  .admin-app .service-admin-list article > div:nth-child(2) { grid-column: 2; grid-row: 1 / 3; align-self: center; }
+  .admin-app .service-admin-list article > .finance-badge { grid-column: 3; grid-row: 1; justify-self: end; padding: 3px 6px; border-radius: 2px; }
+  .admin-app .service-admin-list article > button { grid-column: 3; grid-row: 2; justify-self: end; min-width: max-content; min-height: 36px; padding: 6px 8px; white-space: nowrap; }
+  .admin-app .service-admin-list small { margin-top: 2px; font-size: var(--text-caption); }
+  .admin-app .finance-page .finance-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .admin-app .finance-page .finance-stat-grid .admin-stat { min-height: 104px; aspect-ratio: auto; }
+  .admin-app .finance-table-filters > * { flex: 0 0 44px; min-height: 44px; }
+  .admin-app .dashboard-page > .admin-grid-two { gap: 12px; }
+  .admin-app .dashboard-page > .panel-disclosure { margin-bottom: 12px; }
+  .admin-app .dashboard-secondary-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-app .panel-preferences { padding: 12px; margin-top: 0; }
 }
 @media (max-width: 359px) {
   .admin-app .admin-entity-form, .admin-app .service-editor-grid { grid-template-columns: minmax(0, 1fr); }
+  .admin-app .admin-page { padding-inline: 12px; }
+  .admin-app .service-admin-list article { grid-template-columns: 46px minmax(0, 1fr) auto; }
+  .admin-app .service-admin-thumb { width: 46px; height: 46px; }
 }
