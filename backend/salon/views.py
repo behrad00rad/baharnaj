@@ -723,6 +723,7 @@ class BookingHoldDeleteView(generics.DestroyAPIView):
 
 class WaitlistView(generics.CreateAPIView):
     permission_classes = (AllowAny,)
+    throttle_scope = "guest_booking"
     serializer_class = WaitlistEntrySerializer
 
 

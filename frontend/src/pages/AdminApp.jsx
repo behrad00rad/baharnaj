@@ -1458,15 +1458,19 @@ function CrudPage({
                           )}
                         </span>
                       )}
-                      {field.deleteEndpoint && (options[field.name] || []).length > 0 && (
-                        <div className="admin-option-list" aria-label="دسته‌بندی‌های گالری">
-                          {(options[field.name] || []).map((option) => (
-                            <span key={option.id}>
-                              {field.optionLabel ? field.optionLabel(option) : option.name}
-                              <button type="button" className="admin-option-delete" disabled={optionSaving[field.name]} onClick={() => removeOption(field, option)} aria-label={`حذف دسته‌بندی ${option.name}`}>×</button>
-                            </span>
-                          ))}
-                        </div>
+                      {field.deleteEndpoint && (
+                        <details className="admin-category-manager">
+                          <summary><span>مدیریت دسته‌بندی‌های گالری</span><small>{(options[field.name] || []).length} دسته‌بندی</small></summary>
+                          {(options[field.name] || []).length ? <div className="admin-option-list">
+                            {(options[field.name] || []).map((option) => (
+                              <span key={option.id}>
+                                {field.optionLabel ? field.optionLabel(option) : option.name}
+                                <button type="button" className="admin-option-delete" disabled={optionSaving[field.name]} onClick={() => removeOption(field, option)} aria-label={`حذف دسته‌بندی ${option.name}`}>×</button>
+                              </span>
+                            ))}
+                          </div> : <p className="admin-category-empty">هنوز دسته‌بندی‌ای ساخته نشده است.</p>}
+                          <p className="admin-category-note">حذف دسته، آیتم‌های گالری را حذف نمی‌کند.</p>
+                        </details>
                       )}
                     </>
                   ) : field.type === "textarea" ? (

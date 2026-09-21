@@ -3,7 +3,7 @@ import { formatServicePrice, bookingPriceSummary } from "../shared/pricing";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { DateModal } from "../components/DatePicker";
-import { api, applyRefreshSession } from "../shared/api";
+import { api, applyRefreshSession, requestErrorMessage } from "../shared/api";
 import { useAuth } from "../shared/auth";
 import { useServices } from "../shared/hooks";
 import { SEO } from "../components/SEO";
@@ -194,9 +194,10 @@ export default function Booking() {
         setSlots(data.slots || []);
         setAvailabilityState(data);
       })
-      .catch(() => {
+      .catch((requestError) => {
         setSlots([]);
         setAvailabilityState(null);
+        if (requestError.response?.status === 429) setError(requestErrorMessage(requestError, "دریافت ساعت‌های آزاد انجام نشد."));
       });
   }, [date, selected, employeeIds, chosenServices, availabilityItems, availabilityRefresh]);
   useEffect(() => {
@@ -244,9 +245,7 @@ export default function Booking() {
       setHoldExpired(false);
       setStep(3);
     } catch (requestError) {
-      setError(
-        requestError.response?.data?.detail || "این زمان دیگر در دسترس نیست.",
-      );
+      setError(requestErrorMessage(requestError, requestError.response?.data?.detail || "این زمان دیگر در دسترس نیست."));
     } finally {
       setLoading(false);
     }
@@ -291,10 +290,7 @@ export default function Booking() {
     } catch (requestError) {
       const responseData = requestError.response?.data;
       const fieldError = responseData && Object.values(responseData).flat(Infinity).find((value) => typeof value === "string");
-      setError(
-        (requestError.message === "offline" ? "اتصال اینترنت برقرار نیست. اطلاعات شما حفظ شده؛ پس از اتصال دوباره ثبت کنید." : responseData?.detail || fieldError) ||
-          "ثبت رزرو انجام نشد. زمان دیگری را امتحان کنید.",
-      );
+      setError(requestErrorMessage(requestError, (requestError.message === "offline" ? "اتصال اینترنت برقرار نیست. اطلاعات شما حفظ شده؛ پس از اتصال دوباره ثبت کنید." : responseData?.detail || fieldError) || "ثبت رزرو انجام نشد. زمان دیگری را امتحان کنید."));
     } finally {
       submitting.current = false;
       setLoading(false);

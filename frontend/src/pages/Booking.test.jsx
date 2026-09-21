@@ -51,6 +51,7 @@ vi.mock("../components/DatePicker", () => ({
 }));
 vi.mock("../shared/api", () => ({
   api: { get, post, delete: vi.fn(() => Promise.resolve()) },
+  requestErrorMessage: (error, fallback) => error?.response?.status === 429 ? "تعداد درخواست‌ها زیاد است. لطفاً ۱ دقیقه دیگر دوباره تلاش کنید." : fallback,
   toman: (value) => `${value} تومان`,
 }));
 

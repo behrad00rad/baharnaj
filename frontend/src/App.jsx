@@ -1,7 +1,7 @@
 import BookingManage from "./pages/BookingManage";
 import TelegramSettings from "./pages/TelegramSettings";
 import { lazy, Suspense, useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { PublicLayout } from "./components/PublicLayout";
 import Booking from "./pages/Booking";
 import AdminLayout from "./components/AdminLayout";
@@ -32,6 +32,14 @@ const AdminRouter = lazy(() => import("./pages/AdminApp"));
 const EmployeeApp = lazy(() => import("./pages/EmployeeApp"));
 const CustomerApp = lazy(() => import("./pages/CustomerApp"));
 
+function MobileScrollReset() {
+  const { pathname, key } = useLocation();
+  useEffect(() => {
+    if (window.innerWidth <= 760) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [pathname, key]);
+  return null;
+}
+
 // App is intentionally limited to routing; page behavior lives beside its page.
 export default function App() {
   const { ready } = useAuth();
@@ -46,6 +54,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <BrowserRouter>
+      <MobileScrollReset />
       <Routes>
         <Route
           path="/"

@@ -49,5 +49,14 @@ export const logoutSession = async () => {
     clearSessionState()
   }
 }
+export const requestErrorMessage = (error, fallback) => {
+  if (error?.response?.status !== 429) return fallback
+  const retryAfter = Number(error.response.headers?.["retry-after"] ?? error.response.data?.wait)
+  if (!Number.isFinite(retryAfter) || retryAfter <= 0) return "تعداد درخواست‌ها زیاد است. لطفاً چند دقیقه دیگر دوباره تلاش کنید."
+  const minutes = Math.floor(retryAfter / 60)
+  const seconds = Math.ceil(retryAfter % 60)
+  const wait = [minutes && `${new Intl.NumberFormat("fa-IR").format(minutes)} دقیقه`, seconds && `${new Intl.NumberFormat("fa-IR").format(seconds)} ثانیه`].filter(Boolean).join(" و ")
+  return `تعداد درخواست‌ها زیاد است. لطفاً ${wait} دیگر دوباره تلاش کنید.`
+}
 export const toman = (value) => `${new Intl.NumberFormat('fa-IR').format(value || 0)} تومان`
 export const getTokenRole = () => null

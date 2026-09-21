@@ -2,7 +2,7 @@ import React from 'react'
 import { render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
-import { api, applyRefreshSession } from './api'
+import { api, applyRefreshSession, requestErrorMessage } from './api'
 import { clearSessionState, getAccessToken, getRole, setSession } from './auth'
 
 describe('in-memory auth state', () => {
@@ -44,5 +44,15 @@ describe('in-memory auth state', () => {
     const config = await requestInterceptor.fulfilled({ url: 'appointments/', method: 'post', headers: {} })
 
     expect(config.headers.Authorization).toBe('Bearer booking-access')
+  })
+
+  it('turns a throttled request into a clear wait message', () => {
+    const message = requestErrorMessage(
+      { response: { status: 429, headers: { 'retry-after': '65' }, data: {} } },
+      'درخواست انجام نشد.',
+    )
+
+    expect(message).toContain('۱ دقیقه')
+    expect(message).toContain('۵ ثانیه')
   })
 })
