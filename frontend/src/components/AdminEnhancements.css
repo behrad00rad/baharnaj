@@ -35,3 +35,8 @@
 
 /* Keep finance focused on the figures and primary actions. */
 .finance-page .admin-stat-grid{gap:8px;margin-bottom:14px}.finance-page .admin-stat{min-height:112px;padding:14px 16px;border-radius:2px;box-shadow:none}.finance-page .admin-stat strong{font-size:var(--text-lead)}.finance-page .finance-chart,.finance-page .finance-employees,.finance-page .finance-table-panel{box-shadow:none}.finance-page .finance-chart-grid{gap:12px;margin-bottom:14px}.finance-page .finance-chart .panel-title{margin-bottom:10px}.finance-page .finance-chart .recharts-cartesian-grid line{stroke-opacity:.45}.finance-page .finance-employee-grid{gap:8px}.finance-page .finance-employee-card{padding:12px;border-radius:3px;box-shadow:none;transform:none}.finance-page .finance-employee-card:hover{transform:none;box-shadow:none}.finance-page .finance-table-panel{margin:14px 0}.finance-page .finance-table th{padding:9px 10px}.finance-page .finance-table td{padding:10px}.finance-page .finance-ledger{gap:0}.finance-page .finance-ledger>div{padding:10px 0}
+
+/* Modal overlays must remain anchored to the viewport, including on long admin pages. */
+.modal-backdrop{align-items:start;justify-items:center;overflow-y:auto;overscroll-behavior:contain}
+.modal-backdrop>.admin-modal{margin-block:auto;max-height:calc(100dvh - 40px);overflow:auto}
+@media(max-width:650px){.modal-backdrop{padding:12px}.modal-backdrop>.admin-modal{max-height:calc(100dvh - 24px)}}

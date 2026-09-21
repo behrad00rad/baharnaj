@@ -16,5 +16,6 @@
   .public-site :is(.service-card,.employee-card,.gallery-card,.work-item), .customer-panel, .employee-card, .admin-panel { transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease; }
   .public-site :is(.service-card,.employee-card,.gallery-card,.work-item):hover, .customer-panel:hover, .employee-card:hover { transform:translateY(-3px); }
   .public-site .gallery-card:hover,.public-site .work-item:hover { transform:none; }
-  @keyframes baharnaj-page-enter { from { opacity:0;transform:translateY(8px); } to { opacity:1;transform:none; } }
+  /* Do not transform route containers: they can contain fixed dialogs/lightboxes. */
+  @keyframes baharnaj-page-enter { from { opacity:0; } to { opacity:1; } }
 }
