@@ -152,6 +152,8 @@ const { get, post, mockState } = vi.hoisted(() => ({
           services_performed: [{ id: 21, date: "2026-09-01", customer: "Customer", appointment: 20, service: "Cut", amount: 800, status: "completed", appointment_status: "completed", payment_status: "paid", commission: 80 }],
         },
         "admin/activity/": [],
+        "admin/customers/": [{ id: 41, user_id: 51, name: "مریم احمدی", phone: "09121234567", is_guest: false, identity_conflict: false, account_status: "active", upcoming_visit: "2026-09-25", previous_visit: "2026-08-20", total_spending: 1500, appointment_count: 3, no_show_count: 1, notes: "مشتری قدیمی", tags: "VIP", preferences: { operational_reminders: true, promotional_messages: false } }],
+        "admin/time-off/": [{ id: 61, employee_name: "سارا", start_date: "2026-09-25", end_date: "2026-09-26", reason: "کار شخصی", status: "pending", review_notes: "" }],
       }[normalizedEndpoint] || [];
     return Promise.resolve({ data });
   }),
@@ -164,7 +166,7 @@ const { get, post, mockState } = vi.hoisted(() => ({
 }));
 
 vi.mock("../shared/api", () => ({
-  api: { get, post, patch: vi.fn() },
+  api: { get, post, patch: vi.fn(), delete: vi.fn() },
   toman: (value) => `${value} تومان`,
 }));
 
@@ -251,6 +253,22 @@ describe("admin CRUD forms", () => {
       "6",
     );
     expect(screen.getByRole("combobox").value).toBe("6");
+  });
+
+  it("shows customer visit and spending summaries in the customer directory", async () => {
+    render(<MemoryRouter initialEntries={["/customers"]}><AdminRouter /></MemoryRouter>);
+    expect(await screen.findByText("مریم احمدی")).toBeInTheDocument();
+    expect(screen.getByText("1500 تومان")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /مریم احمدی/ }));
+    expect(screen.getAllByText("پرونده مشتری").length).toBeGreaterThan(1);
+    expect(screen.getByDisplayValue("مشتری قدیمی")).toBeInTheDocument();
+  });
+
+  it("lets the admin review a pending leave request", async () => {
+    render(<MemoryRouter initialEntries={["/leave-requests"]}><AdminRouter /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "بررسی" }));
+    fireEvent.click(screen.getByRole("button", { name: "تأیید مرخصی" }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("admin/time-off/61/approve/", { review_notes: "" }));
   });
 
   it("assigns selected available services when creating an employee", async () => {

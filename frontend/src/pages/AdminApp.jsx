@@ -36,15 +36,15 @@ const labels = {
 };
 
 function useResource(endpoint) {
-  const [state, setState] = useState({ data: [], loading: true, error: false });
+  const [state, setState] = useState({ data: [], loading: true, error: false, count: 0, next: null, previous: null });
   const reload = () => {
     setState((current) => ({ ...current, loading: true }));
     api
       .get(endpoint)
       .then(({ data }) =>
-        setState({ data: unwrap(data), loading: false, error: false }),
+        setState({ data: unwrap(data), loading: false, error: false, count: data?.count ?? unwrap(data).length, next: data?.next || null, previous: data?.previous || null }),
       )
-      .catch(() => setState({ data: [], loading: false, error: true }));
+      .catch(() => setState({ data: [], loading: false, error: true, count: 0, next: null, previous: null }));
   };
   useEffect(reload, [endpoint]);
   return { ...state, reload };
@@ -2277,13 +2277,74 @@ function SalonClosures() {
   </div>;
 }
 
+const leaveStatusLabels = { pending: "در انتظار", approved: "تأیید شده", rejected: "رد شده", withdrawn: "پس‌گرفته شده" };
+
+function TimeOffManagement() {
+  const requests = useResource("admin/time-off/");
+  const [selected, setSelected] = useState(null);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const review = async (action) => {
+    setBusy(true); setMessage("");
+    try {
+      await api.post(`admin/time-off/${selected.id}/${action}/`, { review_notes: reviewNotes });
+      setMessage(action === "approve" ? "مرخصی تأیید و در برنامه اعمال شد." : "درخواست مرخصی رد شد.");
+      setSelected(null); setReviewNotes(""); requests.reload();
+    } catch (error) {
+      setMessage(firstError(error, "بررسی درخواست انجام نشد."));
+    } finally { setBusy(false); }
+  };
+  const pending = requests.data.filter((item) => item.status === "pending");
+  const reviewed = requests.data.filter((item) => item.status !== "pending");
+  const rows = (items) => <div className="leave-request-list">{items.map((item) => <article key={item.id}>
+    <span className="entity-avatar">{item.employee_name?.[0] || "ک"}</span>
+    <span><b>{item.employee_name || "کارمند"}</b><small>{formatJalaliDate(item.start_date)} تا {formatJalaliDate(item.end_date)} · {item.reason || "بدون توضیح"}</small></span>
+    <em className={`status ${item.status}`}>{leaveStatusLabels[item.status]}</em>
+    {item.status === "pending" ? <button className="admin-primary" onClick={() => { setSelected(item); setReviewNotes(""); }}>بررسی</button> : <small>{item.review_notes || "بدون یادداشت مدیر"}</small>}
+  </article>)}</div>;
+  return <div className="admin-page">
+    <Header eyebrow="برنامه کارکنان" title="درخواست‌های مرخصی" />
+    <p className="admin-page-description">درخواست تا زمان تأیید مدیر، ساعت‌های قابل رزرو کارمند را مسدود نمی‌کند.</p>
+    {message && <Toast message={message} type={message.includes("نشد") || message.includes("نوبت فعال") ? "error" : "success"} />}
+    <section className="admin-panel"><div className="panel-title"><div><span>نیازمند اقدام</span><h2>در انتظار بررسی</h2></div><b>{new Intl.NumberFormat("fa-IR").format(pending.length)} درخواست</b></div>{requests.loading ? <Skeleton /> : pending.length ? rows(pending) : <Empty title="درخواست بازی وجود ندارد" />}</section>
+    <section className="admin-panel"><div className="panel-title"><div><span>سابقه</span><h2>درخواست‌های بررسی‌شده</h2></div></div>{reviewed.length ? rows(reviewed) : <Empty title="سابقه‌ای وجود ندارد" />}</section>
+    {selected && <div className="modal-backdrop" onMouseDown={() => setSelected(null)}><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="leave-review-title" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setSelected(null)}>×</button><span className="admin-kicker">بررسی مرخصی</span><h2 id="leave-review-title">{selected.employee_name}</h2><p>{formatJalaliDate(selected.start_date)} تا {formatJalaliDate(selected.end_date)}</p><p>{selected.reason || "دلیلی ثبت نشده است."}</p><label>یادداشت برای کارمند<textarea value={reviewNotes} maxLength={500} onChange={(event) => setReviewNotes(event.target.value)} /></label><div className="drawer-actions"><button className="admin-success" disabled={busy} onClick={() => review("approve")}>تأیید مرخصی</button><button className="admin-danger" disabled={busy} onClick={() => review("reject")}>رد درخواست</button></div></section></div>}
+  </div>;
+}
+
 function CustomerManagement() {
-  const customers = useResource("admin/users/");
+  const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [accountFilter, setAccountFilter] = useState("");
+  const [conflictsOnly, setConflictsOnly] = useState(false);
+  const [page, setPage] = useState(1);
+  const customerEndpoint = useMemo(() => {
+    const params = new URLSearchParams({ page: String(page) });
+    if (appliedSearch) params.set("q", appliedSearch);
+    if (accountFilter) params.set("account", accountFilter);
+    if (conflictsOnly) params.set("identity_conflict", "1");
+    return `admin/customers/?${params}`;
+  }, [page, appliedSearch, accountFilter, conflictsOnly]);
+  const customers = useResource(customerEndpoint);
   const deletions = useResource("admin/deletion-requests/");
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [customerForm, setCustomerForm] = useState({ notes: "", tags: "", neighborhood: "", service_preferences: "", no_show_count: 0 });
   const [selectedDeletion, setSelectedDeletion] = useState(null);
   const [notes, setNotes] = useState("");
   const [message, setMessage] = useState("");
   const conflictGroups = Object.values((customers.data || []).filter((item) => item.identity_conflict && item.normalized_phone).reduce((groups, item) => ({ ...groups, [item.normalized_phone]: [...(groups[item.normalized_phone] || []), item] }), {}));
+  const openCustomer = (item) => {
+    setSelectedCustomer(item);
+    setCustomerForm({ notes: item.notes || "", tags: item.tags || "", neighborhood: item.neighborhood || "", service_preferences: item.service_preferences || "", no_show_count: item.no_show_count || 0 });
+  };
+  const saveCustomer = async (event) => {
+    event.preventDefault(); setMessage("");
+    try {
+      const { data } = await api.patch(`admin/customers/${selectedCustomer.id}/`, customerForm);
+      setSelectedCustomer(data); setMessage("اطلاعات داخلی مشتری ذخیره شد."); customers.reload();
+    } catch (error) { setMessage(firstError(error, "ذخیره اطلاعات مشتری انجام نشد.")); }
+  };
   const decide = async (action) => {
     setMessage("");
     try {
@@ -2294,15 +2355,22 @@ function CustomerManagement() {
   const mergeIdentity = async (canonical, legacy) => {
     setMessage("");
     try {
-      await api.post(`admin/users/${canonical.id}/resolve-identity/`, { legacy_user_id: legacy.id });
+      await api.post(`admin/customers/${canonical.id}/resolve-identity/`, { legacy_user_id: legacy.user_id });
       setMessage("سوابق مشتری ادغام شد."); customers.reload();
     } catch (error) { setMessage(firstError(error, "ادغام سوابق انجام نشد.")); }
   };
   return <div className="admin-page"><Header eyebrow="ارتباط با مشتری" title="مدیریت مشتریان" />
     {message && <Toast message={message} type={message.includes("نشد") ? "error" : "success"} />}
-    {conflictGroups.length > 0 && <section className="admin-panel"><div className="panel-title"><div><span>نیازمند بررسی</span><h2>تعارض هویت مشتریان</h2></div></div>{conflictGroups.map((group) => { const canonical = group.find((item) => !item.is_guest) || group[0]; return <div className="identity-conflict" key={canonical.normalized_phone}><div><b>{canonical.normalized_phone}</b><small>{group.length} رکورد با این شماره</small></div>{group.filter((item) => item.id !== canonical.id).map((legacy) => <button className="admin-secondary" key={legacy.id} onClick={() => mergeIdentity(canonical, legacy)}>ادغام {legacy.first_name || legacy.username} در حساب اصلی</button>)}</div>; })}</section>}
-    <section className="admin-panel"><div className="panel-title"><div><span>حساب‌ها</span><h2>مشتریان و مهمان‌ها</h2></div></div>{customers.loading ? <Skeleton /> : customers.data.length ? <div className="entity-list">{customers.data.map((item) => <article key={item.id}><span className="entity-avatar">{item.first_name?.[0] || "م"}</span><span><b>{[item.first_name,item.last_name].filter(Boolean).join(" ") || item.username}</b><small>{item.phone || "بدون شماره"} · {item.is_guest ? "رکورد مهمان" : "حساب ورود"}{item.identity_conflict ? " · تعارض هویت" : ""}</small></span><em className={`status ${item.account_status}`}>{item.account_status === "active" ? "فعال" : item.account_status === "closed" ? "بسته" : "معلق"}</em></article>)}</div> : <Empty />}</section>
+    <section className="admin-panel customer-directory"><div className="panel-title"><div><span>پرونده مشتری</span><h2>مشتریان و مهمان‌ها</h2></div><b>{new Intl.NumberFormat("fa-IR").format(customers.count)} نفر</b></div>
+      <form className="customer-toolbar" onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedSearch(search.trim()); }}><input aria-label="جستجوی مشتری" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="نام، موبایل یا ایمیل" /><select aria-label="نوع حساب" value={accountFilter} onChange={(event) => { setAccountFilter(event.target.value); setPage(1); }}><option value="">همه مشتریان</option><option value="account">حساب فعال</option><option value="guest">مهمان</option></select><label className="check-label"><input type="checkbox" checked={conflictsOnly} onChange={(event) => { setConflictsOnly(event.target.checked); setPage(1); }} /> فقط تعارض هویت</label><button className="admin-primary">جستجو</button></form>
+      {customers.loading ? <Skeleton /> : customers.error ? <Empty title="دریافت مشتریان انجام نشد" text="دوباره تلاش کنید." /> : customers.data.length ? <div className="customer-list">{customers.data.map((item) => <button type="button" key={item.id} onClick={() => openCustomer(item)}>
+        <span className="entity-avatar">{item.name?.[0] || "م"}</span><span><b>{item.name}</b><small>{item.phone || "بدون شماره"} · {item.is_guest ? "مهمان" : "حساب مشتری"}{item.identity_conflict ? " · تعارض هویت" : ""}</small></span><span><small>نوبت بعدی</small><b>{formatJalaliDate(item.upcoming_visit, "ندارد")}</b></span><span><small>آخرین مراجعه</small><b>{formatJalaliDate(item.previous_visit, "ندارد")}</b></span><span><small>پرداخت تأییدشده</small><b>{toman(item.total_spending)}</b></span>
+      </button>)}</div> : <Empty title="مشتری پیدا نشد" text="فیلتر یا عبارت جستجو را تغییر دهید." />}
+      <div className="customer-pagination"><button className="admin-secondary" disabled={!customers.previous} onClick={() => setPage((value) => Math.max(1, value - 1))}>صفحه قبل</button><span>صفحه {new Intl.NumberFormat("fa-IR").format(page)}</span><button className="admin-secondary" disabled={!customers.next} onClick={() => setPage((value) => value + 1)}>صفحه بعد</button></div>
+    </section>
+    {conflictGroups.length > 0 && <section className="admin-panel"><div className="panel-title"><div><span>نیازمند بررسی</span><h2>تعارض هویت مشتریان</h2></div></div>{conflictGroups.map((group) => { const canonical = group.find((item) => !item.is_guest) || group[0]; return <div className="identity-conflict" key={canonical.normalized_phone}><div><b>{canonical.normalized_phone}</b><small>{group.length} رکورد با این شماره</small></div>{group.filter((item) => item.id !== canonical.id).map((legacy) => <button className="admin-secondary" key={legacy.id} onClick={() => mergeIdentity(canonical, legacy)}>ادغام {legacy.name} در حساب اصلی</button>)}</div>; })}</section>}
     <section className="admin-panel"><div className="panel-title"><div><span>حریم خصوصی</span><h2>درخواست‌های حذف حساب</h2></div></div>{deletions.loading ? <Skeleton /> : deletions.data.length ? <div className="entity-list">{deletions.data.map((item) => <article key={item.id}><span className="entity-avatar">×</span><span><b>{item.customer_name || "مشتری"}</b><small>{item.customer_phone || "شماره حذف شده"} · {formatJalaliDateTime(item.requested_at)} · {{pending:"در انتظار",approved:"تأیید اولیه",rejected:"رد شده",completed:"تکمیل شده",cancelled:"لغو مشتری"}[item.status]}</small></span>{["pending","approved"].includes(item.status) && <button className="admin-ghost" onClick={() => { setSelectedDeletion(item); setNotes(""); }}>بررسی</button>}</article>)}</div> : <Empty title="درخواست حذفی ثبت نشده" />}</section>
+    {selectedCustomer && <div className="drawer-backdrop" onMouseDown={() => setSelectedCustomer(null)}><aside className="admin-drawer customer-drawer" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setSelectedCustomer(null)}>×</button><span className="admin-kicker">پرونده مشتری</span><h2>{selectedCustomer.name}</h2><p className="drawer-meta">{selectedCustomer.phone || "بدون شماره"} · {selectedCustomer.is_guest ? "مهمان" : "حساب ورود"}</p><div className="customer-metrics"><span><small>کل نوبت‌ها</small><b>{new Intl.NumberFormat("fa-IR").format(selectedCustomer.appointment_count)}</b></span><span><small>پرداخت تأییدشده</small><b>{toman(selectedCustomer.total_spending)}</b></span><span><small>عدم حضور</small><b>{new Intl.NumberFormat("fa-IR").format(selectedCustomer.no_show_count)}</b></span></div><div className="drawer-section"><h3>رفتار و ترجیحات</h3><p>یادآوری عملیاتی: {selectedCustomer.preferences?.operational_reminders ? "فعال" : "غیرفعال"} · پیام تبلیغاتی: {selectedCustomer.preferences?.promotional_messages ? "فعال" : "غیرفعال"}</p></div><form className="customer-notes-form" onSubmit={saveCustomer}><label>محله<input value={customerForm.neighborhood} onChange={(event) => setCustomerForm({ ...customerForm, neighborhood: event.target.value })} /></label><label>ترجیحات خدمات<textarea value={customerForm.service_preferences} onChange={(event) => setCustomerForm({ ...customerForm, service_preferences: event.target.value })} /></label><label>یادداشت داخلی<textarea value={customerForm.notes} onChange={(event) => setCustomerForm({ ...customerForm, notes: event.target.value })} /></label><label>برچسب‌ها<input value={customerForm.tags} onChange={(event) => setCustomerForm({ ...customerForm, tags: event.target.value })} /></label><label>تعداد عدم حضور<input type="number" min="0" value={customerForm.no_show_count} onChange={(event) => setCustomerForm({ ...customerForm, no_show_count: Number(event.target.value) })} /></label><button className="admin-primary">ذخیره پرونده</button></form></aside></div>}
     {selectedDeletion && <div className="modal-backdrop" onMouseDown={() => setSelectedDeletion(null)}><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="deletion-review-title" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setSelectedDeletion(null)}>×</button><span className="admin-kicker">درخواست حذف حساب</span><h2 id="deletion-review-title">{selectedDeletion.customer_name}</h2><p>{selectedDeletion.reason || "دلیلی ثبت نشده است."}</p><label>یادداشت پردازش<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="دلیل تصمیم یا شرح ناشناس‌سازی" /></label><div className="drawer-actions">{selectedDeletion.status === "pending" && <><button className="admin-success" onClick={() => decide("approve")}>تأیید اولیه</button><button className="admin-danger" disabled={!notes.trim()} onClick={() => decide("reject")}>رد درخواست</button></>}{selectedDeletion.status === "approved" && <><button className="admin-danger" disabled={!notes.trim()} onClick={() => decide("complete")}>ناشناس‌سازی و تکمیل</button><button className="admin-secondary" disabled={!notes.trim()} onClick={() => decide("reject")}>بازگرداندن / رد</button></>}</div></section></div>}
   </div>;
 }
@@ -2312,6 +2380,7 @@ function AdminRouter() {
       <Route index element={<DashboardHome />} />
       <Route path="appointments" element={<Appointments />} />
       <Route path="off-days" element={<SalonClosures />} />
+      <Route path="leave-requests" element={<TimeOffManagement />} />
       <Route path="employees" element={<EmployeeManagement />} />
       <Route
         path="services"

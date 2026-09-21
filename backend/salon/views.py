@@ -28,7 +28,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .models import AdminActionLog, Appointment, AppointmentItem, AppointmentStatusHistory, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerAccountDeletionRequest, CustomerCommunicationPreference, CustomerIdentityClaim, CustomerMutationRequest, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, SalonClosure, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsCustomer, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, normalize_phone, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, CustomerAppointmentSerializer, CustomerDeletionRequestSerializer, CustomerPasswordChangeSerializer, CustomerPreferenceSerializer, CustomerProfileSerializer, CustomerRegistrationSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, SalonClosureSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminCustomerSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, CustomerAppointmentSerializer, CustomerDeletionRequestSerializer, CustomerPasswordChangeSerializer, CustomerPreferenceSerializer, CustomerProfileSerializer, CustomerRegistrationSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, SalonClosureSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 def set_refresh_cookie(response, refresh):
@@ -414,7 +414,7 @@ def availability_context(start_date, end_date, segments):
     for entry in WorkingSchedule.objects.filter(employee_id__in=employee_ids, is_active=True).values("employee_id", "weekday", "start_time", "end_time"):
         schedules.setdefault((entry["employee_id"], entry["weekday"]), []).append((entry["start_time"], entry["end_time"]))
     time_off = {}
-    for entry in TimeOff.objects.filter(employee_id__in=employee_ids, start_date__lte=end_date, end_date__gte=start_date).values("employee_id", "start_date", "end_date"):
+    for entry in TimeOff.objects.filter(employee_id__in=employee_ids, status="approved", start_date__lte=end_date, end_date__gte=start_date).values("employee_id", "start_date", "end_date"):
         time_off.setdefault(entry["employee_id"], []).append((entry["start_date"], entry["end_date"]))
     appointments = {}
     for entry in AppointmentItem.objects.filter(employee_id__in=employee_ids, date__range=(start_date, end_date), appointment__status__in=("pending", "confirmed")).values("employee_id", "date", "start_time", "end_time"):
@@ -455,7 +455,7 @@ def availability_for_date(selected_date, segments, context=None):
                     weekday=selected_date.weekday(), is_active=True,
                     start_time__lte=segment_start.time(), end_time__gte=segment_end.time(),
                 ).exists()
-                employee_absent = employee.time_off.filter(start_date__lte=selected_date, end_date__gte=selected_date).exists()
+                employee_absent = employee.time_off.filter(status="approved", start_date__lte=selected_date, end_date__gte=selected_date).exists()
             if not schedule or employee_absent:
                 candidate_has_capacity = False
                 available = False
@@ -704,7 +704,7 @@ class BookingHoldView(generics.CreateAPIView):
                 return Response({"code": "salon_closed", "detail": detail}, status=status.HTTP_409_CONFLICT)
             if not item["employee"].working_schedules.filter(weekday=item["date"].weekday(), is_active=True, start_time__lte=item["start_time"], end_time__gte=item["end_time"]).exists():
                 return Response({"detail": "زمان انتخاب‌شده خارج از ساعات کاری متخصص است."}, status=status.HTTP_400_BAD_REQUEST)
-            if item["employee"].time_off.filter(start_date__lte=item["date"], end_date__gte=item["date"]).exists():
+            if item["employee"].time_off.filter(status="approved", start_date__lte=item["date"], end_date__gte=item["date"]).exists():
                 return Response({"detail": "متخصص در این تاریخ در دسترس نیست."}, status=status.HTTP_400_BAD_REQUEST)
             validate_no_employee_overlap(employee=item["employee"], date=item["date"], start_time=item["start_time"], end_time=item["end_time"])
             if BookingHoldItem.objects.filter(employee=item["employee"], date=item["date"], hold__expires_at__gt=timezone.now(), start_time__lt=item["end_time"], end_time__gt=item["start_time"]).exists():
@@ -894,7 +894,7 @@ class CustomerAppointmentMutationView(CustomerBaseView, generics.GenericAPIView)
                 end_minutes = start_minutes + item.duration_snapshot
                 start_time = time(start_minutes // 60, start_minutes % 60)
                 end_time = time(end_minutes // 60, end_minutes % 60)
-                if not item.employee.working_schedules.filter(weekday=target_date.weekday(), is_active=True, start_time__lte=start_time, end_time__gte=end_time).exists() or item.employee.time_off.filter(start_date__lte=target_date, end_date__gte=target_date).exists():
+                if not item.employee.working_schedules.filter(weekday=target_date.weekday(), is_active=True, start_time__lte=start_time, end_time__gte=end_time).exists() or item.employee.time_off.filter(status="approved", start_date__lte=target_date, end_date__gte=target_date).exists():
                     return Response({"code": "availability_conflict", "detail": "این زمان برای همه سرویس‌ها در دسترس نیست."}, status=status.HTTP_409_CONFLICT)
                 if AppointmentItem.objects.filter(employee=item.employee, date=target_date, appointment__status__in=("pending", "confirmed")).exclude(appointment=appointment).filter(start_time__lt=end_time, end_time__gt=start_time).exists():
                     return Response({"code": "availability_conflict", "detail": "این زمان قبلاً رزرو شده است."}, status=status.HTTP_409_CONFLICT)
@@ -1036,6 +1036,54 @@ class AdminSalonClosureViewSet(AdminModelViewSet):
         AdminActionLog.objects.create(actor=self.request.user, action="delete", model_name="SalonClosure", object_id=closure_id, details=details)
 
 
+class AdminTimeOffViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = (IsAdmin,)
+    serializer_class = TimeOffSerializer
+    queryset = TimeOff.objects.select_related("employee__user", "reviewed_by").order_by("-created_at")
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        status_value = self.request.query_params.get("status")
+        return queryset.filter(status=status_value) if status_value else queryset
+
+    def _review(self, request, pk, next_status):
+        leave = self.get_object()
+        if leave.status != "pending":
+            return Response({"detail": "این درخواست قبلاً بررسی شده است."}, status=status.HTTP_409_CONFLICT)
+        if next_status == "approved":
+            conflict_count = AppointmentItem.objects.filter(
+                employee=leave.employee, date__range=(leave.start_date, leave.end_date),
+                appointment__status__in=("pending", "confirmed"),
+            ).values("appointment_id").distinct().count()
+            if conflict_count:
+                return Response({"code": "appointment_conflict", "detail": f"در این بازه {conflict_count} نوبت فعال وجود دارد؛ ابتدا آن‌ها را جابه‌جا یا لغو کنید.", "appointment_count": conflict_count}, status=status.HTTP_409_CONFLICT)
+        leave.status = next_status
+        leave.review_notes = str(request.data.get("review_notes", "")).strip()[:500]
+        leave.reviewed_by = request.user
+        leave.reviewed_at = timezone.now()
+        leave.updated_by = request.user
+        leave.save(update_fields=("status", "review_notes", "reviewed_by", "reviewed_at", "updated_by", "updated_at"))
+        AdminActionLog.objects.create(
+            actor=request.user, action=next_status, model_name="TimeOff", object_id=str(leave.pk),
+            details={"employee": leave.employee_id, "start_date": leave.start_date.isoformat(), "end_date": leave.end_date.isoformat(), "notes": leave.review_notes},
+        )
+        Notification.objects.create(
+            recipient=leave.employee.user, type="leave_reviewed",
+            title="درخواست مرخصی تأیید شد" if next_status == "approved" else "درخواست مرخصی رد شد",
+            message=leave.review_notes or ("مرخصی شما در برنامه ثبت شد." if next_status == "approved" else "درخواست مرخصی تأیید نشد."),
+            target_url="/employee/availability",
+        )
+        return Response(self.get_serializer(leave).data)
+
+    @action(detail=True, methods=("post",))
+    def approve(self, request, pk=None):
+        return self._review(request, pk, "approved")
+
+    @action(detail=True, methods=("post",))
+    def reject(self, request, pk=None):
+        return self._review(request, pk, "rejected")
+
+
 class AdminServiceViewSet(AdminModelViewSet):
     queryset = Service.objects.select_related("category").prefetch_related("images", "employee_links__employee__user")
     serializer_class = ServiceAdminSerializer
@@ -1069,7 +1117,7 @@ class AdminEmployeeViewSet(AdminModelViewSet):
 
 
 class AdminUserViewSet(AdminModelViewSet):
-    queryset = User.objects.filter(role="customer").order_by("-identity_conflict", "-date_joined")
+    queryset = User.objects.all().order_by("-date_joined")
     serializer_class = UserAdminSerializer
 
     @action(detail=True, methods=("post",), url_path="resolve-identity")
@@ -1084,6 +1132,59 @@ class AdminUserViewSet(AdminModelViewSet):
         if not appointment:
             return Response({"detail": "رکورد قدیمی نوبتی برای انتقال ندارد."}, status=status.HTTP_400_BAD_REQUEST)
         merge_customer_history(canonical.customer_profile, legacy.customer_profile, request.user, appointment)
+        return Response({"detail": "سوابق مشتری ادغام شد."})
+
+
+class AdminCustomerViewSet(AdminModelViewSet):
+    serializer_class = AdminCustomerSerializer
+    pagination_class = CustomerPagination
+    http_method_names = ("get", "patch", "head", "options", "post")
+
+    def create(self, request, *args, **kwargs):
+        return Response({"detail": "ساخت مشتری از مسیر ثبت‌نام یا ثبت نوبت انجام می‌شود."}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def get_queryset(self):
+        queryset = CustomerProfile.objects.filter(user__role="customer").select_related(
+            "user", "communication_preferences",
+        ).prefetch_related(
+            "appointments__items",
+            "appointments__payments__refunds",
+            Prefetch("deletion_requests", queryset=CustomerAccountDeletionRequest.objects.order_by("-requested_at")),
+        ).order_by("-user__identity_conflict", "-user__date_joined")
+        query = self.request.query_params.get("q", "").strip()
+        account_type = self.request.query_params.get("account")
+        if query:
+            queryset = queryset.filter(
+                Q(user__first_name__icontains=query) | Q(user__last_name__icontains=query)
+                | Q(user__phone__icontains=query) | Q(user__email__icontains=query)
+            )
+        if account_type == "guest":
+            queryset = queryset.filter(user__is_guest=True)
+        elif account_type == "account":
+            queryset = queryset.filter(user__is_guest=False)
+        if self.request.query_params.get("identity_conflict") in {"1", "true"}:
+            queryset = queryset.filter(user__identity_conflict=True)
+        if self.request.query_params.get("deletion") == "pending":
+            queryset = queryset.filter(deletion_requests__status="pending")
+        return queryset.distinct()
+
+    def perform_update(self, serializer):
+        customer = serializer.save()
+        AdminActionLog.objects.create(
+            actor=self.request.user, action="update", model_name="CustomerProfile", object_id=str(customer.pk),
+            details={"fields": list(serializer.validated_data)},
+        )
+
+    @action(detail=True, methods=("post",), url_path="resolve-identity")
+    def resolve_identity(self, request, pk=None):
+        canonical = self.get_object()
+        legacy_user = User.objects.filter(pk=request.data.get("legacy_user_id"), role="customer").first()
+        if not legacy_user or not hasattr(legacy_user, "customer_profile") or legacy_user.pk == canonical.user_id or canonical.user.normalized_phone != legacy_user.normalized_phone:
+            return Response({"detail": "دو رکورد معتبر با شماره یکسان انتخاب کنید."}, status=status.HTTP_400_BAD_REQUEST)
+        appointment = Appointment.objects.filter(customer=legacy_user.customer_profile).order_by("pk").first()
+        if not appointment:
+            return Response({"detail": "رکورد قدیمی نوبتی برای انتقال ندارد."}, status=status.HTTP_400_BAD_REQUEST)
+        merge_customer_history(canonical, legacy_user.customer_profile, request.user, appointment)
         return Response({"detail": "سوابق مشتری ادغام شد."})
 
 
@@ -1971,7 +2072,24 @@ class EmployeeTimeOffViewSet(viewsets.ModelViewSet):
         return TimeOff.objects.filter(employee__user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(employee=EmployeeProfile.objects.get(user=self.request.user), created_by=self.request.user)
+        serializer.save(employee=EmployeeProfile.objects.get(user=self.request.user), status="pending", created_by=self.request.user, updated_by=self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        if self.get_object().status != "pending":
+            return Response({"detail": "فقط درخواست در انتظار قابل ویرایش است."}, status=status.HTTP_409_CONFLICT)
+        return super().update(request, *args, **kwargs)
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        leave = self.get_object()
+        if leave.status != "pending":
+            return Response({"detail": "فقط درخواست در انتظار قابل پس‌گرفتن است."}, status=status.HTTP_409_CONFLICT)
+        leave.status = "withdrawn"
+        leave.updated_by = request.user
+        leave.save(update_fields=("status", "updated_by", "updated_at"))
+        return Response(self.get_serializer(leave).data)
 
 
 class EmployeeWorkingScheduleViewSet(viewsets.ModelViewSet):

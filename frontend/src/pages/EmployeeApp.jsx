@@ -408,6 +408,7 @@ function Availability() {
   });
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(null);
   const submit = async (event) => {
     event.preventDefault();
     if (!form.start_date || !form.end_date) {
@@ -423,7 +424,7 @@ function Availability() {
     try {
       await api.post("employee/time-off/", form);
       setForm({ start_date: "", end_date: "", reason: "" });
-      setMessage("مرخصی ثبت شد.");
+      setMessage("درخواست مرخصی برای بررسی مدیر ثبت شد.");
       timeOff.reload();
     } catch (error) {
       setMessage(errorText(error, "ثبت مرخصی انجام نشد"));
@@ -431,13 +432,24 @@ function Availability() {
       setSaving(false);
     }
   };
+  const withdraw = async (id) => {
+    setWithdrawing(id); setMessage("");
+    try {
+      await api.delete(`employee/time-off/${id}/`);
+      setMessage("درخواست مرخصی پس گرفته شد.");
+      timeOff.reload();
+    } catch (error) {
+      setMessage(errorText(error, "پس‌گرفتن درخواست انجام نشد"));
+    } finally { setWithdrawing(null); }
+  };
 
   return (
     <div className="employee-page">
       <Heading kicker="برنامه کاری" title="ساعات کاری و مرخصی" />
       <WeeklyScheduleEditor />
       <section className="employee-card">
-        <h2>ثبت مرخصی</h2>
+        <h2>درخواست مرخصی</h2>
+        <p>درخواست پس از تأیید مدیر در تقویم کاری شما اعمال می‌شود.</p>
         <form className="employee-form" onSubmit={submit}>
           <label>
             از
@@ -463,7 +475,7 @@ function Availability() {
             />
           </label>
           <button className="employee-action" disabled={saving}>
-            {saving ? "در حال ثبت..." : "ثبت مرخصی"}
+            {saving ? "در حال ثبت..." : "ارسال درخواست"}
           </button>
           {message && <small className="schedule-message">{message}</small>}
         </form>
@@ -481,6 +493,9 @@ function Availability() {
                 {formatJalaliDate(entry.start_date, "—")} تا {formatJalaliDate(entry.end_date, "—")}
               </b>
               <small>{entry.reason || "بدون توضیح"}</small>
+              <span className={`employee-status ${entry.status}`}>{{ pending: "در انتظار بررسی", approved: "تأیید شده", rejected: "رد شده", withdrawn: "پس‌گرفته شده" }[entry.status] || entry.status}</span>
+              {entry.review_notes && <small>یادداشت مدیر: {entry.review_notes}</small>}
+              {entry.status === "pending" && <button type="button" className="employee-inline-danger" disabled={withdrawing === entry.id} onClick={() => withdraw(entry.id)}>{withdrawing === entry.id ? "در حال انجام..." : "پس‌گرفتن درخواست"}</button>}
             </div>
           ))
         ) : (

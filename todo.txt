@@ -9,6 +9,9 @@ The core system is functional, but it is not “absolutely done” yet. Excludin
 - [x] Repair customer identity integrity with normalized canonical phones, guest classification, verified history claiming, conflict review, and a database constraint.
 - [x] Persist versioned terms/privacy acceptance for signup and booking-time account creation.
 - [x] Add the complete customer/admin account-deletion review, cancellation, decision, audit, and anonymization workflow.
+- [x] Replace the admin customer list with a customer-only, searchable, filterable, paginated operational directory.
+- [x] Add pending employee leave requests with admin approval/rejection, withdrawal, conflict protection, and notifications.
+- [x] Complete booking hold countdown, expiry recovery, honest specialist loading, offline protection, and review edit actions.
 
 The first three items above have now been implemented; the remaining sections retain the original audit notes.
 
@@ -299,9 +302,9 @@ Also clean the 13 lint warnings, especially state updates inside effects that ca
 4. Cancellation/rescheduling policy engine.
 5. Customer identity constraint and historical claim workflow.
 6. Terms/privacy acceptance audit.
-7. Admin customer management and deletion requests.
-8. Employee leave approval.
-9. Booking hold/loading/offline UX.
+7. [Done] Admin customer management and deletion requests.
+8. [Done] Employee leave approval.
+9. [Done] Booking hold/loading/offline UX.
 10. Real end-to-end tests and lint cleanup.
 11. Accessibility, mobile-device and Persian-copy review.
 12. Final real-content and brand-asset pass.

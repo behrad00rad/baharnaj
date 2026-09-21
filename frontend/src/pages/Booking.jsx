@@ -75,6 +75,7 @@ export default function Booking() {
   const [step, setStep] = useState(initialServices.length ? 1 : 0);
   const [selected, setSelected] = useState(initialServices);
   const [employees, setEmployees] = useState({});
+  const [employeeStates, setEmployeeStates] = useState({});
   const [employeeIds, setEmployeeIds] = useState(() => Object.fromEntries(
     repeatedBooking.filter((item) => item.preferred_employee).map((item) => [String(item.id), item.preferred_employee]),
   ));
@@ -94,6 +95,10 @@ export default function Booking() {
     acceptTerms: false,
   });
   const [hold, setHold] = useState(null);
+  const [holdRemaining, setHoldRemaining] = useState(0);
+  const [holdExpired, setHoldExpired] = useState(false);
+  const [availabilityRefresh, setAvailabilityRefresh] = useState(0);
+  const [online, setOnline] = useState(() => navigator.onLine);
   const [confirmation, setConfirmation] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -149,21 +154,31 @@ export default function Booking() {
     api.get("customer/profile/").then(({ data }) => setContact((current) => ({ ...current, name: data.display_name || "", phone: data.phone || "", account: false }))).catch(() => {});
   }, [role]);
   useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
+  }, []);
+  useEffect(() => {
     selected.forEach((serviceId) => {
-      if (!employees[serviceId])
+      if (!employeeStates[serviceId]) {
+        setEmployeeStates((current) => ({ ...current, [serviceId]: "loading" }));
         api
           .get(`employees/?service=${serviceId}`)
-          .then(({ data }) =>
+          .then(({ data }) => {
             setEmployees((current) => ({
               ...current,
               [serviceId]: unwrap(data),
-            })),
-          )
-          .catch(() =>
-            setEmployees((current) => ({ ...current, [serviceId]: [] })),
-          );
+            }));
+            setEmployeeStates((current) => ({ ...current, [serviceId]: "ready" }));
+          })
+          .catch(() => {
+            setEmployees((current) => ({ ...current, [serviceId]: [] }));
+            setEmployeeStates((current) => ({ ...current, [serviceId]: "error" }));
+          });
+      }
     });
-  }, [selected, employees]);
+  }, [selected, employeeStates]);
   useEffect(() => {
     if (
       !date ||
@@ -183,7 +198,19 @@ export default function Booking() {
         setSlots([]);
         setAvailabilityState(null);
       });
-  }, [date, selected, employeeIds, chosenServices, availabilityItems]);
+  }, [date, selected, employeeIds, chosenServices, availabilityItems, availabilityRefresh]);
+  useEffect(() => {
+    if (!hold?.expires_at) return undefined;
+    const update = () => {
+      const expires = new Date(hold.expires_at).getTime();
+      const remaining = Number.isFinite(expires) ? Math.max(0, Math.ceil((expires - Date.now()) / 1000)) : 300;
+      setHoldRemaining(remaining);
+      if (remaining === 0 && Number.isFinite(expires)) setHoldExpired(true);
+    };
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, [hold]);
   useEffect(
     () => () => {
       if (hold) api.delete(`booking-holds/${hold.token}/`).catch(() => {});
@@ -204,12 +231,17 @@ export default function Booking() {
   };
   const reserveHold = async () => {
     setError("");
+    if (!online) {
+      setError("اتصال اینترنت برقرار نیست. پس از اتصال دوباره تلاش کنید.");
+      return;
+    }
     setLoading(true);
     try {
       const { data } = await api.post("booking-holds/", {
         items: bookingItems,
       });
       setHold(data);
+      setHoldExpired(false);
       setStep(3);
     } catch (requestError) {
       setError(
@@ -219,6 +251,15 @@ export default function Booking() {
       setLoading(false);
     }
   };
+  const releaseHoldAndGo = (targetStep) => {
+    if (hold) api.delete(`booking-holds/${hold.token}/`).catch(() => {});
+    setHold(null); setHoldExpired(false); setStep(targetStep);
+  };
+  const recheckTime = () => {
+    releaseHoldAndGo(2);
+    setTime("");
+    setAvailabilityRefresh((value) => value + 1);
+  };
   const submit = async (event) => {
     event.preventDefault();
     if (submitting.current) return;
@@ -226,6 +267,7 @@ export default function Booking() {
     setError("");
     setLoading(true);
     try {
+      if (!online) throw new Error("offline");
       const accountData = contact.account ? {
         create_account: true,
         account_password: contact.password,
@@ -250,7 +292,7 @@ export default function Booking() {
       const responseData = requestError.response?.data;
       const fieldError = responseData && Object.values(responseData).flat(Infinity).find((value) => typeof value === "string");
       setError(
-        responseData?.detail || fieldError ||
+        (requestError.message === "offline" ? "اتصال اینترنت برقرار نیست. اطلاعات شما حفظ شده؛ پس از اتصال دوباره ثبت کنید." : responseData?.detail || fieldError) ||
           "ثبت رزرو انجام نشد. زمان دیگری را امتحان کنید.",
       );
     } finally {
@@ -264,6 +306,7 @@ export default function Booking() {
     <>
     <SEO title="رزرو آنلاین سالن بهارناژ در رشت" description="سرویس، متخصص و زمان مناسب خود را در سالن زیبایی بهارناژ رشت به‌صورت آنلاین انتخاب و رزرو کنید." canonicalPath="/book" />
     <section className="booking-wizard container">
+      {!online && <div className="booking-offline" role="status">اینترنت قطع است؛ انتخاب‌های شما حفظ می‌شود اما ثبت نهایی تا اتصال دوباره ممکن نیست.</div>}
       <WizardHeader step={step} />
       <div className="wizard-layout">
         <div>
@@ -301,6 +344,7 @@ export default function Booking() {
               services={chosenServices}
               employees={employees}
               employeeIds={employeeIds}
+              employeeStates={employeeStates}
               setEmployeeIds={setEmployeeIds}
               onBack={() => setStep(0)}
               onNext={() => setStep(2)}
@@ -336,10 +380,12 @@ export default function Booking() {
               date={date}
               time={time}
               hold={hold}
+              holdRemaining={holdRemaining}
+              holdExpired={holdExpired}
+              onRecheck={recheckTime}
               signedIn={role === "customer"}
               onBack={() => {
-                setHold(null);
-                setStep(2);
+                releaseHoldAndGo(2);
               }}
               onNext={() => setStep(4)}
             />
@@ -354,6 +400,11 @@ export default function Booking() {
               onBack={() => setStep(3)}
               onSubmit={submit}
               loading={loading}
+              online={online}
+              holdRemaining={holdRemaining}
+              holdExpired={holdExpired}
+              onRecheck={recheckTime}
+              onEdit={(target) => target === 3 ? setStep(3) : releaseHoldAndGo(target)}
             />
           )}
         </div>
@@ -460,6 +511,7 @@ function EmployeeStep({
   services,
   employees,
   employeeIds,
+  employeeStates,
   setEmployeeIds,
   onBack,
   onNext,
@@ -504,7 +556,9 @@ function EmployeeStep({
                 </button>
               ))}
             </div>
-            {!employees[service.id]?.length && (
+            {employeeStates[service.id] === "loading" && <EmptyLine text="در حال دریافت متخصص‌ها…" />}
+            {employeeStates[service.id] === "error" && <EmptyLine text="دریافت متخصص‌ها انجام نشد. به مرحله قبل برگردید و دوباره تلاش کنید." />}
+            {employeeStates[service.id] === "ready" && !employees[service.id]?.length && (
               <EmptyLine text="متخصص فعالی برای این سرویس پیدا نشد." />
             )}
           </section>
@@ -635,6 +689,9 @@ function ContactStep({
   date,
   time,
   hold,
+  holdRemaining,
+  holdExpired,
+  onRecheck,
   signedIn,
   onBack,
   onNext,
@@ -647,8 +704,8 @@ function ContactStep({
         onNext();
       }}
     >
-      <div className="hold-notice">
-        این زمان تا ۵ دقیقه برای شما نگه داشته شده است.
+      <div className={`hold-notice ${holdExpired ? "expired" : ""}`}>
+        {holdExpired ? <><b>زمان نگهداری این نوبت تمام شد.</b><button type="button" onClick={onRecheck}>بررسی دوباره ساعت‌ها</button></> : <>این زمان برای شما نگه داشته شده است: <b dir="ltr">{new Intl.NumberFormat("fa-IR", { minimumIntegerDigits: 2 }).format(Math.floor(holdRemaining / 60))}:{new Intl.NumberFormat("fa-IR", { minimumIntegerDigits: 2 }).format(holdRemaining % 60)}</b></>}
       </div>
       <BookingSummary
         chosenServices={chosenServices}
@@ -705,7 +762,7 @@ function ContactStep({
       </div>}
       <div className="wizard-footer">
         <Back onClick={onBack} />
-        <Next disabled={!hold}>بررسی اطلاعات</Next>
+        <Next disabled={!hold || holdExpired}>بررسی اطلاعات</Next>
       </div>
     </form>
   );
@@ -719,9 +776,15 @@ function ReviewStep({
   onBack,
   onSubmit,
   loading,
+  online,
+  holdRemaining,
+  holdExpired,
+  onRecheck,
+  onEdit,
 }) {
   return (
     <form className="wizard-panel contact-panel" onSubmit={onSubmit}>
+      <div className={`hold-notice ${holdExpired ? "expired" : ""}`}>{holdExpired ? <><b>زمان نگهداری این نوبت تمام شد.</b><button type="button" onClick={onRecheck}>بررسی دوباره ساعت‌ها</button></> : <>زمان باقی‌مانده برای ثبت: <b dir="ltr">{new Intl.NumberFormat("fa-IR", { minimumIntegerDigits: 2 }).format(Math.floor(holdRemaining / 60))}:{new Intl.NumberFormat("fa-IR", { minimumIntegerDigits: 2 }).format(holdRemaining % 60)}</b></>}</div>
       <BookingSummary
         chosenServices={chosenServices}
         selectedEmployees={selectedEmployees}
@@ -729,12 +792,13 @@ function ReviewStep({
         time={time}
         contact={contact}
       />
+      <div className="review-edit-links"><button type="button" onClick={() => onEdit(0)}>ویرایش سرویس</button><button type="button" onClick={() => onEdit(1)}>ویرایش متخصص</button><button type="button" onClick={() => onEdit(2)}>ویرایش زمان</button><button type="button" onClick={() => onEdit(3)}>ویرایش اطلاعات تماس</button></div>
       <p className="wizard-empty">
         اطلاعات رزرو را بررسی کنید. با ثبت نهایی، درخواست برای سالن ارسال می‌شود.
       </p>
       <div className="wizard-footer">
         <Back onClick={onBack} />
-        <Next disabled={loading}>
+        <Next disabled={loading || !online || holdExpired}>
           {loading ? "در حال ثبت…" : "تأیید و ثبت نهایی رزرو"}
         </Next>
       </div>
@@ -742,6 +806,9 @@ function ReviewStep({
   );
 }
 function Confirmation({ appointment, navigate }) {
+  const copyCode = () => navigator.clipboard?.writeText(appointment.confirmation_code);
+  const share = () => navigator.share?.({ title: "نوبت بهارناژ", text: `کد پیگیری نوبت: ${appointment.confirmation_code}` });
+  const duration = appointment.items?.reduce((sum, item) => sum + Number(item.duration_snapshot || 0), 0) || 0;
   return (
     <section className="booking-confirmation container">
       <p className="eyebrow">درخواست شما ثبت شد</p>
@@ -750,6 +817,7 @@ function Confirmation({ appointment, navigate }) {
       <p>
         کد پیگیری شما: <strong>{appointment.confirmation_code}</strong>
       </p>
+      <div className="confirmation-actions"><button type="button" onClick={copyCode}>کپی کد پیگیری</button>{navigator.share && <button type="button" onClick={share}>اشتراک‌گذاری</button>}<button type="button" onClick={() => window.print()}>چاپ رسید</button></div>
       <div className="confirmation-card">
         <h2>جزئیات نوبت</h2>
         {appointment.items?.map((item) => (
@@ -758,8 +826,11 @@ function Confirmation({ appointment, navigate }) {
             <span>
               {formatJalaliDate(item.date, "تاریخ نامشخص")} · {item.start_time} تا {item.end_time}
             </span>
+            {item.employee_name && <small>متخصص: {item.employee_name}</small>}
           </div>
         ))}
+        {duration > 0 && <p>مدت کل: {new Intl.NumberFormat("fa-IR").format(duration)} دقیقه</p>}
+        {appointment.appointment_total > 0 && <p>مبلغ: {new Intl.NumberFormat("fa-IR").format(appointment.appointment_total)} تومان</p>}
       </div>
       <TelegramConnect receipt={appointment.telegram_receipt} compact />
       {appointment.account_created && <button className="button" onClick={() => navigate("/account")}>مشاهده نوبت در حساب من <span>←</span></button>}

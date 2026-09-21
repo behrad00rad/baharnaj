@@ -497,6 +497,69 @@ class UserAdminSerializer(serializers.ModelSerializer):
         fields = ("id", "username", "first_name", "last_name", "email", "phone", "normalized_phone", "role", "account_status", "is_active", "is_staff", "is_guest", "identity_conflict")
 
 
+class AdminCustomerSerializer(serializers.ModelSerializer):
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    name = serializers.SerializerMethodField()
+    phone = serializers.CharField(source="user.phone", read_only=True)
+    email = serializers.EmailField(source="user.email", read_only=True)
+    normalized_phone = serializers.CharField(source="user.normalized_phone", read_only=True)
+    account_status = serializers.CharField(source="user.account_status", read_only=True)
+    is_guest = serializers.BooleanField(source="user.is_guest", read_only=True)
+    identity_conflict = serializers.BooleanField(source="user.identity_conflict", read_only=True)
+    upcoming_visit = serializers.SerializerMethodField()
+    previous_visit = serializers.SerializerMethodField()
+    appointment_count = serializers.SerializerMethodField()
+    total_spending = serializers.SerializerMethodField()
+    deletion_request = serializers.SerializerMethodField()
+    preferences = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomerProfile
+        fields = (
+            "id", "user_id", "name", "phone", "email", "normalized_phone", "account_status", "is_guest",
+            "identity_conflict", "birthday", "neighborhood", "service_preferences", "notes", "tags",
+            "no_show_count", "last_visit", "upcoming_visit", "previous_visit", "appointment_count",
+            "total_spending", "deletion_request", "preferences",
+        )
+        read_only_fields = tuple(field for field in fields if field not in {"neighborhood", "service_preferences", "notes", "tags", "no_show_count"})
+
+    def get_name(self, obj):
+        return obj.user.get_full_name() or obj.user.username
+
+    def _appointments(self, obj):
+        return list(obj.appointments.all())
+
+    def get_upcoming_visit(self, obj):
+        today = timezone.localdate()
+        dates = [item.date for appointment in self._appointments(obj) if appointment.status in {"pending", "confirmed"} for item in appointment.items.all() if item.date >= today]
+        return min(dates).isoformat() if dates else None
+
+    def get_previous_visit(self, obj):
+        today = timezone.localdate()
+        dates = [item.date for appointment in self._appointments(obj) for item in appointment.items.all() if item.date <= today]
+        return max(dates).isoformat() if dates else None
+
+    def get_appointment_count(self, obj):
+        return len(self._appointments(obj))
+
+    def get_total_spending(self, obj):
+        total = 0
+        for appointment in self._appointments(obj):
+            for payment in appointment.payments.all():
+                if payment.status == "paid":
+                    refunded = sum(refund.amount for refund in payment.refunds.all() if refund.status == "completed")
+                    total += max(payment.amount - refunded, 0)
+        return total
+
+    def get_deletion_request(self, obj):
+        request_obj = next(iter(obj.deletion_requests.all()), None)
+        return CustomerDeletionRequestSerializer(request_obj).data if request_obj else None
+
+    def get_preferences(self, obj):
+        preference = getattr(obj, "communication_preferences", None)
+        return CustomerPreferenceSerializer(preference).data if preference else None
+
+
 class ServiceAdminSerializer(ServiceSerializer):
     pass
 
@@ -789,7 +852,7 @@ class AppointmentItemSerializer(serializers.ModelSerializer):
         end_time = attrs.get("end_time", self.instance.end_time if self.instance else None)
         if not employee.working_schedules.filter(weekday=appointment_date.weekday(), is_active=True, start_time__lte=start_time, end_time__gte=end_time).exists():
             raise serializers.ValidationError("زمان انتخاب‌شده خارج از ساعات کاری متخصص است.")
-        if employee.time_off.filter(start_date__lte=appointment_date, end_date__gte=appointment_date).exists():
+        if employee.time_off.filter(status="approved", start_date__lte=appointment_date, end_date__gte=appointment_date).exists():
             raise serializers.ValidationError("متخصص در این تاریخ در دسترس نیست.")
         validate_no_employee_overlap(
             employee=employee, date=appointment_date, start_time=start_time, end_time=end_time,
@@ -1290,10 +1353,29 @@ class EmployeeWorkingScheduleSerializer(WorkingScheduleSerializer):
 
 
 class TimeOffSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source="employee.user.get_full_name", read_only=True)
+
     class Meta:
         model = TimeOff
         fields = "__all__"
-        read_only_fields = ("employee", "created_by", "updated_by", "created_at", "updated_at")
+        read_only_fields = ("employee", "employee_name", "status", "review_notes", "reviewed_by", "reviewed_at", "created_by", "updated_by", "created_at", "updated_at")
+
+    def validate(self, attrs):
+        start = attrs.get("start_date", getattr(self.instance, "start_date", None))
+        end = attrs.get("end_date", getattr(self.instance, "end_date", None))
+        if start and end and end < start:
+            raise serializers.ValidationError({"end_date": "تاریخ پایان نمی‌تواند قبل از شروع باشد."})
+        if start and start < timezone.localdate():
+            raise serializers.ValidationError({"start_date": "درخواست مرخصی برای تاریخ گذشته قابل ثبت نیست."})
+        request = self.context.get("request")
+        employee = getattr(getattr(request, "user", None), "employee_profile", None)
+        if employee and start and end:
+            overlap = TimeOff.objects.filter(employee=employee, status__in=("pending", "approved"), start_date__lte=end, end_date__gte=start)
+            if self.instance:
+                overlap = overlap.exclude(pk=self.instance.pk)
+            if overlap.exists():
+                raise serializers.ValidationError({"start_date": "این بازه با درخواست مرخصی دیگری هم‌پوشانی دارد."})
+        return attrs
 
 
 class SalonClosureSerializer(serializers.ModelSerializer):

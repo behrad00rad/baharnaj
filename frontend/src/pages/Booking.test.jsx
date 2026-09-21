@@ -59,7 +59,7 @@ describe("booking wizard", () => {
     window.history.pushState({}, "", "/book");
   });
 
-  it("moves from service selection to employee selection and validates selection", async () => {
+  it("moves from service selection to employee selection without showing a false empty state", async () => {
     render(
       <MemoryRouter>
         <Booking />
@@ -70,11 +70,8 @@ describe("booking wizard", () => {
     fireEvent.click(screen.getByRole("button", { name: /کوتاهی/ }));
     fireEvent.click(screen.getByRole("button", { name: /انتخاب متخصص/ }));
     expect(screen.getByText("متخصصت را انتخاب کن.")).toBeInTheDocument();
-    await waitFor(() =>
-      expect(
-        screen.getByText("متخصص فعالی برای این سرویس پیدا نشد."),
-      ).toBeInTheDocument(),
-    );
+    expect(screen.queryByText("متخصص فعالی برای این سرویس پیدا نشد.")).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /متخصص/ })).toBeInTheDocument();
   });
 
   it("preserves the previous specialist when booking again", async () => {
@@ -146,5 +143,21 @@ describe("booking wizard", () => {
     expect(appointmentPayload).not.toHaveProperty("account_password_confirm");
     expect(appointmentPayload).not.toHaveProperty("account_email");
     expect(await screen.findByRole("heading", {name: status === "confirmed" ? "نوبت شما تأیید شد." : "درخواست نوبت دریافت شد."})).toBeInTheDocument();
+  });
+
+  it("shows an expired hold and returns to availability with one action", async () => {
+    post.mockImplementation((url) => Promise.resolve({ data: url === "booking-holds/" ? { token: "expired-hold", expires_at: "2000-01-01T00:00:00Z" } : {} }));
+    render(<MemoryRouter><Booking /></MemoryRouter>);
+    fireEvent.click(screen.getByRole("button", { name: /کوتاهی/ }));
+    fireEvent.click(screen.getByRole("button", { name: /انتخاب متخصص/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /متخصص/ }));
+    fireEvent.click(screen.getByRole("button", { name: /انتخاب تاریخ و ساعت/ }));
+    fireEvent.click(screen.getByRole("button", { name: "تاریخ نوبت" }));
+    fireEvent.click(screen.getByRole("button", { name: /انتخاب تاریخ آزمایشی/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "10:00" }));
+    fireEvent.click(screen.getByRole("button", { name: /ادامه/ }));
+    expect(await screen.findByText("زمان نگهداری این نوبت تمام شد.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "بررسی دوباره ساعت‌ها" }));
+    expect(screen.getByText("زمان مناسب را پیدا کن.")).toBeInTheDocument();
   });
 });

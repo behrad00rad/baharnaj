@@ -79,6 +79,7 @@ class Notification(models.Model):
         ("payment_confirmed", "Payment confirmed"),
         ("payment_rejected", "Payment rejected"),
         ("customer_account", "Customer account"),
+        ("leave_reviewed", "Leave reviewed"),
     ]
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
@@ -512,14 +513,26 @@ class ScheduleException(models.Model):
 
 
 class TimeOff(models.Model):
+    STATUS_CHOICES = [("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected"), ("withdrawn", "Withdrawn")]
     employee = models.ForeignKey(EmployeeProfile, on_delete=models.PROTECT, related_name="time_off")
     start_date = models.DateField()
     end_date = models.DateField()
     reason = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    review_notes = models.CharField(max_length=500, blank=True)
+    reviewed_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="reviewed_time_off")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="created_time_off")
     updated_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="updated_time_off")
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def clean(self):
+        if self.end_date < self.start_date:
+            raise ValidationError({"end_date": "End date cannot be before start date."})
 
 
 class SalonClosure(models.Model):

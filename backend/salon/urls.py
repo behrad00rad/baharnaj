@@ -6,7 +6,7 @@ from .views import (AdminAppointmentViewSet, AdminBlogCategoryViewSet, AdminBlog
 										EmployeeAppointmentsView, EmployeeCustomerOptionsView, EmployeeListView, EmployeeSelfBookingView, EmployeeSelfServiceListView, EmployeeStatisticsView, GalleryCategoryListView,
 					ServiceDetailView, ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
 					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
-					PaymentViewSet, FirebaseDeviceViewSet, NotificationViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, AdminSalonClosureViewSet, EmployeeTimeOffViewSet,
+					PaymentViewSet, FirebaseDeviceViewSet, NotificationViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, AdminCustomerViewSet, AdminSalonClosureViewSet, AdminTimeOffViewSet, EmployeeTimeOffViewSet,
 					EmployeeEarningsView, EmployeeAppointmentPaymentReportView, GalleryListView, AdminGalleryViewSet, WaitlistView, AvailabilityCalendarView, CustomerBookingView, CustomerHistoryView,
 					BlogCategoryListView, BlogPostDetailView, BlogPostListView, CustomerAppointmentDetailView, CustomerAppointmentListView, CustomerBookAgainView, CustomerDashboardView, CustomerDeletionRequestView, CustomerIdentityClaimView, CustomerNotificationViewSet, CustomerPasswordChangeView, CustomerPreferencesView, CustomerProfileView, CustomerAppointmentMutationView)
 
@@ -15,7 +15,9 @@ router.register("admin/services", AdminServiceViewSet, basename="admin-service")
 router.register("admin/gallery", AdminGalleryViewSet, basename="admin-gallery")
 router.register("admin/employees", AdminEmployeeViewSet, basename="admin-employee")
 router.register("admin/users", AdminUserViewSet, basename="admin-user")
+router.register("admin/customers", AdminCustomerViewSet, basename="admin-customer")
 router.register("admin/closures", AdminSalonClosureViewSet, basename="admin-closure")
+router.register("admin/time-off", AdminTimeOffViewSet, basename="admin-time-off")
 router.register("admin/deletion-requests", AdminDeletionRequestViewSet, basename="admin-deletion-request")
 router.register("admin/service-categories", AdminServiceCategoryViewSet, basename="admin-service-category")
 router.register("admin/appointments", AdminAppointmentViewSet, basename="admin-appointment")

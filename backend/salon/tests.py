@@ -282,7 +282,7 @@ class AppointmentItemSchemaTests(TestCase):
 
     def test_time_off_and_schedule_exception_enforcement(self):
         WorkingSchedule.objects.create(employee=self.employee, weekday=5, start_time="09:00", end_time="20:00")
-        TimeOff.objects.create(employee=self.employee, start_date=date(2026, 8, 29), end_date=date(2026, 8, 29))
+        TimeOff.objects.create(employee=self.employee, start_date=date(2026, 8, 29), end_date=date(2026, 8, 29), status="approved")
         from .serializers import AppointmentItemSerializer
         serializer = AppointmentItemSerializer(data={"appointment": self.appointment.pk, "service": self.service.pk, "employee": self.employee.pk, "date": "2026-08-29", "start_time": "10:00", "end_time": "11:00"})
         self.assertFalse(serializer.is_valid())
@@ -753,7 +753,7 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(EmployeeCommission.objects.count(), 0)
         self.assertEqual(client.post("/api/v1/employee/appointments/create/", {**payload, "services": [restricted_service.pk], "start_time": "12:00"}, format="json").status_code, 400)
         self.assertEqual(client.post("/api/v1/employee/appointments/create/", {**payload, "services": [self.service.pk], "start_time": "10:30"}, format="json").status_code, 400)
-        TimeOff.objects.create(employee=self.employee, start_date=booking_date, end_date=booking_date)
+        TimeOff.objects.create(employee=self.employee, start_date=booking_date, end_date=booking_date, status="approved")
         self.assertEqual(client.post("/api/v1/employee/appointments/create/", {**payload, "services": [self.service.pk], "start_time": "13:00"}, format="json").status_code, 400)
 
     def test_employee_earnings_periods_use_snapshots_commissions_and_payment_status(self):
