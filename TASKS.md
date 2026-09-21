@@ -189,15 +189,15 @@ Completed in the current working tree:
 
 Required before enabling customer accounts in production:
 
-- [ ] Audit existing users grouped by normalized phone; classify login accounts versus legacy guest records and resolve username/email conflicts.
-- [ ] Design and test a verified claim/merge workflow for historical guest bookings. Never merge records based only on a typed phone number.
-- [ ] Add a database-backed canonical identity constraint that permits the chosen guest model while guaranteeing one active login account per phone.
-- [ ] Record terms/privacy acceptance version, timestamp, and source for standalone and booking-time registration.
+- [x] Audit existing users grouped by normalized phone; classify login accounts versus legacy guest records and expose conflicts for admin resolution.
+- [x] Design and test a verified confirmation-code claim/merge workflow for historical guest bookings. Never merge records based only on a typed phone number.
+- [x] Add a database-backed canonical identity constraint that permits guest records while guaranteeing one active login account per normalized phone.
+- [x] Record terms/privacy acceptance version, timestamp, source, IP, and user agent for standalone and booking-time registration.
 - [ ] Configure and test production SMTP, branded email templates, expiry messaging, and delivery-failure monitoring.
 - [ ] Choose a dependable Iranian SMS/OTP provider before phone verification, verified phone changes, or phone-based password recovery.
 - [ ] Approve cancellation/rescheduling deadlines and fees, expose them in settings, then set `CUSTOMER_APPOINTMENT_POLICY_CONFIGURED=true`.
 - [ ] Add server-side enforcement for the approved cancellation/rescheduling deadline and fee rules; the current gate is intentionally all-or-nothing.
-- [ ] Add an admin workflow for reviewing and completing account-deletion requests.
+- [x] Add an admin workflow for reviewing, rejecting, completing, and auditing account-deletion requests while preserving required appointment/financial records.
 - [ ] Add end-to-end coverage for booking-time account creation, standalone registration, login/logout persistence, password recovery email, rescheduling conflicts, notifications, and legacy account claiming.
 - [ ] Run the new Simple JWT blacklist migrations during deployment and verify refresh-token rotation/revocation in staging.
 - [ ] Perform a Persian copy, accessibility, mobile-device, slow-network, and session-expiry review of all customer account screens.

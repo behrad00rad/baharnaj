@@ -631,9 +631,12 @@ function BirthdayField({ initialValue }) {
 
 function Profile() {
   const request = useRequest("customer/profile/");
+  const deletionRequest = useRequest("customer/account/deletion-request/");
   const [message, setMessage] = useState("");
   const [deletionPassword, setDeletionPassword] = useState("");
   const [deletionMessage, setDeletionMessage] = useState("");
+  const [claimCode, setClaimCode] = useState("");
+  const [claimMessage, setClaimMessage] = useState("");
   const [passwords, setPasswords] = useState({
     current_password: "",
     new_password: "",
@@ -674,10 +677,31 @@ function Profile() {
           ? "درخواست حذف حساب شما برای بررسی ثبت شد."
           : "درخواست حذف حساب قبلی شما موجود است.",
       );
+      deletionRequest.reload();
     } catch (error) {
       setDeletionMessage(
         error.response?.data?.detail || "ثبت درخواست حذف انجام نشد.",
       );
+    }
+  };
+  const cancelDeletion = async () => {
+    try {
+      await api.delete("customer/account/deletion-request/");
+      setDeletionMessage("درخواست حذف حساب لغو شد.");
+      deletionRequest.reload();
+    } catch (error) {
+      setDeletionMessage(error.response?.data?.detail || "لغو درخواست انجام نشد.");
+    }
+  };
+  const claimHistory = async (event) => {
+    event.preventDefault();
+    setClaimMessage("");
+    try {
+      const { data } = await api.post("customer/account/claim-history/", { confirmation_code: claimCode });
+      setClaimMessage(data.detail);
+      setClaimCode("");
+    } catch (error) {
+      setClaimMessage(error.response?.data?.detail || error.response?.data?.confirmation_code || "افزودن سوابق انجام نشد.");
     }
   };
   const changePassword = async (event) => {
@@ -735,13 +759,21 @@ function Profile() {
           <button className="customer-primary">تغییر رمز عبور</button>
         </form>
       </div>
+      <form className="customer-panel customer-form" onSubmit={claimHistory}>
+        <div><span className="customer-kicker">سوابق قدیمی</span><h2>افزودن رزرو قبلی</h2></div>
+        <p>برای افزودن امن سوابق مهمان به حساب، کد پیگیری یکی از رزروهای قبلی همین شماره را وارد کنید.</p>
+        <label>کد پیگیری<input required value={claimCode} onChange={(event) => setClaimCode(event.target.value)} /></label>
+        {claimMessage && <p className="customer-message" role="status">{claimMessage}</p>}
+        <button className="customer-secondary">بررسی و افزودن سوابق</button>
+      </form>
       <details className="customer-panel customer-danger">
         <summary>حذف حساب و اطلاعات دسترسی</summary>
         <div>
           <p>نوبت‌ها، پرداخت‌ها و سوابق مالی ممکن است برای الزامات قانونی نگهداری شوند. حذف حساب پس از بررسی سالن انجام می‌شود.</p>
-          <label className="customer-form">رمز عبور فعلی<PasswordInput visibilityLabel="رمز عبور فعلی" value={deletionPassword} onChange={(event) => setDeletionPassword(event.target.value)} autoComplete="current-password" /></label>
+          {deletionRequest.data && <p className="customer-message">وضعیت درخواست: {{ pending: "در انتظار بررسی", approved: "تأیید اولیه", rejected: "رد شده", completed: "تکمیل شده", cancelled: "لغو شده" }[deletionRequest.data.status] || deletionRequest.data.status}</p>}
+          {(!deletionRequest.data || ["rejected", "cancelled"].includes(deletionRequest.data.status)) && <label className="customer-form">رمز عبور فعلی<PasswordInput visibilityLabel="رمز عبور فعلی" value={deletionPassword} onChange={(event) => setDeletionPassword(event.target.value)} autoComplete="current-password" /></label>}
           {deletionMessage && <p role="status">{deletionMessage}</p>}
-          <button className="customer-danger-button" type="button" onClick={requestDeletion}>ثبت درخواست حذف حساب</button>
+          {deletionRequest.data?.status === "pending" ? <button className="customer-secondary" type="button" onClick={cancelDeletion}>لغو درخواست حذف</button> : (!deletionRequest.data || ["rejected", "cancelled"].includes(deletionRequest.data.status)) && <button className="customer-danger-button" type="button" onClick={requestDeletion}>ثبت درخواست حذف حساب</button>}
         </div>
       </details>
     </>

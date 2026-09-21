@@ -14,7 +14,7 @@ from .models import (
     EmployeeService, GalleryAsset, GalleryCategory, Payment, Refund, Service, ServiceCategory, ServiceImage,
     BlogCategory, BlogMedia, BlogPost, BlogPostRevision, BlogTag, BookingHold, BookingHoldItem, FirebaseDevice,
     Notification, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule,
-    CustomerCommunicationPreference, CustomerAccountDeletionRequest,
+    CustomerCommunicationPreference, CustomerAccountDeletionRequest, CustomerLegalAcceptance,
 )
 from .validators import validate_no_employee_overlap
 from .security import validate_image_upload, validate_phone
@@ -119,10 +119,29 @@ class CustomerAppointmentSerializer(serializers.Serializer):
 
 
 class CustomerDeletionRequestSerializer(serializers.ModelSerializer):
+    customer_name = serializers.CharField(source="customer.user.get_full_name", read_only=True)
+    customer_phone = serializers.CharField(source="customer.user.phone", read_only=True)
+    processed_by_name = serializers.SerializerMethodField()
+
     class Meta:
         model = CustomerAccountDeletionRequest
-        fields = ("id", "status", "reason", "requested_at", "processed_at")
-        read_only_fields = ("id", "status", "requested_at", "processed_at")
+        fields = ("id", "customer", "customer_name", "customer_phone", "status", "reason", "requested_at", "processed_at", "processed_by_name", "processing_notes", "cancelled_at")
+        read_only_fields = fields
+
+    def get_processed_by_name(self, obj):
+        return (obj.processed_by.get_full_name() or obj.processed_by.username) if obj.processed_by else ""
+
+
+def record_legal_acceptance(customer, request, source):
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "") if request else ""
+    ip_address = forwarded.split(",")[0].strip() if forwarded else (request.META.get("REMOTE_ADDR") if request else None)
+    return CustomerLegalAcceptance.objects.get_or_create(
+        customer=customer,
+        terms_version=settings.TERMS_VERSION,
+        privacy_version=settings.PRIVACY_POLICY_VERSION,
+        source=source,
+        defaults={"ip_address": ip_address or None, "user_agent": (request.META.get("HTTP_USER_AGENT", "") if request else "")[:500]},
+    )[0]
 
 
 class FirebaseDeviceSerializer(serializers.ModelSerializer):
@@ -340,7 +359,7 @@ class CustomerRegistrationSerializer(serializers.Serializer):
         if attrs["password"] != attrs["password_confirm"]:
             raise serializers.ValidationError({"password_confirm": "تکرار رمز عبور مطابقت ندارد."})
         phone = attrs["phone"]
-        login_accounts = [user for user in User.objects.filter(Q(username=phone) | Q(phone=phone)) if user.has_usable_password()]
+        login_accounts = User.objects.filter(role="customer", is_guest=False, account_status="active", normalized_phone=phone)
         if login_accounts:
             raise serializers.ValidationError({"phone": "برای این شماره حسابی وجود دارد؛ وارد حساب شوید."})
         if User.objects.filter(email__iexact=attrs["email"]).exclude(email="").exists():
@@ -359,7 +378,8 @@ class CustomerRegistrationSerializer(serializers.Serializer):
         password = validated_data.pop("password")
         phone = validated_data["phone"]
         user = User.objects.create_user(username=phone, password=password, role="customer", **validated_data)
-        CustomerProfile.objects.create(user=user)
+        profile = CustomerProfile.objects.create(user=user)
+        record_legal_acceptance(profile, self.context.get("request"), "signup")
         return user
 
 
@@ -474,7 +494,7 @@ class AdminCustomerOptionSerializer(serializers.ModelSerializer):
 class UserAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ("id", "username", "first_name", "last_name", "email", "phone", "role", "account_status", "is_active", "is_staff")
+        fields = ("id", "username", "first_name", "last_name", "email", "phone", "normalized_phone", "role", "account_status", "is_active", "is_staff", "is_guest", "identity_conflict")
 
 
 class ServiceAdminSerializer(ServiceSerializer):
@@ -891,7 +911,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"account_email": "ایمیل برای بازیابی حساب الزامی است."})
             if not attrs.get("account_accept_terms"):
                 raise serializers.ValidationError({"account_accept_terms": "پذیرش قوانین و حریم خصوصی الزامی است."})
-            login_accounts = [user for user in User.objects.filter(Q(username=phone) | Q(phone=phone)) if user.has_usable_password()]
+            login_accounts = User.objects.filter(role="customer", is_guest=False, account_status="active", normalized_phone=phone)
             if login_accounts:
                 raise serializers.ValidationError({"customer_phone": "برای این شماره حسابی وجود دارد؛ ابتدا وارد حساب شوید."})
             if User.objects.filter(email__iexact=attrs["account_email"]).exclude(email="").exists():
@@ -920,9 +940,12 @@ class AppointmentSerializer(serializers.ModelSerializer):
         if create_account and account_password:
             customer.username = phone
             customer.email = account_email
+            customer.is_guest = False
             customer.set_password(account_password)
-            customer.save(update_fields=("username", "email", "password"))
+            customer.save(update_fields=("username", "email", "password", "is_guest"))
         customer_profile, _ = CustomerProfile.objects.get_or_create(user=customer)
+        if create_account:
+            record_legal_acceptance(customer_profile, request, "booking")
         hold = BookingHold.objects.filter(token=hold_token, expires_at__gt=timezone.now()).first() if hold_token else None
         held_items = {(item.employee_id, item.service_id, item.date, item.start_time, item.end_time) for item in hold.items.all()} if hold else set()
         submitted_items = {(item["employee"].pk, item["service"].pk, item["date"], item["start_time"], item["end_time"]) for item in item_data}

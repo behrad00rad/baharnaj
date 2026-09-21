@@ -9,6 +9,8 @@ from .models import (
     AppointmentItem,
     CustomerAccountDeletionRequest,
     CustomerCommunicationPreference,
+    CustomerIdentityClaim,
+    CustomerLegalAcceptance,
     CustomerProfile,
     EmployeeProfile,
     EmployeeService,
@@ -98,6 +100,24 @@ class CustomerDashboardTests(TestCase):
         self.assertTrue(Appointment.objects.filter(pk=self.appointment.pk).exists())
         self.assertEqual(self.client.post("/api/v1/customer/account/deletion-request/", {"confirm": True, "password": "password123"}, format="json").status_code, 200)
 
+    def test_customer_can_cancel_pending_deletion_request(self):
+        self.client.post("/api/v1/customer/account/deletion-request/", {"confirm": True, "password": "password123"}, format="json")
+        response = self.client.delete("/api/v1/customer/account/deletion-request/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "cancelled")
+
+    def test_admin_processes_deletion_and_preserves_financial_history(self):
+        request_obj = CustomerAccountDeletionRequest.objects.create(customer=self.customer, reason="حذف شود")
+        admin = User.objects.create_user(username="privacy-admin", password="password123", role="admin")
+        self.client.force_authenticate(admin)
+        self.assertEqual(self.client.post(f"/api/v1/admin/deletion-requests/{request_obj.pk}/approve/", {"notes": "هویت بررسی شد"}, format="json").status_code, 200)
+        completed = self.client.post(f"/api/v1/admin/deletion-requests/{request_obj.pk}/complete/", {"notes": "اطلاعات دسترسی ناشناس شد"}, format="json")
+        self.assertEqual(completed.status_code, 200)
+        self.customer_user.refresh_from_db()
+        self.assertFalse(self.customer_user.is_active)
+        self.assertEqual(self.customer_user.phone, "")
+        self.assertTrue(Appointment.objects.filter(pk=self.appointment.pk, customer=self.customer).exists())
+
     def test_non_customer_cannot_use_customer_api(self):
         employee = User.objects.create_user(username="employee-only", password="password123", role="employee")
         self.client.force_authenticate(employee)
@@ -128,6 +148,9 @@ class CustomerDashboardTests(TestCase):
         self.assertIn("baharnaj_refresh", registered.cookies)
         user = User.objects.get(username="09351234567")
         self.assertTrue(hasattr(user, "customer_profile"))
+        acceptance = CustomerLegalAcceptance.objects.get(customer=user.customer_profile)
+        self.assertEqual(acceptance.source, "signup")
+        self.assertTrue(acceptance.terms_version)
         duplicate = self.client.post("/api/v1/auth/register/", payload, format="json")
         self.assertEqual(duplicate.status_code, 400)
         logged_in = self.client.post("/api/v1/auth/token/", {"username": "00989351234567", "password": payload["password"]}, format="json")
@@ -143,6 +166,16 @@ class CustomerDashboardTests(TestCase):
         self.client.force_authenticate(None)
         response = self.client.post("/api/v1/auth/token/", {"username": phone, "password": "Strong-login-8472"}, format="json")
         self.assertEqual(response.status_code, 200)
+
+    def test_verified_confirmation_code_claims_legacy_guest_history(self):
+        legacy_user = User.objects.create_user(username="guest_claim", phone=self.customer_user.phone, role="customer")
+        legacy = CustomerProfile.objects.create(user=legacy_user)
+        old_appointment = Appointment.objects.create(customer=legacy, confirmation_code="claim-code")
+        response = self.client.post("/api/v1/customer/account/claim-history/", {"confirmation_code": "claim-code"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        old_appointment.refresh_from_db()
+        self.assertEqual(old_appointment.customer, self.customer)
+        self.assertTrue(CustomerIdentityClaim.objects.filter(customer=self.customer, legacy_customer=legacy).exists())
 
     def test_customer_can_change_password(self):
         response = self.client.post("/api/v1/customer/password/", {
@@ -205,6 +238,7 @@ class BookingAccountCreationTests(TestCase):
         self.assertEqual(account.email, "sara@example.com")
         self.assertTrue(account.check_password("Secure-booking-8472"))
         self.assertTrue(account.customer_profile.appointments.filter(pk=response.data["id"]).exists())
+        self.assertTrue(CustomerLegalAcceptance.objects.filter(customer=account.customer_profile, source="booking").exists())
 
     def test_logged_in_customer_booking_accepts_hidden_account_fields_as_blank(self):
         customer_user = User.objects.create_user(username="logged-in-customer", phone="09123334455", password="Existing-pass-8472", role="customer")

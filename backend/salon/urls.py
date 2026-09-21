@@ -1,20 +1,21 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from .views import (AdminAppointmentViewSet, AdminBlogCategoryViewSet, AdminBlogMediaViewSet, AdminBlogPostViewSet, AdminBlogTagViewSet, AdminEmployeeViewSet, AdminGalleryCategoryView, AdminServiceViewSet,
-					AdminUserViewSet, AdminCustomerOptionsView, AdminEmployeeEligibleUsersView, AdminEmployeeFinanceView, AdminRevenueView, AdminServiceCategoryViewSet, AdminTransactionTypesView, BookingHoldDeleteView,
+					AdminUserViewSet, AdminDeletionRequestViewSet, AdminCustomerOptionsView, AdminEmployeeEligibleUsersView, AdminEmployeeFinanceView, AdminRevenueView, AdminServiceCategoryViewSet, AdminTransactionTypesView, BookingHoldDeleteView,
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView, BookingHoldView,
 										EmployeeAppointmentsView, EmployeeCustomerOptionsView, EmployeeListView, EmployeeSelfBookingView, EmployeeSelfServiceListView, EmployeeStatisticsView, GalleryCategoryListView,
 					ServiceDetailView, ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
 					AppointmentItemViewSet, EmployeeAppointmentItemViewSet, EmployeePasswordChangeView, EmployeeProfileView, EmployeeWorkingScheduleViewSet,
 					PaymentViewSet, FirebaseDeviceViewSet, NotificationViewSet, RefundViewSet, EmployeeCommissionViewSet, ServiceImageViewSet, AdminActionLogViewSet, EmployeeTimeOffViewSet,
 					EmployeeEarningsView, EmployeeAppointmentPaymentReportView, GalleryListView, AdminGalleryViewSet, WaitlistView, CustomerBookingView, CustomerHistoryView,
-					BlogCategoryListView, BlogPostDetailView, BlogPostListView, CustomerAppointmentDetailView, CustomerAppointmentListView, CustomerBookAgainView, CustomerDashboardView, CustomerDeletionRequestView, CustomerNotificationViewSet, CustomerPasswordChangeView, CustomerPreferencesView, CustomerProfileView, CustomerAppointmentMutationView)
+					BlogCategoryListView, BlogPostDetailView, BlogPostListView, CustomerAppointmentDetailView, CustomerAppointmentListView, CustomerBookAgainView, CustomerDashboardView, CustomerDeletionRequestView, CustomerIdentityClaimView, CustomerNotificationViewSet, CustomerPasswordChangeView, CustomerPreferencesView, CustomerProfileView, CustomerAppointmentMutationView)
 
 router = DefaultRouter()
 router.register("admin/services", AdminServiceViewSet, basename="admin-service")
 router.register("admin/gallery", AdminGalleryViewSet, basename="admin-gallery")
 router.register("admin/employees", AdminEmployeeViewSet, basename="admin-employee")
 router.register("admin/users", AdminUserViewSet, basename="admin-user")
+router.register("admin/deletion-requests", AdminDeletionRequestViewSet, basename="admin-deletion-request")
 router.register("admin/service-categories", AdminServiceCategoryViewSet, basename="admin-service-category")
 router.register("admin/appointments", AdminAppointmentViewSet, basename="admin-appointment")
 router.register("admin/working-schedules", WorkingScheduleViewSet, basename="working-schedule")
@@ -61,6 +62,7 @@ urlpatterns = [
 	path("customer/preferences/", CustomerPreferencesView.as_view(), name="customer-preferences"),
 	path("customer/password/", CustomerPasswordChangeView.as_view(), name="customer-password"),
 	path("customer/account/deletion-request/", CustomerDeletionRequestView.as_view(), name="customer-deletion-request"),
+	path("customer/account/claim-history/", CustomerIdentityClaimView.as_view(), name="customer-identity-claim"),
 	path("employee/appointments/", EmployeeAppointmentsView.as_view(), name="employee-appointments"),
 	path("employee/appointments/create/", EmployeeSelfBookingView.as_view(), name="employee-appointment-create"),
 	path("employee/services/", EmployeeSelfServiceListView.as_view(), name="employee-service-list"),

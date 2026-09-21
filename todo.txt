@@ -6,6 +6,9 @@ The core system is functional, but it is not “absolutely done” yet. Excludin
 - [x] Customer-dashboard redesign.
 - [x] Customer correctness fixes: full history count, pagination, payment labels, notification navigation, book-again specialist preservation, and rescheduling feedback/Jalali selection.
 - [ ] Continue with the cancellation/rescheduling policy engine.
+- [x] Repair customer identity integrity with normalized canonical phones, guest classification, verified history claiming, conflict review, and a database constraint.
+- [x] Persist versioned terms/privacy acceptance for signup and booking-time account creation.
+- [x] Add the complete customer/admin account-deletion review, cancellation, decision, audit, and anonymization workflow.
 
 The first three items above have now been implemented; the remaining sections retain the original audit notes.
 

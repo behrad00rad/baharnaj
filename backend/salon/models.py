@@ -4,6 +4,7 @@ from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
 from decimal import Decimal
+import re
 import uuid
 
 
@@ -34,6 +35,9 @@ class User(AbstractUser):
     ROLE_CHOICES = [("customer", "Customer"), ("employee", "Employee"), ("admin", "Admin")]
     ACCOUNT_STATUS_CHOICES = [("active", "Active"), ("suspended", "Suspended"), ("closed", "Closed")]
     phone = models.CharField(max_length=20, blank=True)
+    normalized_phone = models.CharField(max_length=11, null=True, blank=True, db_index=True)
+    is_guest = models.BooleanField(default=False)
+    identity_conflict = models.BooleanField(default=False)
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="customer")
     account_status = models.CharField(max_length=20, choices=ACCOUNT_STATUS_CHOICES, default="active")
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
@@ -41,10 +45,27 @@ class User(AbstractUser):
     locked_until = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
+        compact = re.sub(r"[\s-]", "", self.phone or "")
+        if compact.startswith("+98"):
+            compact = "0" + compact[3:]
+        elif compact.startswith("0098"):
+            compact = "0" + compact[4:]
+        self.normalized_phone = compact if re.fullmatch(r"09\d{9}", compact) else None
+        if self.role == "customer" and (self.username.startswith(("guest_", "employee_guest_")) or not self.has_usable_password()):
+            self.is_guest = True
         self.is_staff = self.role in {"employee", "admin"}
         if kwargs.get("update_fields") is not None:
-            kwargs["update_fields"] = set(kwargs["update_fields"]) | {"is_staff"}
+            kwargs["update_fields"] = set(kwargs["update_fields"]) | {"is_staff", "normalized_phone", "is_guest"}
         super().save(*args, **kwargs)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("normalized_phone",),
+                condition=models.Q(role="customer", is_guest=False, account_status="active", normalized_phone__isnull=False),
+                name="unique_active_customer_login_phone",
+            ),
+        ]
 
 
 class Notification(models.Model):
@@ -140,14 +161,42 @@ class CustomerCommunicationPreference(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class CustomerLegalAcceptance(models.Model):
+    SOURCE_CHOICES = [("signup", "Standalone signup"), ("booking", "Booking account creation")]
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.PROTECT, related_name="legal_acceptances")
+    terms_version = models.CharField(max_length=40)
+    privacy_version = models.CharField(max_length=40)
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES)
+    accepted_at = models.DateTimeField(default=timezone.now)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        ordering = ("-accepted_at",)
+        constraints = [models.UniqueConstraint(fields=("customer", "terms_version", "privacy_version", "source"), name="unique_customer_legal_acceptance")]
+
+
+class CustomerIdentityClaim(models.Model):
+    customer = models.ForeignKey(CustomerProfile, on_delete=models.PROTECT, related_name="identity_claims")
+    legacy_customer = models.ForeignKey(CustomerProfile, on_delete=models.PROTECT, related_name="claimed_identity_records")
+    appointment = models.ForeignKey("Appointment", on_delete=models.PROTECT, related_name="identity_claims")
+    verification_method = models.CharField(max_length=40, default="confirmation_code")
+    claimed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("customer", "legacy_customer"), name="unique_customer_identity_claim")]
+
+
 class CustomerAccountDeletionRequest(models.Model):
-    STATUS_CHOICES = [("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected"), ("completed", "Completed")]
+    STATUS_CHOICES = [("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected"), ("completed", "Completed"), ("cancelled", "Cancelled")]
     customer = models.ForeignKey(CustomerProfile, on_delete=models.PROTECT, related_name="deletion_requests")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     reason = models.CharField(max_length=500, blank=True)
     requested_at = models.DateTimeField(auto_now_add=True)
     processed_at = models.DateTimeField(null=True, blank=True)
     processed_by = models.ForeignKey(User, on_delete=models.PROTECT, null=True, blank=True, related_name="processed_deletion_requests")
+    processing_notes = models.TextField(blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
 
 
 class CustomerMutationRequest(models.Model):

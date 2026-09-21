@@ -2201,6 +2201,35 @@ function Content() {
     />
   );
 }
+function CustomerManagement() {
+  const customers = useResource("admin/users/");
+  const deletions = useResource("admin/deletion-requests/");
+  const [selectedDeletion, setSelectedDeletion] = useState(null);
+  const [notes, setNotes] = useState("");
+  const [message, setMessage] = useState("");
+  const conflictGroups = Object.values((customers.data || []).filter((item) => item.identity_conflict && item.normalized_phone).reduce((groups, item) => ({ ...groups, [item.normalized_phone]: [...(groups[item.normalized_phone] || []), item] }), {}));
+  const decide = async (action) => {
+    setMessage("");
+    try {
+      await api.post(`admin/deletion-requests/${selectedDeletion.id}/${action}/`, { notes });
+      setSelectedDeletion(null); setNotes(""); deletions.reload();
+    } catch (error) { setMessage(firstError(error, "پردازش درخواست انجام نشد.")); }
+  };
+  const mergeIdentity = async (canonical, legacy) => {
+    setMessage("");
+    try {
+      await api.post(`admin/users/${canonical.id}/resolve-identity/`, { legacy_user_id: legacy.id });
+      setMessage("سوابق مشتری ادغام شد."); customers.reload();
+    } catch (error) { setMessage(firstError(error, "ادغام سوابق انجام نشد.")); }
+  };
+  return <div className="admin-page"><Header eyebrow="ارتباط با مشتری" title="مدیریت مشتریان" />
+    {message && <Toast message={message} type={message.includes("نشد") ? "error" : "success"} />}
+    {conflictGroups.length > 0 && <section className="admin-panel"><div className="panel-title"><div><span>نیازمند بررسی</span><h2>تعارض هویت مشتریان</h2></div></div>{conflictGroups.map((group) => { const canonical = group.find((item) => !item.is_guest) || group[0]; return <div className="identity-conflict" key={canonical.normalized_phone}><div><b>{canonical.normalized_phone}</b><small>{group.length} رکورد با این شماره</small></div>{group.filter((item) => item.id !== canonical.id).map((legacy) => <button className="admin-secondary" key={legacy.id} onClick={() => mergeIdentity(canonical, legacy)}>ادغام {legacy.first_name || legacy.username} در حساب اصلی</button>)}</div>; })}</section>}
+    <section className="admin-panel"><div className="panel-title"><div><span>حساب‌ها</span><h2>مشتریان و مهمان‌ها</h2></div></div>{customers.loading ? <Skeleton /> : customers.data.length ? <div className="entity-list">{customers.data.map((item) => <article key={item.id}><span className="entity-avatar">{item.first_name?.[0] || "م"}</span><span><b>{[item.first_name,item.last_name].filter(Boolean).join(" ") || item.username}</b><small>{item.phone || "بدون شماره"} · {item.is_guest ? "رکورد مهمان" : "حساب ورود"}{item.identity_conflict ? " · تعارض هویت" : ""}</small></span><em className={`status ${item.account_status}`}>{item.account_status === "active" ? "فعال" : item.account_status === "closed" ? "بسته" : "معلق"}</em></article>)}</div> : <Empty />}</section>
+    <section className="admin-panel"><div className="panel-title"><div><span>حریم خصوصی</span><h2>درخواست‌های حذف حساب</h2></div></div>{deletions.loading ? <Skeleton /> : deletions.data.length ? <div className="entity-list">{deletions.data.map((item) => <article key={item.id}><span className="entity-avatar">×</span><span><b>{item.customer_name || "مشتری"}</b><small>{item.customer_phone || "شماره حذف شده"} · {formatJalaliDateTime(item.requested_at)} · {{pending:"در انتظار",approved:"تأیید اولیه",rejected:"رد شده",completed:"تکمیل شده",cancelled:"لغو مشتری"}[item.status]}</small></span>{["pending","approved"].includes(item.status) && <button className="admin-ghost" onClick={() => { setSelectedDeletion(item); setNotes(""); }}>بررسی</button>}</article>)}</div> : <Empty title="درخواست حذفی ثبت نشده" />}</section>
+    {selectedDeletion && <div className="modal-backdrop" onMouseDown={() => setSelectedDeletion(null)}><section className="admin-modal" role="dialog" aria-modal="true" aria-labelledby="deletion-review-title" onMouseDown={(event) => event.stopPropagation()}><button className="drawer-close" aria-label="بستن" onClick={() => setSelectedDeletion(null)}>×</button><span className="admin-kicker">درخواست حذف حساب</span><h2 id="deletion-review-title">{selectedDeletion.customer_name}</h2><p>{selectedDeletion.reason || "دلیلی ثبت نشده است."}</p><label>یادداشت پردازش<textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="دلیل تصمیم یا شرح ناشناس‌سازی" /></label><div className="drawer-actions">{selectedDeletion.status === "pending" && <><button className="admin-success" onClick={() => decide("approve")}>تأیید اولیه</button><button className="admin-danger" disabled={!notes.trim()} onClick={() => decide("reject")}>رد درخواست</button></>}{selectedDeletion.status === "approved" && <><button className="admin-danger" disabled={!notes.trim()} onClick={() => decide("complete")}>ناشناس‌سازی و تکمیل</button><button className="admin-secondary" disabled={!notes.trim()} onClick={() => decide("reject")}>بازگرداندن / رد</button></>}</div></section></div>}
+  </div>;
+}
 function AdminRouter() {
   return (
     <Routes>
@@ -2211,22 +2240,7 @@ function AdminRouter() {
         path="services"
         element={<ServiceManagement />}
       />
-      <Route
-        path="customers"
-        element={
-          <CrudPage
-            type="مشتری"
-            endpoint="admin/users/"
-            title="مدیریت مشتریان"
-            eyebrow="ارتباط با مشتری"
-            fields={[
-              { name: "first_name", label: "نام" },
-              { name: "last_name", label: "نام خانوادگی" },
-              { name: "phone", label: "شماره تماس" },
-            ]}
-          />
-        }
-      />
+      <Route path="customers" element={<CustomerManagement />} />
       <Route path="telegram" element={<AdminTelegram />} />
       <Route path="finance" element={<Finance />} />
       <Route path="content" element={<Content />} />

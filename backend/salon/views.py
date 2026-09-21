@@ -2,6 +2,7 @@ from base64 import urlsafe_b64decode
 import copy
 from datetime import date as date_type, datetime, time, timedelta
 import json
+from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth import password_validation
@@ -24,7 +25,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import AdminActionLog, Appointment, AppointmentItem, AppointmentStatusHistory, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerAccountDeletionRequest, CustomerCommunicationPreference, CustomerMutationRequest, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
+from .models import AdminActionLog, Appointment, AppointmentItem, AppointmentStatusHistory, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerAccountDeletionRequest, CustomerCommunicationPreference, CustomerIdentityClaim, CustomerMutationRequest, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsCustomer, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, normalize_phone, record_failed_login
 from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, CustomerAppointmentSerializer, CustomerDeletionRequestSerializer, CustomerPasswordChangeSerializer, CustomerPreferenceSerializer, CustomerProfileSerializer, CustomerRegistrationSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
@@ -840,6 +841,52 @@ class CustomerDeletionRequestView(CustomerBaseView, generics.GenericAPIView):
         Notification.objects.create(recipient=request.user, type="customer_account", title="درخواست حذف حساب ثبت شد", message="درخواست شما برای بررسی سالن ثبت شد.", target_url="/account/profile/")
         return Response(self.get_serializer(request_obj).data, status=status.HTTP_201_CREATED)
 
+    def delete(self, request):
+        request_obj = CustomerAccountDeletionRequest.objects.filter(customer=self.customer_profile(), status="pending").first()
+        if not request_obj:
+            return Response({"detail": "درخواست در انتظار بررسی پیدا نشد."}, status=status.HTTP_404_NOT_FOUND)
+        request_obj.status = "cancelled"
+        request_obj.cancelled_at = timezone.now()
+        request_obj.save(update_fields=("status", "cancelled_at"))
+        AdminActionLog.objects.create(actor=request.user, action="cancel", model_name="CustomerAccountDeletionRequest", object_id=str(request_obj.pk), details={"source": "customer"})
+        return Response(self.get_serializer(request_obj).data)
+
+
+def merge_customer_history(target, legacy, actor, appointment):
+    with transaction.atomic():
+        Appointment.objects.filter(customer=legacy).update(customer=target)
+        CustomerAccountDeletionRequest.objects.filter(customer=legacy).update(customer=target)
+        legacy.is_deleted = True
+        legacy.save(update_fields=("is_deleted",))
+        legacy_user = legacy.user
+        legacy_user.account_status = "closed"
+        legacy_user.is_active = False
+        legacy_user.phone = ""
+        legacy_user.email = ""
+        legacy_user.identity_conflict = False
+        legacy_user.set_unusable_password()
+        legacy_user.save(update_fields=("account_status", "is_active", "phone", "email", "identity_conflict", "password"))
+        target.user.identity_conflict = False
+        target.user.save(update_fields=("identity_conflict",))
+        claim, _ = CustomerIdentityClaim.objects.get_or_create(customer=target, legacy_customer=legacy, defaults={"appointment": appointment})
+        AdminActionLog.objects.create(actor=actor, action="identity_merge", model_name="CustomerProfile", object_id=str(target.pk), details={"legacy_customer": legacy.pk, "appointment": appointment.pk})
+        return claim
+
+
+class CustomerIdentityClaimView(CustomerBaseView, generics.GenericAPIView):
+    def post(self, request):
+        confirmation_code = str(request.data.get("confirmation_code", "")).strip()
+        if not confirmation_code:
+            return Response({"confirmation_code": "کد پیگیری الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
+        target = self.customer_profile()
+        appointment = Appointment.objects.select_related("customer__user").filter(confirmation_code=confirmation_code).first()
+        if not appointment or not appointment.customer.user.is_guest or appointment.customer.user.normalized_phone != request.user.normalized_phone:
+            return Response({"detail": "رزرو قدیمی قابل تأیید نیست."}, status=status.HTTP_400_BAD_REQUEST)
+        if appointment.customer_id == target.pk:
+            return Response({"detail": "این رزرو هم‌اکنون در حساب شماست."})
+        merge_customer_history(target, appointment.customer, request.user, appointment)
+        return Response({"detail": "سوابق تأییدشده به حساب شما اضافه شد."})
+
 class CustomerHistoryView(generics.ListAPIView):
     permission_classes = (IsAuthenticated,)
     serializer_class = AppointmentSerializer
@@ -885,8 +932,76 @@ class AdminEmployeeViewSet(AdminModelViewSet):
 
 
 class AdminUserViewSet(AdminModelViewSet):
-    queryset = User.objects.all()
+    queryset = User.objects.filter(role="customer").order_by("-identity_conflict", "-date_joined")
     serializer_class = UserAdminSerializer
+
+    @action(detail=True, methods=("post",), url_path="resolve-identity")
+    def resolve_identity(self, request, pk=None):
+        canonical = self.get_object()
+        legacy = User.objects.filter(pk=request.data.get("legacy_user_id"), role="customer").first()
+        if not legacy or legacy.pk == canonical.pk or canonical.normalized_phone != legacy.normalized_phone:
+            return Response({"detail": "دو رکورد معتبر با شماره یکسان انتخاب کنید."}, status=status.HTTP_400_BAD_REQUEST)
+        if not hasattr(canonical, "customer_profile") or not hasattr(legacy, "customer_profile"):
+            return Response({"detail": "پروفایل مشتری برای ادغام کامل نیست."}, status=status.HTTP_400_BAD_REQUEST)
+        appointment = Appointment.objects.filter(customer=legacy.customer_profile).order_by("pk").first()
+        if not appointment:
+            return Response({"detail": "رکورد قدیمی نوبتی برای انتقال ندارد."}, status=status.HTTP_400_BAD_REQUEST)
+        merge_customer_history(canonical.customer_profile, legacy.customer_profile, request.user, appointment)
+        return Response({"detail": "سوابق مشتری ادغام شد."})
+
+
+class AdminDeletionRequestViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = (IsAdmin,)
+    serializer_class = CustomerDeletionRequestSerializer
+    queryset = CustomerAccountDeletionRequest.objects.select_related("customer__user", "processed_by").order_by("-requested_at")
+
+    def _decide(self, request, pk, next_status):
+        deletion = self.get_object()
+        allowed = {"approve": ("pending",), "reject": ("pending", "approved"), "complete": ("approved",)}
+        action_name = {"approved": "approve", "rejected": "reject", "completed": "complete"}[next_status]
+        if deletion.status not in allowed[action_name]:
+            return Response({"detail": "این تغییر وضعیت برای درخواست فعلی مجاز نیست."}, status=status.HTTP_409_CONFLICT)
+        notes = str(request.data.get("notes", "")).strip()
+        if next_status in {"rejected", "completed"} and not notes:
+            return Response({"notes": "ثبت توضیح پردازش الزامی است."}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            deletion.status = next_status
+            deletion.processing_notes = notes
+            deletion.processed_by = request.user
+            deletion.processed_at = timezone.now()
+            deletion.save(update_fields=("status", "processing_notes", "processed_by", "processed_at"))
+            if next_status == "completed":
+                user = deletion.customer.user
+                user.username = f"deleted_customer_{user.pk}_{uuid4().hex[:8]}"
+                user.first_name = "کاربر حذف‌شده"
+                user.last_name = ""
+                user.email = ""
+                user.phone = ""
+                user.account_status = "closed"
+                user.is_active = False
+                user.identity_conflict = False
+                user.set_unusable_password()
+                user.save()
+                deletion.customer.birthday = None
+                deletion.customer.neighborhood = ""
+                deletion.customer.service_preferences = ""
+                deletion.customer.profile_photo = ""
+                deletion.customer.save(update_fields=("birthday", "neighborhood", "service_preferences", "profile_photo"))
+                FirebaseDevice.objects.filter(user=user).update(is_active=False)
+            AdminActionLog.objects.create(actor=request.user, action=f"deletion_{next_status}", model_name="CustomerAccountDeletionRequest", object_id=str(deletion.pk), details={"notes": notes})
+        return Response(self.get_serializer(deletion).data)
+
+    @action(detail=True, methods=("post",))
+    def approve(self, request, pk=None):
+        return self._decide(request, pk, "approved")
+
+    @action(detail=True, methods=("post",))
+    def reject(self, request, pk=None):
+        return self._decide(request, pk, "rejected")
+
+    @action(detail=True, methods=("post",))
+    def complete(self, request, pk=None):
+        return self._decide(request, pk, "completed")
 
 
 class AdminEmployeeEligibleUsersView(generics.ListAPIView):
@@ -1468,9 +1583,9 @@ class CookieTokenView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         username = request.data.get("username", "")
         normalized = normalize_phone(username)
-        user = User.objects.filter(username=username).first() or User.objects.filter(username=normalized).first()
+        user = User.objects.filter(username=username, is_guest=False).first() or User.objects.filter(username=normalized, is_guest=False).first()
         if not user:
-            user = next((candidate for candidate in User.objects.filter(Q(phone=normalized) | Q(phone=username)).order_by("pk") if candidate.has_usable_password()), None)
+            user = User.objects.filter(normalized_phone=normalized, is_guest=False, account_status="active").order_by("pk").first()
         if user and is_locked(user):
             return Response({"detail": "حساب موقتاً قفل شده است."}, status=status.HTTP_429_TOO_MANY_REQUESTS)
         credentials = request.data.copy()
