@@ -1119,6 +1119,9 @@ function Profile() {
       <Link className="employee-action" to="/employee/availability">
         مدیریت برنامه کاری
       </Link>
+      <Link className="employee-action" to="/employee/preferences">
+        تنظیمات نمایش پنل
+      </Link>
       <section className="employee-card employee-danger-zone">
         <div>
           <h2>خروج از پنل</h2>
