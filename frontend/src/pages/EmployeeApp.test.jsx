@@ -250,7 +250,7 @@ describe("employee app", () => {
       expect(get).toHaveBeenCalledWith(expect.stringMatching(/group_by=monthly$/)),
     );
     fireEvent.change(screen.getByLabelText("شاخص"), { target: { value: "revenue" } });
-    expect(screen.getByRole("heading", { name: "درآمد ایجادشده" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "ارزش سرویس‌های انجام‌شده" })).toBeInTheDocument();
   });
 
   it("submits notes with completed work and shows backend failures", async () => {
@@ -312,6 +312,7 @@ describe("employee app", () => {
       { target: { value: "کار تکمیل شد" } },
     );
     fireEvent.click(screen.getByRole("button", { name: "تکمیل سرویس" }));
+    fireEvent.click(screen.getByRole("button", { name: "بله، تکمیل شد" }));
 
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith(

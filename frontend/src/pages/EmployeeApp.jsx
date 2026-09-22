@@ -50,22 +50,39 @@ function Empty({
 function useData(endpoint) {
   const [state, setState] = useState({ data: [], error: "", loading: true });
   const reload = () => {
-    setState({ data: [], error: "", loading: true });
+    setState((current) => ({ ...current, error: "", loading: true }));
     api
       .get(endpoint)
       .then(({ data }) =>
         setState({ data: unwrap(data), error: "", loading: false }),
       )
       .catch((error) =>
-        setState({
-          data: [],
+        setState((current) => ({
+          data: current.data,
           error: errorText(error, "دریافت اطلاعات انجام نشد"),
           loading: false,
-        }),
+        })),
       );
   };
   useEffect(reload, [endpoint]);
   return { ...state, reload };
+}
+function useOnlineStatus() {
+  const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener("online", update); window.addEventListener("offline", update);
+    return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
+  }, []);
+  return online;
+}
+function useUnsavedWarning(dirty) {
+  useEffect(() => {
+    if (!dirty) return undefined;
+    const warn = (event) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
 }
 function Heading({ kicker, title }) {
   return (
@@ -84,9 +101,10 @@ function Preferences() {
 function AppointmentCard({ item, onClick }) {
   const line = item.items?.[0] || item;
   const name = item.customer_name || item.customer?.name || "مشتری";
+  const displayStatus = ["completed", "cancelled", "in_progress"].includes(line.completion_status) ? line.completion_status : item.status || line.completion_status || "pending";
   return (
     <button
-      className={`employee-appointment ${item.status || line.completion_status || "pending"}`}
+      className={`employee-appointment ${displayStatus}`}
       onClick={onClick}
     >
       <time>{line.start_time || "--:--"}</time>
@@ -97,8 +115,8 @@ function AppointmentCard({ item, onClick }) {
           {line.service_name || "سرویس رزرو شده"} · {line.end_time || ""}
         </small>
       </span>
-      <em className={`employee-status ${item.status}`}>
-        {statusNames[item.status] || item.status || "در انتظار"}
+      <em className={`employee-status ${displayStatus}`}>
+        {statusNames[displayStatus] || displayStatus || "در انتظار"}
       </em>
     </button>
   );
@@ -108,6 +126,7 @@ function DailyWorkspace() {
   const appointments = useData(`employee/appointments/?date=${today}`);
   const summary = useData("employee/statistics/");
   const [selected, setSelected] = useState(null);
+  const online = useOnlineStatus();
   const next = summary.data.next_appointment;
   const nextItem = summary.data.next_appointment_item;
   return (
@@ -116,10 +135,9 @@ function DailyWorkspace() {
       <Link className="employee-action" to="/employee/appointments/new">
         + نوبت جدید
       </Link>
+      {!online && <div className="employee-offline" role="status"><b>اتصال اینترنت قطع است.</b><span>اطلاعات فعلی قابل مشاهده است؛ ثبت تغییرات تا بازگشت اینترنت متوقف می‌شود.</span></div>}
       {summary.error || appointments.error ? (
-        <div className="schedule-message">
-          {summary.error || appointments.error}
-        </div>
+        <div className="employee-retry" role="alert"><span>{summary.error || appointments.error}</span><button type="button" onClick={() => { summary.reload(); appointments.reload(); }}>تلاش دوباره</button></div>
       ) : null}
       {next ? (
         <section className="employee-card next-card">
@@ -163,7 +181,7 @@ function DailyWorkspace() {
       {appointments.loading ? (
         <Skeleton />
       ) : appointments.error ? null : appointments.data.length ? (
-        appointments.data.map((item) => (
+        [...appointments.data].sort((a, b) => (a.items?.[0]?.start_time || a.start_time || "").localeCompare(b.items?.[0]?.start_time || b.start_time || "")).map((item) => (
           <AppointmentCard
             key={item.id}
             item={item}
@@ -177,6 +195,7 @@ function DailyWorkspace() {
         <AppointmentDetail
           item={selected}
           close={() => setSelected(null)}
+          online={online}
           onSaved={() => {
             setSelected(null);
             appointments.reload();
@@ -655,7 +674,7 @@ function PaymentReport({ appointmentId }) {
   );
 }
 
-function AppointmentDetail({ item, close, onSaved }) {
+function AppointmentDetail({ item, close, onSaved, online }) {
   const lines = item.items?.length ? item.items : [item];
   const [activeItemId, setActiveItemId] = useState(lines[0].id);
   const line = lines.find((entry) => entry.id === activeItemId) || lines[0];
@@ -664,7 +683,13 @@ function AppointmentDetail({ item, close, onSaved }) {
   const [notes, setNotes] = useState(line.notes || "");
   const [showReason, setShowReason] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [confirmComplete, setConfirmComplete] = useState(false);
   const isFinal = ["completed", "cancelled"].includes(line.completion_status);
+  const dirty = notes !== (line.notes || "") || reason.trim();
+  useUnsavedWarning(dirty);
+  const requestClose = () => {
+    if (!dirty || window.confirm("یادداشت یا تغییرات ذخیره‌نشده دارید. خارج می‌شوید؟")) close();
+  };
 
   const chooseLine = (entry) => {
     setActiveItemId(entry.id);
@@ -678,6 +703,7 @@ function AppointmentDetail({ item, close, onSaved }) {
       setShowReason(true);
       return;
     }
+    if (!online) { setActionError("اتصال اینترنت برقرار نیست. پس از اتصال دوباره تلاش کنید."); return; }
     setBusy(true);
     setActionError("");
     try {
@@ -694,11 +720,11 @@ function AppointmentDetail({ item, close, onSaved }) {
   };
 
   return (
-    <div className="employee-detail-backdrop" onMouseDown={close}>
+    <div className="employee-detail-backdrop" onMouseDown={requestClose}>
       <section className="employee-detail" role="dialog" aria-modal="true" aria-labelledby="employee-appointment-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="detail-top">
           <div><span className="employee-kicker">جزئیات نوبت</span><h2 id="employee-appointment-title">{item.customer_name || item.customer?.name || "مشتری"}</h2></div>
-          <button type="button" className="detail-close" aria-label="بستن جزئیات نوبت" onClick={close}>×</button>
+          <button type="button" className="detail-close" aria-label="بستن جزئیات نوبت" onClick={requestClose}>×</button>
         </div>
         <div className="customer-head">
           <div className="customer-avatar">{(item.customer_name || "م")[0]}</div>
@@ -714,7 +740,8 @@ function AppointmentDetail({ item, close, onSaved }) {
         {item.notes && <div className="detail-notes">یادداشت مشتری: {item.notes}</div>}
         <details className="employee-detail-section"><summary>مبلغ و پرداخت</summary><div className="detail-price"><ItemPricing key={line.id} item={line} role="employee" onSaved={onSaved} /></div><PaymentReport appointmentId={item.id} /></details>
         <details className="employee-detail-section"><summary>یادداشت کاری</summary><textarea className="employee-note" placeholder="یادداشت‌ها و محصولات مصرف‌شده را ثبت کنید..." value={notes} onChange={(event) => setNotes(event.target.value)} /></details>
-        {isFinal ? <div className="detail-final-state">این سرویس قبلاً {line.completion_status === "completed" ? "تکمیل" : "لغو"} شده است.</div> : <div className="detail-buttons"><button disabled={busy} onClick={() => act("complete")}>تکمیل سرویس</button><button className="danger" disabled={busy} onClick={() => setShowReason(true)}>لغو سرویس</button></div>}
+        {isFinal ? <div className="detail-final-state">این سرویس قبلاً {line.completion_status === "completed" ? "تکمیل" : "لغو"} شده است.</div> : <div className="detail-buttons"><button disabled={busy || !online} onClick={() => setConfirmComplete(true)}>{busy ? "در حال ثبت…" : "تکمیل سرویس"}</button><button className="danger" disabled={busy || !online} onClick={() => setShowReason(true)}>لغو سرویس</button></div>}
+        {confirmComplete && <div className="employee-confirm"><b>از تکمیل این سرویس مطمئن هستید؟</b><span>پس از ثبت، این وضعیت نهایی می‌شود.</span><div><button type="button" className="employee-action secondary" onClick={() => setConfirmComplete(false)}>بازگشت</button><button type="button" className="employee-action" disabled={busy} onClick={() => act("complete")}>بله، تکمیل شد</button></div></div>}
         {showReason && !isFinal && <div className="cancel-box"><div><b>لغو این سرویس</b><button type="button" aria-label="بستن فرم لغو" onClick={() => { setShowReason(false); setReason(""); }}>×</button></div><label>دلیل لغو<textarea autoFocus value={reason} onChange={(event) => setReason(event.target.value)} placeholder="دلیل کوتاه را بنویسید" /></label><button className="employee-action danger" disabled={busy || !reason.trim()} onClick={() => act("cancel")}>{busy ? "در حال ثبت…" : "تأیید لغو"}</button></div>}
         {actionError && <small className="schedule-message" role="alert">{actionError}</small>}
       </section>
@@ -722,7 +749,7 @@ function AppointmentDetail({ item, close, onSaved }) {
   );
 }
 const employeeFinanceGroups = { daily: "روزانه", weekly: "هفتگی", monthly: "ماهانه" };
-const employeeFinanceMetrics = { commission: "درآمد من", revenue: "درآمد ایجادشده", services: "سرویس‌های تکمیل‌شده", appointments: "نوبت‌های تکمیل‌شده", payments: "پرداخت‌ها" };
+const employeeFinanceMetrics = { commission: "کمیسیون من", revenue: "ارزش سرویس‌های انجام‌شده", services: "سرویس‌های تکمیل‌شده", appointments: "نوبت‌های تکمیل‌شده", payments: "پرداخت‌های مرتبط" };
 function employeeFinanceRange(preset, customStart, customEnd) {
   const current = isoDate(new Date());
   const anchor = new Date(`${current}T12:00:00`);
@@ -771,7 +798,7 @@ function Earnings() {
 
   return (
     <div className="employee-page">
-      <Heading kicker="مالی شخصی" title="درآمد" />
+      <Heading kicker="مالی شخصی" title="کمیسیون و عملکرد" />
       <div className="employee-finance-filters">
         <div className="calendar-toggle">{[["day","امروز"],["week","این هفته"],["month","این ماه"],["last-month","ماه قبل"],["custom","بازه دلخواه"]].map(([value, label]) => (
           <button
@@ -787,12 +814,12 @@ function Earnings() {
       {resource.loading && <Skeleton />}
       {resource.error && <div className="warning">{resource.error}</div>}
       <div className="employee-finance-stat-grid">
-        <section className="employee-card next-card"><span className="employee-kicker">درآمد تأییدشده ایجادشده</span><strong>{toman(resource.data.received || 0)}</strong><p>از پرداخت واقعی؛ کمیسیون من نیست</p></section>
-        <section className="employee-card"><span>کمیسیون / درآمد من</span><strong>{toman(resource.data.commission_total || resource.data.employee_commission || 0)}</strong><small>بر اساس نرخ ثبت‌شده</small></section>
+        <section className="employee-card next-card"><span className="employee-kicker">پرداخت تأییدشده مرتبط</span><strong>{toman(resource.data.received || 0)}</strong><p>مبلغ پرداخت مشتری است، نه دریافتی متخصص</p></section>
+        <section className="employee-card"><span>کمیسیون من</span><strong>{toman(resource.data.commission_total || resource.data.employee_commission || 0)}</strong><small>سهم شما بر پایه نرخ کمیسیون ثبت‌شده</small></section>
         <section className="employee-card"><span>سرویس تکمیل‌شده</span><strong>{new Intl.NumberFormat("fa-IR").format(resource.data.completed_services || 0)}</strong><small>{resource.data.completed_appointments || 0} نوبت تکمیل‌شده</small></section>
         <section className="employee-card"><span>پرداخت مرتبط</span><strong>{new Intl.NumberFormat("fa-IR").format(resource.data.payments_count || 0)}</strong><small>میانگین سهم: {toman(resource.data.average_payment || 0)}</small></section>
         <section className="employee-card"><span>گزارش در انتظار</span><strong>{toman(resource.data.pending_reports || 0)}</strong><small>در انتظار بررسی مدیریت</small></section>
-        <section className="employee-card"><span>مانده منتسب به کار من</span><strong>{toman(resource.data.outstanding || 0)}</strong><small>بازپرداخت: {toman(resource.data.refunded || 0)}</small></section>
+        <section className="employee-card"><span>مانده پرداخت سرویس‌ها</span><strong>{toman(resource.data.outstanding || 0)}</strong><small>این مبلغ کمیسیون شما نیست · بازپرداخت: {toman(resource.data.refunded || 0)}</small></section>
       </div>
       <PanelDisclosure title="نمودار روند درآمد">
       <section className="employee-card employee-finance-chart">
@@ -966,6 +993,8 @@ function Profile() {
   });
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordSaving, setPasswordSaving] = useState(false);
+  const dirty = Object.keys(form).length > 0 || Object.values(passwords).some(Boolean);
+  useUnsavedWarning(dirty);
   const logout = async () => {
     await disableCurrentFirebaseDevice().catch(() => {});
     await logoutSession();
@@ -1116,10 +1145,10 @@ function Profile() {
           {passwordMessage && <small>{passwordMessage}</small>}
         </form>
       </section>
-      <Link className="employee-action" to="/employee/availability">
+      <Link className="employee-action" to="/employee/availability" onClick={(event) => { if (dirty && !window.confirm("تغییرات ذخیره‌نشده دارید. ادامه می‌دهید؟")) event.preventDefault(); }}>
         مدیریت برنامه کاری
       </Link>
-      <Link className="employee-action" to="/employee/preferences">
+      <Link className="employee-action" to="/employee/preferences" onClick={(event) => { if (dirty && !window.confirm("تغییرات ذخیره‌نشده دارید. ادامه می‌دهید؟")) event.preventDefault(); }}>
         تنظیمات نمایش پنل
       </Link>
       <section className="employee-card employee-danger-zone">
