@@ -14,10 +14,10 @@ export default defineConfig({
     host: '0.0.0.0',
     allowedHosts: ['baharnaj.ir', 'www.baharnaj.ir'],
     proxy: {
-      '/api': { target: proxyTarget, changeOrigin: true },
-      '/media': { target: proxyTarget, changeOrigin: true },
-      '/robots.txt': { target: proxyTarget, changeOrigin: true },
-      '/sitemap.xml': { target: proxyTarget, changeOrigin: true },
+      '/api': { target: proxyTarget },
+      '/media': { target: proxyTarget },
+      '/robots.txt': { target: proxyTarget },
+      '/sitemap.xml': { target: proxyTarget },
     },
   },
 })
