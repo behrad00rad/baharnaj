@@ -1999,6 +1999,21 @@ function ServiceManagement() {
       setCategorySaving(false);
     }
   };
+  const removeCategory = async (category) => {
+    if (!window.confirm(`دسته‌بندی «${category.name}» حذف شود؟ سرویس‌های موجود حذف نمی‌شوند؛ دسته‌های دارای سرویس ابتدا باید خالی شوند.`)) return;
+    setCategorySaving(true);
+    setCategoryError("");
+    try {
+      await api.delete(`admin/service-categories/${category.id}/`);
+      setCategoryOptions((current) => current.filter((item) => item.id !== category.id));
+      if (String(form?.category) === String(category.id)) update("category", "");
+      categories.reload();
+    } catch (error) {
+      setCategoryError(firstError(error, "حذف دسته‌بندی انجام نشد"));
+    } finally {
+      setCategorySaving(false);
+    }
+  };
   const uploadImages = async (serviceId) => {
     for (const [index, file] of files.entries()) {
       const body = new FormData();
@@ -2050,7 +2065,15 @@ function ServiceManagement() {
       <fieldset><legend>اطلاعات اصلی</legend><div className="service-editor-grid">
         <label>نام فارسی<input required value={form.persian_name || ""} onChange={(event) => update("persian_name", event.target.value)} /></label>
         <label>نام داخلی<input required value={form.name || ""} onChange={(event) => update("name", event.target.value)} /></label>
-        <label>دسته‌بندی<select required value={form.category || ""} onChange={(event) => update("category", event.target.value)}><option value="">انتخاب کنید</option>{categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><details className="admin-option-create"><summary>+ دسته‌بندی جدید</summary><span className="admin-inline-option"><input aria-label="نام دسته‌بندی جدید سرویس" placeholder="نام دسته‌بندی جدید" value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} /><button type="button" disabled={categorySaving} onClick={createCategory}>{categorySaving ? "در حال ذخیره..." : "+ افزودن دسته‌بندی جدید"}</button>{categoryError && <small className="admin-field-error">{categoryError}</small>}</span></details></label>
+        <label className="admin-field-wide">دسته‌بندی
+          <select required value={form.category || ""} onChange={(event) => update("category", event.target.value)}><option value="">انتخاب کنید</option>{categoryOptions.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
+          <span className="admin-inline-option"><input aria-label="نام دسته‌بندی جدید سرویس" placeholder="نام دسته‌بندی جدید" value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} /><button type="button" disabled={categorySaving} onClick={createCategory}>{categorySaving ? "در حال ذخیره..." : "+ افزودن دسته‌بندی جدید"}</button>{categoryError && <small className="admin-field-error">{categoryError}</small>}</span>
+          <details className="admin-category-manager">
+            <summary><span>مدیریت دسته‌بندی‌های سرویس</span><small>{categoryOptions.length} دسته‌بندی</small></summary>
+            {categoryOptions.length ? <div className="admin-option-list">{categoryOptions.map((category) => <span key={category.id}>{category.name}<button type="button" className="admin-option-delete" disabled={categorySaving} onClick={() => removeCategory(category)} aria-label={`حذف دسته‌بندی ${category.name}`}>×</button></span>)}</div> : <p className="admin-category-empty">هنوز دسته‌بندی‌ای ساخته نشده است.</p>}
+            <p className="admin-category-note">حذف دسته‌بندی‌های دارای سرویس ممکن نیست؛ ابتدا سرویس‌ها را منتقل کنید.</p>
+          </details>
+        </label>
         <label>نشانی صفحه سرویس<input dir="ltr" value={form.slug || ""} onChange={(event) => update("slug", event.target.value)} /><small>تغییر این مقدار، آدرس عمومی سرویس را تغییر می‌دهد.</small></label>
       </div></fieldset>
       <PanelDisclosure title="محتوای صفحه سرویس"><label>معرفی کوتاه<textarea maxLength="320" value={form.short_description || ""} onChange={(event) => update("short_description", event.target.value)} /></label><label>توضیحات کامل سرویس<textarea className="service-article-input" value={form.description || ""} onChange={(event) => update("description", event.target.value)} /></label></PanelDisclosure>

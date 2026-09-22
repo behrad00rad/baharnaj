@@ -1291,6 +1291,17 @@ class AdminServiceCategoryViewSet(AdminModelViewSet):
     queryset = ServiceCategory.objects.order_by("name")
     serializer_class = ServiceCategorySerializer
 
+    def destroy(self, request, *args, **kwargs):
+        category = self.get_object()
+        if category.services.exists():
+            return Response(
+                {
+                    "detail": "این دسته‌بندی به سرویس‌های موجود متصل است. ابتدا سرویس‌ها را به دسته دیگری منتقل کنید."
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
+
 
 class AdminAppointmentViewSet(AdminModelViewSet):
     queryset = Appointment.objects.select_related("customer__user").prefetch_related("items__service", "items__employee__user", "payments__refunds", "status_history__changed_by")

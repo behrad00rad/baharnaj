@@ -70,6 +70,19 @@ class FinalTouchesTests(TestCase):
         self.assertEqual(employees.data[0]["bio"], "معرفی عمومی متخصص")
         self.assertEqual(employees.data[0]["services"][0]["slug"], self.service.slug)
 
+    def test_admin_cannot_delete_service_category_that_is_in_use(self):
+        admin = User.objects.create_user(username="category-admin", role="admin")
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.delete(
+            f"/api/v1/admin/service-categories/{self.category.pk}/", secure=True
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertTrue(ServiceCategory.objects.filter(pk=self.category.pk).exists())
+        self.assertIn("سرویس", response.data["detail"])
+
     def test_pending_reports_reduce_partial_reportable_balance(self):
         client = APIClient()
         client.force_authenticate(self.employee.user)
