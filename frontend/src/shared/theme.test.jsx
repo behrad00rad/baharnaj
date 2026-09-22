@@ -29,7 +29,7 @@ describe("public theme", () => {
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 
-  it("uses the system preference and persists an explicit toggle", () => {
+  it("uses light on first visit and persists an explicit toggle", () => {
     vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true })));
 
     render(
@@ -38,9 +38,11 @@ describe("public theme", () => {
       </ThemeProvider>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "dark" }));
     expect(screen.getByRole("button", { name: "light" })).toBeInTheDocument();
-    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
-    expect(document.documentElement.dataset.theme).toBe("light");
+
+    fireEvent.click(screen.getByRole("button", { name: "light" }));
+    expect(screen.getByRole("button", { name: "dark" })).toBeInTheDocument();
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+    expect(document.documentElement.dataset.theme).toBe("dark");
   });
 });
