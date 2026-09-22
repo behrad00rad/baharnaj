@@ -1,5 +1,8 @@
 import json
 import base64
+import hashlib
+import hmac
+import struct
 import tempfile
 from datetime import date, time, timedelta
 from unittest.mock import patch
@@ -305,6 +308,30 @@ class AppointmentItemSchemaTests(TestCase):
         self.assertEqual(response.data["role"], "admin")
         self.assertNotIn("refresh", response.data)
         self.assertTrue(response.cookies["baharnaj_refresh"]["httponly"])
+
+    def test_admin_totp_requires_a_second_factor_and_accepts_recovery_code(self):
+        user = User.objects.create_user(username="totp-admin", password="correct-password", role="admin")
+        client = APIClient()
+        client.force_authenticate(user)
+        setup = client.post("/api/v1/admin/account/two-factor/setup/", {"current_password": "correct-password"}, format="json", secure=True)
+        self.assertEqual(setup.status_code, 200)
+        secret = setup.data["manual_key"]
+        counter = int(timezone.now().timestamp() // 30)
+        digest = hmac.new(base64.b32decode(secret + "=" * (-len(secret) % 8)), struct.pack(">Q", counter), hashlib.sha1).digest()
+        offset = digest[-1] & 15
+        code = str(((digest[offset] & 127) << 24 | digest[offset + 1] << 16 | digest[offset + 2] << 8 | digest[offset + 3]) % 1_000_000).zfill(6)
+        confirmed = client.post("/api/v1/admin/account/two-factor/confirm/", {"code": code}, format="json", secure=True)
+        self.assertEqual(confirmed.status_code, 200)
+        self.assertTrue(confirmed.data["enabled"])
+        recovery_code = confirmed.data["recovery_codes"][0]
+
+        login = self.client.post("/api/v1/auth/token/", {"username": user.username, "password": "correct-password"}, secure=True)
+        self.assertEqual(login.status_code, 202)
+        self.assertTrue(login.data["two_factor_required"])
+        verified = self.client.post("/api/v1/auth/token/verify-2fa/", {"two_factor_token": login.data["two_factor_token"], "code": recovery_code}, secure=True)
+        self.assertEqual(verified.status_code, 200)
+        self.assertEqual(verified.data["role"], "admin")
+        self.assertTrue(verified.cookies["baharnaj_refresh"]["httponly"])
 
     def test_refresh_with_deleted_user_clears_stale_cookie(self):
         user = User.objects.create_user(username="deleted-user", password="correct-password")

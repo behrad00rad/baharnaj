@@ -1,7 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from .views import (AdminAppointmentViewSet, AdminBlogCategoryViewSet, AdminBlogMediaViewSet, AdminBlogPostViewSet, AdminBlogTagViewSet, AdminEmployeeViewSet, AdminGalleryCategoryDetailView, AdminGalleryCategoryView, AdminServiceViewSet,
-					AdminUserViewSet, AdminDeletionRequestViewSet, AdminCustomerOptionsView, AdminSelfAccountView, AdminSelfPasswordChangeView, AdminEmployeeEligibleUsersView, AdminEmployeeFinanceView, AdminRevenueView, AdminServiceCategoryViewSet, AdminTransactionTypesView, BookingHoldDeleteView,
+					AdminUserViewSet, AdminDeletionRequestViewSet, AdminCustomerOptionsView, AdminSelfAccountView, AdminSelfPasswordChangeView, AdminTwoFactorConfirmView, AdminTwoFactorDisableView, AdminTwoFactorSetupView, AdminTwoFactorStatusView, AdminEmployeeEligibleUsersView, AdminEmployeeFinanceView, AdminRevenueView, AdminServiceCategoryViewSet, AdminTransactionTypesView, BookingHoldDeleteView,
 					AdminStatisticsView, AppointmentCreateView, AvailabilityView, BookingHoldView,
 										EmployeeAppointmentsView, EmployeeCustomerOptionsView, EmployeeListView, EmployeeSelfBookingView, EmployeeSelfServiceListView, EmployeeStatisticsView, GalleryCategoryListView,
 					ServiceDetailView, ServiceListView, TransactionViewSet, WorkingScheduleViewSet,
@@ -83,6 +83,10 @@ urlpatterns = [
 	path("admin/customer-options/", AdminCustomerOptionsView.as_view(), name="admin-customer-options"),
 	path("admin/account/", AdminSelfAccountView.as_view(), name="admin-self-account"),
 	path("admin/account/password/", AdminSelfPasswordChangeView.as_view(), name="admin-self-password"),
+	path("admin/account/two-factor/", AdminTwoFactorStatusView.as_view(), name="admin-two-factor-status"),
+	path("admin/account/two-factor/setup/", AdminTwoFactorSetupView.as_view(), name="admin-two-factor-setup"),
+	path("admin/account/two-factor/confirm/", AdminTwoFactorConfirmView.as_view(), name="admin-two-factor-confirm"),
+	path("admin/account/two-factor/disable/", AdminTwoFactorDisableView.as_view(), name="admin-two-factor-disable"),
 	path("admin/transaction-types/", AdminTransactionTypesView.as_view(), name="admin-transaction-types"),
 	path("admin/revenue/", AdminRevenueView.as_view(), name="admin-revenue"),
 	path("admin/employees/<int:employee_id>/finance/", AdminEmployeeFinanceView.as_view(), name="admin-employee-finance"),

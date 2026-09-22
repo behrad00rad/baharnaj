@@ -43,6 +43,11 @@ class User(AbstractUser):
     last_login_ip = models.GenericIPAddressField(null=True, blank=True)
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
+    totp_secret = models.TextField(blank=True)
+    totp_pending_secret = models.TextField(blank=True)
+    totp_pending_created_at = models.DateTimeField(null=True, blank=True)
+    totp_enabled = models.BooleanField(default=False)
+    totp_last_used_counter = models.BigIntegerField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         compact = re.sub(r"[\s-]", "", self.phone or "")
@@ -232,6 +237,16 @@ class AccountLogin(models.Model):
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True)
     succeeded = models.BooleanField(default=True)
+
+
+class AdminRecoveryCode(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="admin_recovery_codes")
+    code_hash = models.CharField(max_length=256)
+    created_at = models.DateTimeField(auto_now_add=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=("user", "used_at"), name="admin_recovery_user_used_idx")]
 
 
 class AdminActionLog(models.Model):

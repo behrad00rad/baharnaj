@@ -1,11 +1,16 @@
+import base64
 from base64 import urlsafe_b64decode
 import copy
 from datetime import date as date_type, datetime, time, timedelta
+from io import BytesIO
 import json
+import secrets
+from urllib.parse import quote, urlencode
 from uuid import uuid4
 
 from django.conf import settings
 from django.contrib.auth import password_validation
+from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
@@ -13,6 +18,7 @@ from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Prefetch, Q, Sum, When
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
+from django.core import signing
 from django.utils import timezone
 from rest_framework import generics, serializers, status, viewsets
 from rest_framework.decorators import action
@@ -25,9 +31,9 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import AccountLogin, AdminActionLog, Appointment, AppointmentItem, AppointmentStatusHistory, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerAccountDeletionRequest, CustomerCommunicationPreference, CustomerIdentityClaim, CustomerMutationRequest, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, SalonClosure, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
+from .models import AccountLogin, AdminActionLog, AdminRecoveryCode, Appointment, AppointmentItem, AppointmentStatusHistory, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerAccountDeletionRequest, CustomerCommunicationPreference, CustomerIdentityClaim, CustomerMutationRequest, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, SalonClosure, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsCustomer, IsEmployee, IsOwnEmployeeObject
-from .security import clear_failed_logins, is_locked, normalize_phone, record_failed_login
+from .security import clear_failed_logins, decrypt_totp_secret, encrypt_totp_secret, generate_recovery_codes, generate_totp_secret, is_locked, normalize_phone, record_failed_login, valid_totp_counter
 from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminCustomerSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AdminSelfAccountSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, CustomerAppointmentSerializer, CustomerDeletionRequestSerializer, CustomerPasswordChangeSerializer, CustomerPreferenceSerializer, CustomerProfileSerializer, CustomerRegistrationSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, SalonClosureSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
@@ -1307,6 +1313,124 @@ class AdminSelfPasswordChangeView(generics.GenericAPIView):
         return Response({"detail": "رمز عبور با موفقیت تغییر کرد."})
 
 
+def _two_factor_status(user):
+    return {
+        "enabled": user.totp_enabled,
+        "recovery_codes_remaining": user.admin_recovery_codes.filter(used_at__isnull=True).count(),
+    }
+
+
+def _totp_provisioning_url(user, secret):
+    return "otpauth://totp/" + quote(f"Baharnaj:{user.username}", safe="") + "?" + urlencode({
+        "secret": secret,
+        "issuer": "Baharnaj",
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+    })
+
+
+def _totp_qr_data_uri(url):
+    try:
+        import qrcode
+    except ImportError:
+        return ""
+    image = qrcode.make(url)
+    stream = BytesIO()
+    image.save(stream, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(stream.getvalue()).decode()
+
+
+def _verify_two_factor_code(user, code, *, consume=True):
+    counter = valid_totp_counter(decrypt_totp_secret(user.totp_secret), code)
+    if counter is None:
+        normalized = str(code or "").replace(" ", "").upper()
+        with transaction.atomic():
+            recovery = user.admin_recovery_codes.select_for_update().filter(used_at__isnull=True).order_by("pk")
+            for item in recovery:
+                if check_password(normalized, item.code_hash):
+                    if consume:
+                        item.used_at = timezone.now()
+                        item.save(update_fields=("used_at",))
+                    return True
+        return False
+    if consume:
+        with transaction.atomic():
+            locked_user = User.objects.select_for_update().get(pk=user.pk)
+            if locked_user.totp_last_used_counter is not None and counter <= locked_user.totp_last_used_counter:
+                return False
+            locked_user.totp_last_used_counter = counter
+            locked_user.save(update_fields=("totp_last_used_counter",))
+    return True
+
+
+class AdminTwoFactorStatusView(generics.GenericAPIView):
+    permission_classes = (IsAdmin,)
+
+    def get(self, request):
+        return Response(_two_factor_status(request.user))
+
+
+class AdminTwoFactorSetupView(generics.GenericAPIView):
+    permission_classes = (IsAdmin,)
+
+    def post(self, request):
+        if not request.user.check_password(request.data.get("current_password", "")):
+            raise ValidationError({"current_password": "رمز عبور فعلی صحیح نیست."})
+        secret = generate_totp_secret()
+        user = request.user
+        user.totp_pending_secret = encrypt_totp_secret(secret)
+        user.totp_pending_created_at = timezone.now()
+        user.save(update_fields=("totp_pending_secret", "totp_pending_created_at"))
+        url = _totp_provisioning_url(user, secret)
+        return Response({"manual_key": secret, "otpauth_url": url, "qr_code": _totp_qr_data_uri(url)})
+
+
+class AdminTwoFactorConfirmView(generics.GenericAPIView):
+    permission_classes = (IsAdmin,)
+
+    def post(self, request):
+        user = request.user
+        if not user.totp_pending_created_at or user.totp_pending_created_at < timezone.now() - timedelta(minutes=10):
+            raise ValidationError({"detail": "فرایند راه‌اندازی منقضی شده است؛ دوباره تلاش کنید."})
+        secret = decrypt_totp_secret(user.totp_pending_secret)
+        if valid_totp_counter(secret, request.data.get("code")) is None:
+            raise ValidationError({"code": "کد برنامه احراز هویت صحیح نیست."})
+        codes = generate_recovery_codes()
+        with transaction.atomic():
+            user.totp_secret = encrypt_totp_secret(secret)
+            user.totp_pending_secret = ""
+            user.totp_pending_created_at = None
+            user.totp_enabled = True
+            user.totp_last_used_counter = None
+            user.save(update_fields=("totp_secret", "totp_pending_secret", "totp_pending_created_at", "totp_enabled", "totp_last_used_counter"))
+            user.admin_recovery_codes.all().delete()
+            AdminRecoveryCode.objects.bulk_create([AdminRecoveryCode(user=user, code_hash=make_password(code)) for code in codes])
+            AdminActionLog.objects.create(actor=user, action="two_factor_enabled", model_name="User", object_id=str(user.pk))
+        return Response({**_two_factor_status(user), "recovery_codes": codes})
+
+
+class AdminTwoFactorDisableView(generics.GenericAPIView):
+    permission_classes = (IsAdmin,)
+
+    def post(self, request):
+        user = request.user
+        if not user.check_password(request.data.get("current_password", "")):
+            raise ValidationError({"current_password": "رمز عبور فعلی صحیح نیست."})
+        if not user.totp_enabled or not _verify_two_factor_code(user, request.data.get("code")):
+            raise ValidationError({"code": "کد احراز هویت یا کد بازیابی صحیح نیست."})
+        with transaction.atomic():
+            user.totp_secret = ""
+            user.totp_pending_secret = ""
+            user.totp_pending_created_at = None
+            user.totp_enabled = False
+            user.totp_last_used_counter = None
+            user.save(update_fields=("totp_secret", "totp_pending_secret", "totp_pending_created_at", "totp_enabled", "totp_last_used_counter"))
+            user.admin_recovery_codes.all().delete()
+            AdminActionLog.objects.create(actor=user, action="two_factor_disabled", model_name="User", object_id=str(user.pk))
+        return Response(_two_factor_status(user))
+
+
 class AdminTransactionTypesView(generics.GenericAPIView):
     permission_classes = (IsAdmin,)
 
@@ -1875,6 +1999,9 @@ class SalonTokenView(TokenObtainPairView):
     serializer_class = SalonTokenSerializer
 
 
+TWO_FACTOR_LOGIN_SALT = "baharnaj.admin-two-factor.login.v1"
+
+
 class CookieTokenView(TokenObtainPairView):
     serializer_class = SalonTokenSerializer
     permission_classes = (AllowAny,)
@@ -1903,9 +2030,36 @@ class CookieTokenView(TokenObtainPairView):
         if user.account_status != "active":
             return Response({"detail": "این حساب در حال حاضر فعال نیست."}, status=status.HTTP_403_FORBIDDEN)
         clear_failed_logins(user, username, request.META.get("REMOTE_ADDR"))
+        if user.role == "admin" and user.totp_enabled:
+            challenge = signing.dumps({"user_id": user.pk, "password_hash": user.password}, salt=TWO_FACTOR_LOGIN_SALT)
+            return Response({"two_factor_required": True, "two_factor_token": challenge, "role": user.role}, status=status.HTTP_202_ACCEPTED)
         AccountLogin.objects.create(user=user, ip_address=request.META.get("REMOTE_ADDR"), user_agent=request.META.get("HTTP_USER_AGENT", "")[:1000], succeeded=True)
         response = Response({"access": serializer.validated_data["access"], "role": user.role})
         set_refresh_cookie(response, serializer.validated_data["refresh"])
+        response["X-CSRFToken"] = get_token(request)
+        return response
+
+
+class TwoFactorTokenVerifyView(generics.GenericAPIView):
+    permission_classes = (AllowAny,)
+    throttle_scope = "login"
+
+    def post(self, request):
+        try:
+            payload = signing.loads(request.data.get("two_factor_token", ""), salt=TWO_FACTOR_LOGIN_SALT, max_age=300)
+            user = User.objects.get(pk=payload["user_id"], role="admin", account_status="active", totp_enabled=True)
+            if not secrets.compare_digest(payload["password_hash"], user.password):
+                raise signing.BadSignature
+        except (signing.BadSignature, signing.SignatureExpired, User.DoesNotExist, KeyError, TypeError):
+            return Response({"detail": "فرایند ورود منقضی شده است؛ دوباره وارد شوید."}, status=status.HTTP_401_UNAUTHORIZED)
+        if not _verify_two_factor_code(user, request.data.get("code")):
+            AccountLogin.objects.create(user=user, ip_address=request.META.get("REMOTE_ADDR"), user_agent=request.META.get("HTTP_USER_AGENT", "")[:1000], succeeded=False)
+            return Response({"detail": "کد احراز هویت یا کد بازیابی صحیح نیست."}, status=status.HTTP_401_UNAUTHORIZED)
+        AccountLogin.objects.create(user=user, ip_address=request.META.get("REMOTE_ADDR"), user_agent=request.META.get("HTTP_USER_AGENT", "")[:1000], succeeded=True)
+        refresh = RefreshToken.for_user(user)
+        refresh["role"] = user.role
+        response = Response({"access": str(refresh.access_token), "role": user.role})
+        set_refresh_cookie(response, refresh)
         response["X-CSRFToken"] = get_token(request)
         return response
 

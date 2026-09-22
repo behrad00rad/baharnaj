@@ -103,12 +103,16 @@ function Preferences() {
 }
 function AdminAccount() {
   const [account, setAccount] = useState(null);
+  const [twoFactor, setTwoFactor] = useState(null);
+  const [twoFactorSetup, setTwoFactorSetup] = useState(null);
+  const [twoFactorForm, setTwoFactorForm] = useState({ current_password: "", code: "" });
+  const [recoveryCodes, setRecoveryCodes] = useState([]);
   const [usernameForm, setUsernameForm] = useState({ username: "", current_password: "" });
   const [passwordForm, setPasswordForm] = useState({ current_password: "", new_password: "", new_password_confirm: "" });
   const [notice, setNotice] = useState("");
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState("");
-  useEffect(() => { api.get("admin/account/").then(({ data }) => { setAccount(data); setUsernameForm((form) => ({ ...form, username: data.username })); }).catch(() => setNotice("دریافت اطلاعات حساب انجام نشد.")); }, []);
+  useEffect(() => { Promise.all([api.get("admin/account/"), api.get("admin/account/two-factor/")]).then(([{ data: accountData }, { data: twoFactorData }]) => { setAccount(accountData); setTwoFactor(twoFactorData); setUsernameForm((form) => ({ ...form, username: accountData.username })); }).catch(() => setNotice("دریافت اطلاعات حساب انجام نشد.")); }, []);
   const submitUsername = async (event) => {
     event.preventDefault(); setSaving("username"); setErrors({}); setNotice("");
     try { const { data } = await api.patch("admin/account/", usernameForm); setAccount((current) => ({ ...current, username: data.username })); setUsernameForm((form) => ({ ...form, username: data.username, current_password: "" })); setNotice("نام کاربری به‌روزرسانی شد."); }
@@ -121,6 +125,24 @@ function AdminAccount() {
     catch (error) { setErrors(error.response?.data || { detail: "تغییر رمز عبور انجام نشد." }); }
     finally { setSaving(""); }
   };
+  const startTwoFactor = async (event) => {
+    event.preventDefault(); setSaving("two-factor-setup"); setErrors({}); setNotice("");
+    try { const { data } = await api.post("admin/account/two-factor/setup/", { current_password: twoFactorForm.current_password }); setTwoFactorSetup(data); setTwoFactorForm({ current_password: "", code: "" }); }
+    catch (error) { setErrors(error.response?.data || { detail: "راه‌اندازی احراز هویت دومرحله‌ای انجام نشد." }); }
+    finally { setSaving(""); }
+  };
+  const confirmTwoFactor = async (event) => {
+    event.preventDefault(); setSaving("two-factor-confirm"); setErrors({});
+    try { const { data } = await api.post("admin/account/two-factor/confirm/", { code: twoFactorForm.code }); setTwoFactor(data); setRecoveryCodes(data.recovery_codes || []); setTwoFactorSetup(null); setTwoFactorForm({ current_password: "", code: "" }); setNotice("احراز هویت دومرحله‌ای فعال شد."); }
+    catch (error) { setErrors(error.response?.data || { detail: "تأیید کد انجام نشد." }); }
+    finally { setSaving(""); }
+  };
+  const disableTwoFactor = async (event) => {
+    event.preventDefault(); setSaving("two-factor-disable"); setErrors({}); setNotice("");
+    try { const { data } = await api.post("admin/account/two-factor/disable/", twoFactorForm); setTwoFactor(data); setTwoFactorForm({ current_password: "", code: "" }); setRecoveryCodes([]); setNotice("احراز هویت دومرحله‌ای غیرفعال شد."); }
+    catch (error) { setErrors(error.response?.data || { detail: "غیرفعال‌سازی انجام نشد." }); }
+    finally { setSaving(""); }
+  };
   const errorFor = (field) => { const value = errors[field] || (field === "general" && errors.detail); return Array.isArray(value) ? value[0] : value; };
   return <div className="admin-page admin-account-page">
     <Header eyebrow="امنیت و دسترسی" title="حساب من" />
@@ -129,6 +151,8 @@ function AdminAccount() {
     {!account ? <Skeleton count={2} /> : <div className="admin-account-grid">
       <form className="admin-panel admin-account-card" onSubmit={submitUsername}><div className="panel-title"><div><span>شناسه ورود</span><h2>نام کاربری</h2></div></div><p>نامی که هنگام ورود کارکنان استفاده می‌کنید.</p><label>نام کاربری<input required autoComplete="username" value={usernameForm.username} onChange={(event) => setUsernameForm({ ...usernameForm, username: event.target.value })} /></label><label>رمز عبور فعلی<PasswordInput required visibilityLabel="رمز عبور فعلی برای تغییر نام کاربری" autoComplete="current-password" value={usernameForm.current_password} onChange={(event) => setUsernameForm({ ...usernameForm, current_password: event.target.value })} /></label>{errorFor("username") && <small className="admin-field-error">{errorFor("username")}</small>}{errorFor("current_password") && <small className="admin-field-error">{errorFor("current_password")}</small>}<button className="admin-primary" disabled={saving === "username"}>{saving === "username" ? "در حال ذخیره…" : "ذخیره نام کاربری"}</button></form>
       <form className="admin-panel admin-account-card" onSubmit={submitPassword}><div className="panel-title"><div><span>امنیت ورود</span><h2>تغییر رمز عبور</h2></div></div><p>رمز تازه باید دست‌کم ۸ نویسه داشته باشد و قابل حدس نباشد.</p><label>رمز عبور فعلی<PasswordInput required visibilityLabel="رمز عبور فعلی برای تغییر رمز" autoComplete="current-password" value={passwordForm.current_password} onChange={(event) => setPasswordForm({ ...passwordForm, current_password: event.target.value })} /></label><label>رمز عبور جدید<PasswordInput required visibilityLabel="رمز عبور جدید" autoComplete="new-password" value={passwordForm.new_password} onChange={(event) => setPasswordForm({ ...passwordForm, new_password: event.target.value })} /></label><label>تکرار رمز جدید<PasswordInput required visibilityLabel="تکرار رمز عبور جدید" autoComplete="new-password" value={passwordForm.new_password_confirm} onChange={(event) => setPasswordForm({ ...passwordForm, new_password_confirm: event.target.value })} /></label>{["current_password", "new_password", "new_password_confirm", "general"].map((field) => errorFor(field) && <small key={field} className="admin-field-error">{errorFor(field)}</small>)}<button className="admin-primary" disabled={saving === "password"}>{saving === "password" ? "در حال ذخیره…" : "تغییر رمز عبور"}</button></form>
+      <section className="admin-panel admin-account-card admin-two-factor-card"><div className="panel-title"><div><span>محافظت اضافه</span><h2>احراز هویت دومرحله‌ای</h2></div></div>{twoFactor?.enabled ? <><p>ورود مدیر پس از رمز عبور به کد برنامه احراز هویت نیاز دارد. {twoFactor.recovery_codes_remaining} کد بازیابی باقی مانده است.</p><form onSubmit={disableTwoFactor}><label>رمز عبور فعلی<PasswordInput required visibilityLabel="رمز عبور فعلی برای غیرفعال‌سازی" autoComplete="current-password" value={twoFactorForm.current_password} onChange={(event) => setTwoFactorForm({ ...twoFactorForm, current_password: event.target.value })} /></label><label>کد برنامه یا بازیابی<input required autoComplete="one-time-code" value={twoFactorForm.code} onChange={(event) => setTwoFactorForm({ ...twoFactorForm, code: event.target.value })} /></label>{errorFor("code") && <small className="admin-field-error">{errorFor("code")}</small>}<button className="admin-secondary" disabled={saving === "two-factor-disable"}>{saving === "two-factor-disable" ? "در حال بررسی…" : "غیرفعال‌سازی"}</button></form></> : twoFactorSetup ? <form onSubmit={confirmTwoFactor}><p>کد QR را با Google Authenticator، 1Password یا برنامه مشابه اسکن کنید. اگر اسکن ممکن نیست، کلید را دستی وارد کنید.</p>{twoFactorSetup.qr_code && <img className="admin-two-factor-qr" src={twoFactorSetup.qr_code} alt="کد QR برای برنامه احراز هویت" />}<code className="admin-two-factor-key">{twoFactorSetup.manual_key}</code><label>کد ۶ رقمی برنامه<input required autoFocus inputMode="numeric" autoComplete="one-time-code" value={twoFactorForm.code} onChange={(event) => setTwoFactorForm({ ...twoFactorForm, code: event.target.value })} /></label>{errorFor("code") && <small className="admin-field-error">{errorFor("code")}</small>}<button className="admin-primary" disabled={saving === "two-factor-confirm"}>{saving === "two-factor-confirm" ? "در حال تأیید…" : "فعال‌سازی و دریافت کدها"}</button></form> : <form onSubmit={startTwoFactor}><p>با یک برنامه احراز هویت، بدون نیاز به پیامک یا تلگرام، از ورود مدیر محافظت کنید.</p><label>رمز عبور فعلی<PasswordInput required visibilityLabel="رمز عبور فعلی برای راه‌اندازی" autoComplete="current-password" value={twoFactorForm.current_password} onChange={(event) => setTwoFactorForm({ ...twoFactorForm, current_password: event.target.value })} /></label>{errorFor("current_password") && <small className="admin-field-error">{errorFor("current_password")}</small>}<button className="admin-primary" disabled={saving === "two-factor-setup"}>{saving === "two-factor-setup" ? "در حال آماده‌سازی…" : "راه‌اندازی احراز هویت دومرحله‌ای"}</button></form>}</section>
+      {recoveryCodes.length > 0 && <section className="admin-panel admin-account-card admin-recovery-codes"><div className="panel-title"><div><span>فقط یک‌بار نمایش داده می‌شود</span><h2>کدهای بازیابی</h2></div></div><p>این کدها را در جایی امن و خارج از تلفن خود نگه دارید. هر کد فقط یک‌بار قابل استفاده است.</p><div>{recoveryCodes.map((code) => <code key={code}>{code}</code>)}</div><button className="admin-secondary" type="button" onClick={() => navigator.clipboard?.writeText(recoveryCodes.join("\n")).then(() => setNotice("کدهای بازیابی کپی شدند.")).catch(() => setNotice("کدها را دستی ذخیره کنید."))}>کپی همه کدها</button></section>}
     </div>}
   </div>;
 }
