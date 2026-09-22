@@ -94,8 +94,8 @@ class FinalTouchesTests(TestCase):
 
         response = client.patch(
             f"/api/v1/admin/employees/{employee.pk}/",
-            {"name": "نام جدید", "phone": "09112223344"},
-            format="json",
+            {"user": employee_user.pk, "name": "نام جدید", "phone": "09112223344"},
+            format="multipart",
             secure=True,
         )
 

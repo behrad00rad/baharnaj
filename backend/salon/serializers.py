@@ -389,6 +389,7 @@ class CustomerRegistrationSerializer(serializers.Serializer):
 
 
 class AdminEmployeeSerializer(serializers.ModelSerializer):
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
     name = serializers.CharField(source="user.first_name", required=False, allow_blank=True)
     phone = serializers.CharField(source="user.phone", required=False, allow_blank=True)
     profile_photo_url = serializers.SerializerMethodField()
