@@ -13,6 +13,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
 import { BlogEditor, BlogManagement, BlogPreview } from "./AdminBlog";
 import PasswordInput from "../components/PasswordInput";
 import { formatJalaliDate, formatJalaliDateTime } from "../shared/date";
+import PanelPreferences from "../components/PanelPreferences";
 
 const today = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Tehran",
@@ -93,6 +94,12 @@ function Header({ eyebrow, title, action, onAction }) {
       )}
     </div>
   );
+}
+function Preferences() {
+  return <div className="admin-page panel-preferences-page">
+    <Header eyebrow="تنظیمات پنل" title="ترجیحات" />
+    <PanelPreferences />
+  </div>;
 }
 function Stat({ label, value, note, accent = false }) {
   return (
@@ -2459,6 +2466,7 @@ function AdminRouter() {
       <Route path="blog" element={<BlogManagement />} />
       <Route path="blog/:id/edit" element={<BlogEditor />} />
       <Route path="blog/:id/preview" element={<BlogPreview />} />
+      <Route path="preferences" element={<Preferences />} />
       <Route path="*" element={<DashboardHome />} />
     </Routes>
   );

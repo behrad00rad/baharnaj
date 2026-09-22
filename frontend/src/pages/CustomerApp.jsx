@@ -5,6 +5,7 @@ import { siteConfig } from "../shared/siteConfig";
 import { JalaliDatePicker } from "../components/DatePicker";
 import PasswordInput from "../components/PasswordInput";
 import { formatJalaliDateTime } from "../shared/date";
+import PanelPreferences from "../components/PanelPreferences";
 
 const statusLabels = {
   pending: "در انتظار تأیید",
@@ -32,6 +33,32 @@ const paymentRecordLabels = {
   failed: "ردشده",
   refunded: "بازپرداخت‌شده",
 };
+
+function CopyableTrackingCode({ code }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(code);
+      else {
+        const input = document.createElement("textarea");
+        input.value = code;
+        input.setAttribute("readonly", "");
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        document.body.append(input);
+        input.select();
+        const copiedWithFallback = document.execCommand("copy");
+        input.remove();
+        if (!copiedWithFallback) throw new Error("copy failed");
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return <button type="button" className="customer-copy-code" onClick={copy} aria-label={`کپی کد پیگیری ${code}`} title="کپی کد پیگیری"><bdi>{code}</bdi><span>{copied ? "کپی شد" : "کپی"}</span></button>;
+}
 const priceLabels = {
   final: "قیمت نهایی",
   unresolved: "قیمت پس از مشاوره مشخص می‌شود",
@@ -160,7 +187,7 @@ function AppointmentCard({ appointment, onChanged, featured = false }) {
         </div>
         <div className="customer-confirmation-code">
           <small>کد پیگیری</small>
-          <strong>{appointment.confirmation_code}</strong>
+          <CopyableTrackingCode code={appointment.confirmation_code} />
         </div>
       </div>
       <div className="customer-services">
@@ -578,7 +605,7 @@ function AppointmentDetail({ id }) {
           <h2>اطلاعات قابل نگهداری</h2>
         </div>
         <dl>
-          <div><dt>کد پیگیری</dt><dd>{appointment.confirmation_code}</dd></div>
+          <div><dt>کد پیگیری</dt><dd><CopyableTrackingCode code={appointment.confirmation_code} /></dd></div>
           <div><dt>تاریخ</dt><dd>{formatDate(appointment.date)}</dd></div>
           <div><dt>ساعت</dt><dd>{appointment.start_time || "—"}</dd></div>
           <div><dt>پرداخت</dt><dd>{paymentLabels[appointment.payment_status] || "نامشخص"}</dd></div>
@@ -828,6 +855,7 @@ function Preferences() {
         {message && <p className="customer-message" role="status">{message}</p>}
         <button className="customer-primary">ذخیره ترجیحات</button>
       </form>
+      <PanelPreferences />
     </>
   );
 }

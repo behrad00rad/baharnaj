@@ -10,6 +10,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import PasswordInput from "../components/PasswordInput";
 import { formatJalaliDate } from "../shared/date";
 import { toGregorian, toJalaali } from "jalaali-js";
+import PanelPreferences from "../components/PanelPreferences";
 
 const unwrap = (data) => data?.results || data || [];
 const statusNames = {
@@ -73,6 +74,12 @@ function Heading({ kicker, title }) {
       <h1 className="employee-page-title">{title}</h1>
     </>
   );
+}
+function Preferences() {
+  return <section className="employee-page employee-preferences-page">
+    <Heading kicker="تنظیمات پنل" title="ترجیحات" />
+    <PanelPreferences />
+  </section>;
 }
 function AppointmentCard({ item, onClick }) {
   const line = item.items?.[0] || item;
@@ -1133,6 +1140,7 @@ export default function EmployeeApp() {
       <Route path="earnings" element={<Earnings />} />
       <Route path="availability" element={<Availability />} />
       <Route path="profile" element={<Profile />} />
+      <Route path="preferences" element={<Preferences />} />
       <Route path="*" element={<DailyWorkspace />} />
     </Routes>
   );

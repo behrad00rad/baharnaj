@@ -1,5 +1,4 @@
 import PanelGuide from "./PanelGuide";
-import TextSizeControl from "./TextSizeControl";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { logoutSession } from "../shared/api";
@@ -7,7 +6,6 @@ import { useAuth } from "../shared/auth";
 import NotificationBell from "./NotificationBell";
 import { disableCurrentFirebaseDevice } from "../shared/firebasePush";
 import { SEO } from "./SEO";
-import { useTheme } from "../shared/theme";
 import "./Admin.css";
 import "./AdminEnhancements.css";
 import "./AdminMobileNav.css";
@@ -26,12 +24,12 @@ const links = [
   ["/telegram", "تلگرام و ارتباط با مشتری", "↗"],
   ["/content", "محتوا", "▧"],
   ["/blog", "مقالات / وبلاگ", "¶"],
+  ["/preferences", "ترجیحات", "⚙"],
 ];
 
 export default function AdminLayout() {
   const navigate = useNavigate();
   const { role } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
@@ -83,7 +81,6 @@ export default function AdminLayout() {
             </div>
           </div>
           <div className="admin-top-actions">
-            <button className="panel-theme-toggle" type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "فعال‌کردن حالت روشن" : "فعال‌کردن حالت تاریک"} title={theme === "dark" ? "حالت روشن" : "حالت تاریک"}>{theme === "dark" ? "☀" : "☾"}</button>
             <NotificationBell />
             <div className="admin-user">
               <span>مدیر</span>
@@ -138,7 +135,6 @@ export default function AdminLayout() {
         <main className="admin-main">
           <PanelGuide role="admin" />
           <Outlet />
-          <footer className="panel-preferences"><TextSizeControl /></footer>
         </main>
       </div>
     </div>

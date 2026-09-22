@@ -56,12 +56,7 @@
   color: var(--color-text-primary);
   font-size: var(--text-small);
 }
-.customer-header-actions .customer-theme {
-  width: 42px;
-  padding: 0;
-  border-color: transparent;
-  font-size: 1.15rem;
-}
+.customer-copy-code{display:inline-flex;align-items:center;gap:7px;padding:0;border:0;background:transparent;color:var(--color-text-primary);font:inherit;font-weight:700;cursor:pointer}.customer-copy-code span{padding:2px 5px;border:1px solid var(--color-border);border-radius:4px;color:var(--color-text-secondary);font-size:var(--text-caption);font-weight:400}.customer-copy-code:hover span,.customer-copy-code:focus-visible span{border-color:var(--color-brand-primary);color:var(--color-brand-primary)}
 .customer-layout {
   display: grid;
   grid-template-columns: 230px minmax(0, 1fr);
