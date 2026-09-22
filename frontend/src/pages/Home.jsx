@@ -42,7 +42,7 @@ export default function Home() {
             <ArrowLink to="/gallery">دیدن نمونه‌کارها</ArrowLink>
           </div>
           <div className="hero-index">
-            <span>رشت، ضیابری</span>
+            <span>{siteConfig.address}</span>
             <span>بهارناژ / BAHARNAJ</span>
           </div>
         </div>
@@ -142,7 +142,7 @@ export default function Home() {
         <div className="container visit-grid">
           <div><p className="eyebrow">قرار ما در رشت</p><h2>برای دیدنت آماده‌ایم</h2></div>
           <div>
-            <address>{siteConfig.city}، {siteConfig.area}<br />{siteConfig.hoursLabel}<br /><a href={`tel:${siteConfig.mobileInternational}`}><bdi>{siteConfig.mobile}</bdi></a></address>
+            <address>{siteConfig.address}<br />{siteConfig.hoursLabel}<br /><a href={`tel:${siteConfig.mobileInternational}`}><bdi>{siteConfig.mobile}</bdi></a></address>
             <Link className="button" to="/book">رزرو نوبت <span>←</span></Link>
             <p><Link className="text-link" to="/contact">اطلاعات تماس و مراجعه</Link></p>
           </div>

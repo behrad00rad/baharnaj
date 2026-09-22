@@ -40,7 +40,7 @@ export default function Contact() {
         <div className="contact-business">
           <span>اطلاعات سالن</span>
           <h2>بهارناژ در رشت</h2>
-          <address>{siteConfig.province}، {siteConfig.city}، {siteConfig.area}</address>
+          <address>{siteConfig.address}</address>
           <a href={`tel:${siteConfig.mobileInternational}`}><bdi>{siteConfig.mobile}</bdi></a>
           <a href={`tel:${siteConfig.landlineInternational}`}><bdi>{siteConfig.landline}</bdi></a>
           <p>{siteConfig.hoursLabel}<br />ممکن است در تعطیلات سوگواری اسلامی تعطیل باشیم.</p>

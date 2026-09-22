@@ -149,7 +149,7 @@ export function PublicLayout({ children }) {
               <b>بهارناژ<small>BAHARNAJ</small></b>
             </Link>
             <p>بهارناژ در رشت؛ تجربه و توجه به سلیقهٔ شما، از انتخاب تا جزئیات نهایی.</p>
-            <address className="footer-contact">{siteConfig.province}، {siteConfig.city}، {siteConfig.area}<br /><a href={`tel:${siteConfig.mobileInternational}`}><bdi>{siteConfig.mobile}</bdi></a> · {siteConfig.hoursLabel}</address>
+            <address className="footer-contact">{siteConfig.address}<br /><a href={`tel:${siteConfig.mobileInternational}`}><bdi>{siteConfig.mobile}</bdi></a> · {siteConfig.hoursLabel}</address>
           </div>
           <nav aria-label="پیوندهای پایین صفحه">
             {publicLinks.filter(([path]) => path !== "/").map(([path, label]) => (

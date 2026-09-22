@@ -6,7 +6,8 @@ export const siteConfig = {
   siteUrl: configuredUrl.replace(/\/$/, ""),
   city: "رشت",
   province: "گیلان",
-  area: "فاز ۲ ضیابری",
+  area: "فاز ۲ ضیابری، رو به روی ساختمان خورشید",
+  address: "رشت، فاز ۲ ضیابری، رو به روی ساختمان خورشید",
   country: "ایران",
   hoursLabel: "هر روز، ۹ تا ۲۱",
   mobile: "09111375136",
@@ -27,7 +28,7 @@ export function publicImageUrl(image) {
 }
 
 export function beautySalonSchema() {
-  const address = `${siteConfig.city}، ${siteConfig.province}، ${siteConfig.area}، ${siteConfig.country}`;
+  const address = `${siteConfig.address}، ${siteConfig.country}`;
   return {
     "@context": "https://schema.org",
     "@type": "BeautySalon",
