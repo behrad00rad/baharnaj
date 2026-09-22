@@ -69,13 +69,14 @@ export function PublicState({
 
 export function EmployeeCard({ employee, compact = false }) {
   const name = employee.name?.trim() || "متخصص بهارناژ";
+  const number = new Intl.NumberFormat("fa-IR", { minimumIntegerDigits: 2, useGrouping: false }).format(employee.id);
   return (
     <article className={`employee-card ${compact ? "employee-card-compact" : ""}`}>
       {employee.profile_photo_url && <div className="employee-card-media">
         <MediaImage src={employee.profile_photo_url} alt={`تصویر ${name}`} />
       </div>}
       <div className="employee-card-copy">
-        <span>۰{String(employee.id).slice(-1)}</span>
+        <span>{number}</span>
         <div>
           <h3>{name}</h3>
           {employee.specialty && <p>{employee.specialty}</p>}
