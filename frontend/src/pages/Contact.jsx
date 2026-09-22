@@ -43,6 +43,7 @@ export default function Contact() {
           <address>{siteConfig.address}</address>
           <a href={`tel:${siteConfig.mobileInternational}`}><bdi>{siteConfig.mobile}</bdi></a>
           <a href={`tel:${siteConfig.landlineInternational}`}><bdi>{siteConfig.landline}</bdi></a>
+          <a href={`tel:${siteConfig.additionalLandlineInternational}`}><bdi>{siteConfig.additionalLandline}</bdi></a>
           <p>{siteConfig.hoursLabel}<br />ممکن است در تعطیلات سوگواری اسلامی تعطیل باشیم.</p>
           <a href={siteConfig.instagram} target="_blank" rel="noopener noreferrer">Instagram بهارناژ ↗</a>
         </div>

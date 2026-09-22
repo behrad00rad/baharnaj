@@ -26,6 +26,11 @@
 .site-header { position:relative; z-index:50; background:var(--color-navbar-bg); color:var(--color-navbar-text); }
 .nav { height:92px; display:grid; grid-template-columns:120px 1fr auto; align-items:center; border-bottom:1px solid var(--line); }
 .brand { display:inline-flex; align-items:center; width:max-content; gap:10px; color:var(--ink); }
+.brand .brand-logo { display:block; flex:0 0 48px; width:48px; height:48px; background:transparent; border-radius:0; }
+.brand-logo img { display:block; width:48px; height:48px; }
+.brand-logo-dark { display:none!important; }
+[data-theme="dark"] .site-header .brand-logo-light { display:none; }
+[data-theme="dark"] .site-header .brand-logo-dark { display:block!important; }
 .brand span { display:grid; width:34px; height:34px; place-items:center; border-radius:50%; background:var(--ink); color:var(--acid); font-size: var(--text-small); }
 .brand b { font-size: var(--text-lead); }
 .desktop-links { display:flex; justify-content:center; gap:clamp(12px,1.5vw,24px); color:var(--muted); font-size: var(--text-small); }
@@ -135,7 +140,7 @@
 @media(max-width:650px){.admin-top-actions {margin-inline-start:auto}.admin-user {display:none}.employee-header-actions {gap:6px}.employee-nav {height:auto;min-height:70px}.employee-nav a {min-width:0}.employee-nav span {white-space:normal;text-align:center}}
 
 /* Editorial compositions use existing content, with no placeholder photography. */
-.brand b { position:relative; padding-inline-end:12px; }.brand b::after { content:""; position:absolute; inset-inline-end:0; top:12px; width:6px; height:6px; border-radius:50%; background:var(--color-brand-accent); }
+.brand b { position:relative; }
 .brand small { display:block; font-size:11px; letter-spacing:.12em; font-weight:400; direction:ltr; }
 .skip-link { position:absolute; top:-100px; inset-inline-start:16px; z-index:200; padding:12px; background:var(--color-surface); color:var(--color-text-primary); }.skip-link:focus { top:8px; }
 .hero-image,.employee-card-media,.detail-media,.work-item { border-radius:var(--public-radius-lg); }

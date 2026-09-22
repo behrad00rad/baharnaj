@@ -68,3 +68,4 @@ dist
 backups/
 **/*serviceAccount*.json
 ssh.txt
+todo2(changes).txt

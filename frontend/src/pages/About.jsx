@@ -2,6 +2,7 @@ import { brandCopy } from "../shared/brandCopy";
 import { Link } from "react-router-dom";
 import { PageIntro } from "../components/PublicLayout";
 import { SEO } from "../components/SEO";
+import { siteConfig } from "../shared/siteConfig";
 
 export default function About() {
   return (
@@ -30,6 +31,7 @@ export default function About() {
             برای انتخاب سرویس‌ها، توضیحات و مبنای قیمت هر سرویس را ببینید. اگر هنوز سؤالی دارید، پیش از رزرو با ما تماس بگیرید.
           </p>
           <p>بهارناژ در رشت، فاز ۲ ضیابری، رو به روی ساختمان خورشید قرار دارد و هر روز از ۹ تا ۲۱ پذیرای رزروهای ثبت‌شده شماست.</p>
+          <p>تلفن تماس: <a href={`tel:${siteConfig.additionalLandlineInternational}`}><bdi>{siteConfig.additionalLandline}</bdi></a></p>
           <Link className="button" to="/book">
             انتخاب و رزرو <span>←</span>
           </Link>

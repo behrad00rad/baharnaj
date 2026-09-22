@@ -12,8 +12,10 @@ export const siteConfig = {
   hoursLabel: "هر روز، ۹ تا ۲۱",
   mobile: "09111375136",
   mobileInternational: "+989111375136",
-  landline: "0133520572",
+  landline: "01333520572",
   landlineInternational: "+98133520572",
+  additionalLandline: "01333523654",
+  additionalLandlineInternational: "+981333523654",
   instagram: "https://www.instagram.com/baharnaj_official/",
 };
 

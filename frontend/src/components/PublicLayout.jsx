@@ -44,6 +44,10 @@ export function PublicLayout({ children }) {
       <header className="site-header">
         <nav className="nav container" aria-label="ناوبری اصلی">
           <Link className="brand" to="/" onClick={closeMenu}>
+            <span className="brand-logo" aria-hidden="true">
+              <img className="brand-logo-light" src="/brand/icon-light.svg" alt="" width="48" height="48" />
+              <img className="brand-logo-dark" src="/brand/icon-dark.svg" alt="" width="48" height="48" />
+            </span>
             <b>بهارناژ<small>BAHARNAJ</small></b>
           </Link>
           <div className="desktop-links">
@@ -146,10 +150,13 @@ export function PublicLayout({ children }) {
         <div className="container footer-main">
           <div>
             <Link className="brand footer-brand" to="/">
+              <span className="brand-logo" aria-hidden="true">
+                <img src="/brand/icon-dark.svg" alt="" width="48" height="48" />
+              </span>
               <b>بهارناژ<small>BAHARNAJ</small></b>
             </Link>
             <p>بهارناژ در رشت؛ تجربه و توجه به سلیقهٔ شما، از انتخاب تا جزئیات نهایی.</p>
-            <address className="footer-contact">{siteConfig.address}<br /><a href={`tel:${siteConfig.mobileInternational}`}><bdi>{siteConfig.mobile}</bdi></a> · {siteConfig.hoursLabel}</address>
+            <address className="footer-contact">{siteConfig.address}<br /><a href={`tel:${siteConfig.mobileInternational}`}><bdi>{siteConfig.mobile}</bdi></a> · <a href={`tel:${siteConfig.additionalLandlineInternational}`}><bdi>{siteConfig.additionalLandline}</bdi></a><br />{siteConfig.hoursLabel}</address>
           </div>
           <nav aria-label="پیوندهای پایین صفحه">
             {publicLinks.filter(([path]) => path !== "/").map(([path, label]) => (
