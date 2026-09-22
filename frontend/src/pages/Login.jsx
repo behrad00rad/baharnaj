@@ -1,18 +1,23 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../shared/api";
 import { setSession } from "../shared/auth";
+import { useAuth } from "../shared/auth";
 import { SEO } from "../components/SEO";
 import PasswordInput from "../components/PasswordInput";
 
 export default function Login({ customerOnly = false }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { role, ready } = useAuth();
   const [form, setForm] = useState({ username: "", password: "" });
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (ready && role) navigate(role === "customer" ? "/account" : role === "employee" ? "/employee" : "/admin", { replace: true }); }, [navigate, ready, role]);
   const submit = async (event) => {
     event.preventDefault();
     setError("");
+    setBusy(true);
     try {
       await api.get("auth/csrf/");
       const { data } = await api.post("auth/token/", form);
@@ -29,7 +34,7 @@ export default function Login({ customerOnly = false }) {
         requestError.response?.data?.detail ||
           "اتصال به سرور برقرار نشد یا نام کاربری و رمز عبور صحیح نیست.",
       );
-    }
+    } finally { setBusy(false); }
   };
   return (
     <>
@@ -52,9 +57,7 @@ export default function Login({ customerOnly = false }) {
           <input
             required
             value={form.username}
-            onChange={(event) =>
-              setForm({ ...form, username: event.target.value })
-            }
+            onChange={(event) => setForm({ ...form, username: event.target.value })}
             autoComplete="username"
           />
         </label>
@@ -71,8 +74,8 @@ export default function Login({ customerOnly = false }) {
         </label>
         {error && <p className="error">{error}</p>}
         {location.state?.reset && <p role="status">رمز عبور تغییر کرد؛ اکنون وارد شوید.</p>}
-        <button className="button" type="submit">
-          ورود <span>←</span>
+        <button className="button" type="submit" disabled={busy}>
+          {busy ? "در حال ورود…" : <>ورود <span>←</span></>}
         </button>
         {customerOnly && <><Link to="/account/forgot-password">رمز عبور را فراموش کرده‌اید؟</Link><p>حساب ندارید؟ <Link to="/account/signup">ساخت حساب مشتری</Link></p></>}
         <Link className="login-switch" to={customerOnly ? "/staff/login" : "/account/login"}>{customerOnly ? "ورود کارکنان" : "ورود به حساب مشتری"}</Link>

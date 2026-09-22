@@ -25,10 +25,10 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .models import AdminActionLog, Appointment, AppointmentItem, AppointmentStatusHistory, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerAccountDeletionRequest, CustomerCommunicationPreference, CustomerIdentityClaim, CustomerMutationRequest, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, SalonClosure, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
+from .models import AccountLogin, AdminActionLog, Appointment, AppointmentItem, AppointmentStatusHistory, BlogCategory, BlogMedia, BlogPost, BlogTag, BookingHold, BookingHoldItem, CustomerAccountDeletionRequest, CustomerCommunicationPreference, CustomerIdentityClaim, CustomerMutationRequest, CustomerProfile, EmployeeCommission, EmployeeProfile, EmployeeService, FirebaseDevice, GalleryAsset, GalleryCategory, Notification, Payment, Refund, SalonClosure, Service, ServiceCategory, ServiceImage, TimeOff, Transaction, User, WaitlistEntry, WorkingSchedule
 from .permissions import IsAdmin, IsCustomer, IsEmployee, IsOwnEmployeeObject
 from .security import clear_failed_logins, is_locked, normalize_phone, record_failed_login
-from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminCustomerSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, CustomerAppointmentSerializer, CustomerDeletionRequestSerializer, CustomerPasswordChangeSerializer, CustomerPreferenceSerializer, CustomerProfileSerializer, CustomerRegistrationSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, SalonClosureSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
+from .serializers import AdminActionLogSerializer, AdminAppointmentCreateSerializer, AdminAppointmentStatusSerializer, AdminBlogPostListSerializer, AdminBlogPostSerializer, AdminCustomerOptionSerializer, AdminCustomerSerializer, AdminEmployeeCreateSerializer, AdminEmployeeSerializer, AdminGalleryAssetSerializer, AdminSelfAccountSerializer, AppointmentSerializer, BlogCategorySerializer, BlogMediaSerializer, BlogPostDetailSerializer, BlogPostListSerializer, BlogTagSerializer, BookingHoldSerializer, CustomerAppointmentSerializer, CustomerDeletionRequestSerializer, CustomerPasswordChangeSerializer, CustomerPreferenceSerializer, CustomerProfileSerializer, CustomerRegistrationSerializer, EmployeeAppointmentSerializer, EmployeeCommissionSerializer, EmployeePasswordChangeSerializer, EmployeePaymentReportSerializer, EmployeeSelfBookingSerializer, EmployeeSelfProfileSerializer, EmployeeSerializer, EmployeeWorkingScheduleSerializer, FirebaseDeviceSerializer, GalleryAssetSerializer, GalleryCategorySerializer, NotificationSerializer, RefundSerializer, SalonClosureSerializer, ServiceAdminSerializer, ServiceCategorySerializer, ServiceImageSerializer, ServiceSerializer, TimeOffSerializer, TransactionSerializer, UserAdminSerializer, AppointmentItemSerializer, WaitlistEntrySerializer, WorkingScheduleSerializer, PaymentSerializer
 
 
 def set_refresh_cookie(response, refresh):
@@ -1280,6 +1280,33 @@ class AdminCustomerOptionsView(generics.ListAPIView):
     queryset = CustomerProfile.objects.select_related("user").order_by("user__first_name", "user__username")
 
 
+class AdminSelfAccountView(generics.GenericAPIView):
+    permission_classes = (IsAdmin,)
+    serializer_class = AdminSelfAccountSerializer
+
+    def get(self, request):
+        return Response({"username": request.user.username, "last_login": request.user.last_login})
+
+    def patch(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        AdminActionLog.objects.create(actor=user, action="account_username_change", model_name="User", object_id=str(user.pk), details={"username": user.username})
+        return Response({"username": user.username})
+
+
+class AdminSelfPasswordChangeView(generics.GenericAPIView):
+    permission_classes = (IsAdmin,)
+    serializer_class = EmployeePasswordChangeSerializer
+
+    def post(self, request):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        AdminActionLog.objects.create(actor=user, action="account_password_change", model_name="User", object_id=str(user.pk))
+        return Response({"detail": "رمز عبور با موفقیت تغییر کرد."})
+
+
 class AdminTransactionTypesView(generics.GenericAPIView):
     permission_classes = (IsAdmin,)
 
@@ -1870,11 +1897,13 @@ class CookieTokenView(TokenObtainPairView):
         except Exception:
             if user:
                 record_failed_login(user, username, request.META.get("REMOTE_ADDR"))
+                AccountLogin.objects.create(user=user, ip_address=request.META.get("REMOTE_ADDR"), user_agent=request.META.get("HTTP_USER_AGENT", "")[:1000], succeeded=False)
             return Response({"detail": "نام کاربری یا رمز عبور صحیح نیست."}, status=status.HTTP_401_UNAUTHORIZED)
         user = serializer.user
         if user.account_status != "active":
             return Response({"detail": "این حساب در حال حاضر فعال نیست."}, status=status.HTTP_403_FORBIDDEN)
         clear_failed_logins(user, username, request.META.get("REMOTE_ADDR"))
+        AccountLogin.objects.create(user=user, ip_address=request.META.get("REMOTE_ADDR"), user_agent=request.META.get("HTTP_USER_AGENT", "")[:1000], succeeded=True)
         response = Response({"access": serializer.validated_data["access"], "role": user.role})
         set_refresh_cookie(response, serializer.validated_data["refresh"])
         response["X-CSRFToken"] = get_token(request)

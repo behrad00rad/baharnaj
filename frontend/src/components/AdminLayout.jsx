@@ -115,6 +115,10 @@ export default function AdminLayout() {
             ))}
           </nav>
           <div className="admin-sidebar-foot">
+            <NavLink to="/admin/account" onClick={() => setMenuOpen(false)}>
+              <i aria-hidden="true">♙</i>
+              <span>حساب من</span>
+            </NavLink>
             <NavLink to="/" aria-label="بازگشت به وب‌سایت" title="بازگشت به وب‌سایت">
               <i aria-hidden="true">↗</i>
               <span>وب‌سایت عمومی</span>

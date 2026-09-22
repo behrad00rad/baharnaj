@@ -101,6 +101,37 @@ function Preferences() {
     <PanelPreferences />
   </div>;
 }
+function AdminAccount() {
+  const [account, setAccount] = useState(null);
+  const [usernameForm, setUsernameForm] = useState({ username: "", current_password: "" });
+  const [passwordForm, setPasswordForm] = useState({ current_password: "", new_password: "", new_password_confirm: "" });
+  const [notice, setNotice] = useState("");
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState("");
+  useEffect(() => { api.get("admin/account/").then(({ data }) => { setAccount(data); setUsernameForm((form) => ({ ...form, username: data.username })); }).catch(() => setNotice("دریافت اطلاعات حساب انجام نشد.")); }, []);
+  const submitUsername = async (event) => {
+    event.preventDefault(); setSaving("username"); setErrors({}); setNotice("");
+    try { const { data } = await api.patch("admin/account/", usernameForm); setAccount((current) => ({ ...current, username: data.username })); setUsernameForm((form) => ({ ...form, username: data.username, current_password: "" })); setNotice("نام کاربری به‌روزرسانی شد."); }
+    catch (error) { setErrors(error.response?.data || { detail: "ذخیره نام کاربری انجام نشد." }); }
+    finally { setSaving(""); }
+  };
+  const submitPassword = async (event) => {
+    event.preventDefault(); setSaving("password"); setErrors({}); setNotice("");
+    try { const { data } = await api.post("admin/account/password/", passwordForm); setPasswordForm({ current_password: "", new_password: "", new_password_confirm: "" }); setNotice(data.detail); }
+    catch (error) { setErrors(error.response?.data || { detail: "تغییر رمز عبور انجام نشد." }); }
+    finally { setSaving(""); }
+  };
+  const errorFor = (field) => { const value = errors[field] || (field === "general" && errors.detail); return Array.isArray(value) ? value[0] : value; };
+  return <div className="admin-page admin-account-page">
+    <Header eyebrow="امنیت و دسترسی" title="حساب من" />
+    <p className="admin-account-intro">تغییرات حساس با رمز عبور فعلی تأیید می‌شوند و در گزارش امنیتی ثبت خواهند شد.</p>
+    {notice && <Toast message={notice} type={notice.includes("نشد") ? "error" : "success"} />}
+    {!account ? <Skeleton count={2} /> : <div className="admin-account-grid">
+      <form className="admin-panel admin-account-card" onSubmit={submitUsername}><div className="panel-title"><div><span>شناسه ورود</span><h2>نام کاربری</h2></div></div><p>نامی که هنگام ورود کارکنان استفاده می‌کنید.</p><label>نام کاربری<input required autoComplete="username" value={usernameForm.username} onChange={(event) => setUsernameForm({ ...usernameForm, username: event.target.value })} /></label><label>رمز عبور فعلی<PasswordInput required visibilityLabel="رمز عبور فعلی برای تغییر نام کاربری" autoComplete="current-password" value={usernameForm.current_password} onChange={(event) => setUsernameForm({ ...usernameForm, current_password: event.target.value })} /></label>{errorFor("username") && <small className="admin-field-error">{errorFor("username")}</small>}{errorFor("current_password") && <small className="admin-field-error">{errorFor("current_password")}</small>}<button className="admin-primary" disabled={saving === "username"}>{saving === "username" ? "در حال ذخیره…" : "ذخیره نام کاربری"}</button></form>
+      <form className="admin-panel admin-account-card" onSubmit={submitPassword}><div className="panel-title"><div><span>امنیت ورود</span><h2>تغییر رمز عبور</h2></div></div><p>رمز تازه باید دست‌کم ۸ نویسه داشته باشد و قابل حدس نباشد.</p><label>رمز عبور فعلی<PasswordInput required visibilityLabel="رمز عبور فعلی برای تغییر رمز" autoComplete="current-password" value={passwordForm.current_password} onChange={(event) => setPasswordForm({ ...passwordForm, current_password: event.target.value })} /></label><label>رمز عبور جدید<PasswordInput required visibilityLabel="رمز عبور جدید" autoComplete="new-password" value={passwordForm.new_password} onChange={(event) => setPasswordForm({ ...passwordForm, new_password: event.target.value })} /></label><label>تکرار رمز جدید<PasswordInput required visibilityLabel="تکرار رمز عبور جدید" autoComplete="new-password" value={passwordForm.new_password_confirm} onChange={(event) => setPasswordForm({ ...passwordForm, new_password_confirm: event.target.value })} /></label>{["current_password", "new_password", "new_password_confirm", "general"].map((field) => errorFor(field) && <small key={field} className="admin-field-error">{errorFor(field)}</small>)}<button className="admin-primary" disabled={saving === "password"}>{saving === "password" ? "در حال ذخیره…" : "تغییر رمز عبور"}</button></form>
+    </div>}
+  </div>;
+}
 function Stat({ label, value, note, accent = false }) {
   return (
     <article className={`admin-stat ${accent ? "accent" : ""}`}>
@@ -2467,6 +2498,7 @@ function AdminRouter() {
       <Route path="blog/:id/edit" element={<BlogEditor />} />
       <Route path="blog/:id/preview" element={<BlogPreview />} />
       <Route path="preferences" element={<Preferences />} />
+      <Route path="account" element={<AdminAccount />} />
       <Route path="*" element={<DashboardHome />} />
     </Routes>
   );

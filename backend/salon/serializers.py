@@ -346,6 +346,31 @@ class CustomerPasswordChangeSerializer(EmployeePasswordChangeSerializer):
     """Customer password changes use the same strong validation as staff."""
 
 
+class AdminSelfAccountSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150)
+    current_password = serializers.CharField(write_only=True)
+
+    def validate_current_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("رمز عبور فعلی صحیح نیست.")
+        return value
+
+    def validate_username(self, value):
+        username = value.strip()
+        if not username:
+            raise serializers.ValidationError("نام کاربری را وارد کنید.")
+        user = self.context["request"].user
+        if User.objects.exclude(pk=user.pk).filter(username__iexact=username).exists():
+            raise serializers.ValidationError("این نام کاربری قبلاً استفاده شده است.")
+        return username
+
+    def save(self, **kwargs):
+        user = self.context["request"].user
+        user.username = self.validated_data["username"]
+        user.save(update_fields=("username",))
+        return user
+
+
 class CustomerRegistrationSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=150)
     last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)

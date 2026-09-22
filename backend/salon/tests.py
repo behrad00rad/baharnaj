@@ -106,6 +106,23 @@ class FinalTouchesTests(TestCase):
         self.assertEqual(response.data["name"], "نام جدید")
         self.assertEqual(response.data["phone"], "09112223344")
 
+    def test_admin_can_change_only_own_account_credentials(self):
+        admin = User.objects.create_user(username="secure-admin", password="old-admin-password", role="admin")
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        account = client.get("/api/v1/admin/account/", secure=True)
+        renamed = client.patch("/api/v1/admin/account/", {"username": "updated-admin", "current_password": "old-admin-password"}, format="json", secure=True)
+        changed_password = client.post("/api/v1/admin/account/password/", {"current_password": "old-admin-password", "new_password": "new-admin-password", "new_password_confirm": "new-admin-password"}, format="json", secure=True)
+
+        self.assertEqual(account.status_code, 200)
+        self.assertEqual(account.data["username"], "secure-admin")
+        self.assertEqual(renamed.status_code, 200)
+        self.assertEqual(changed_password.status_code, 200)
+        admin.refresh_from_db()
+        self.assertEqual(admin.username, "updated-admin")
+        self.assertTrue(admin.check_password("new-admin-password"))
+
     def test_pending_reports_reduce_partial_reportable_balance(self):
         client = APIClient()
         client.force_authenticate(self.employee.user)
