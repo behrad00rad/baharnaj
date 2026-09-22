@@ -138,7 +138,7 @@
 .employee-app .employee-calendar-days button.selected b { background:var(--color-button-primary-text); }
 .employee-app .employee-selected-day { margin-top:18px; }
 
-.employee-app .employee-detail-backdrop { position:fixed;inset:0;z-index:1000;isolation:isolate;display:flex;justify-content:flex-start;direction:ltr;background:color-mix(in srgb,#07110f 58%,transparent);backdrop-filter:blur(3px); }
+.employee-app .employee-detail-backdrop { position:fixed;inset:0;z-index:2147483000;isolation:isolate;display:flex;justify-content:flex-start;direction:ltr;background:color-mix(in srgb,#07110f 58%,transparent);backdrop-filter:blur(3px); }
 .employee-app .employee-detail { position:relative;inset:auto;box-sizing:border-box;width:min(520px,100%);height:100dvh;min-height:0;padding:0 20px 24px;overflow:auto;border-radius:0 18px 18px 0;direction:rtl;background:var(--color-surface);box-shadow:0 20px 70px #0004;animation:employee-detail-enter-left .22s ease-out both; }
 @keyframes employee-detail-enter-left { from { transform:translateX(-100%); } to { transform:translateX(0); } }
 .employee-app .employee-detail .detail-top { position:sticky;top:0;z-index:2;align-items:center;margin-inline:-20px;padding:14px 20px 12px;border-bottom:1px solid var(--color-border);background:color-mix(in srgb,var(--color-surface) 96%,transparent);backdrop-filter:blur(12px); }
@@ -310,7 +310,7 @@
   .employee-app .employee-calendar-number { display:grid;width:32px;height:32px;place-items:center;border-radius:50%;background:var(--color-surface-subtle); }
   .employee-app .employee-calendar-days button.selected .employee-calendar-number { background:var(--color-surface);color:var(--color-link); }
   .employee-app .employee-detail-backdrop { align-items:flex-end; }
-  .employee-app .employee-detail { width:100%;height:min(88dvh,760px);padding:0 14px 18px;border-radius:18px 18px 0 0;animation:employee-detail-enter-bottom .22s ease-out both; }
+  .employee-app .employee-detail { width:100%;height:min(88dvh,760px);padding:0 14px calc(108px + env(safe-area-inset-bottom));border-radius:18px 18px 0 0;animation:employee-detail-enter-bottom .22s ease-out both; }
   .employee-app .employee-detail .detail-top { margin-inline:-14px;padding:11px 14px; }
   .employee-app .employee-detail .detail-top h2 { font-size:var(--text-body); }
   .employee-app .employee-detail .customer-head { margin-top:12px; }
