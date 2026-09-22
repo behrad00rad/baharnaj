@@ -83,6 +83,29 @@ class FinalTouchesTests(TestCase):
         self.assertTrue(ServiceCategory.objects.filter(pk=self.category.pk).exists())
         self.assertIn("سرویس", response.data["detail"])
 
+    def test_admin_can_update_employee_name_and_phone(self):
+        admin = User.objects.create_user(username="employee-editor", role="admin")
+        employee_user = User.objects.create_user(
+            username="employee-contact", first_name="نام قبلی", phone="09110000000", role="employee"
+        )
+        employee = EmployeeProfile.objects.create(user=employee_user, specialty="ناخن")
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.patch(
+            f"/api/v1/admin/employees/{employee.pk}/",
+            {"name": "نام جدید", "phone": "09112223344"},
+            format="json",
+            secure=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        employee_user.refresh_from_db()
+        self.assertEqual(employee_user.first_name, "نام جدید")
+        self.assertEqual(employee_user.phone, "09112223344")
+        self.assertEqual(response.data["name"], "نام جدید")
+        self.assertEqual(response.data["phone"], "09112223344")
+
     def test_pending_reports_reduce_partial_reportable_balance(self):
         client = APIClient()
         client.force_authenticate(self.employee.user)

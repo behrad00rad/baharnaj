@@ -279,6 +279,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
     def get_profile_photo_url(self, obj):
         return absolute_media_url(self.context.get("request"), obj.profile_photo.url if obj.profile_photo else "")
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["name"] = instance.user.get_full_name()
+        return data
+
     def validate_profile_photo(self, value):
         if isinstance(value, str):
             raise serializers.ValidationError("لطفاً یک فایل تصویر جدید انتخاب کنید.")
@@ -384,14 +389,15 @@ class CustomerRegistrationSerializer(serializers.Serializer):
 
 
 class AdminEmployeeSerializer(serializers.ModelSerializer):
-    name = serializers.CharField(source="user.get_full_name", read_only=True)
+    name = serializers.CharField(source="user.first_name", required=False, allow_blank=True)
+    phone = serializers.CharField(source="user.phone", required=False, allow_blank=True)
     profile_photo_url = serializers.SerializerMethodField()
     services = serializers.PrimaryKeyRelatedField(queryset=Service.objects.filter(is_active=True, is_bookable=True), many=True, required=False, write_only=True)
     service_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeProfile
-        fields = ("id", "user", "name", "specialty", "bio", "commission_rate", "is_active", "profile_photo", "profile_photo_url", "services", "service_ids")
+        fields = ("id", "user", "name", "phone", "specialty", "bio", "commission_rate", "is_active", "profile_photo", "profile_photo_url", "services", "service_ids")
         extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
 
     def get_profile_photo_url(self, obj):
@@ -407,6 +413,16 @@ class AdminEmployeeSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         services = validated_data.pop("services", None)
+        user_data = validated_data.pop("user", None)
+        if user_data:
+            user = instance.user
+            changed_fields = []
+            for field, value in user_data.items():
+                if getattr(user, field) != value:
+                    setattr(user, field, value)
+                    changed_fields.append(field)
+            if changed_fields:
+                user.save(update_fields=changed_fields)
         employee = super().update(instance, validated_data)
         if services is not None:
             EmployeeService.objects.filter(employee=employee).delete()
@@ -422,7 +438,7 @@ class AdminEmployeeCreateSerializer(AdminEmployeeSerializer):
     phone = serializers.CharField(required=False, write_only=True, allow_blank=True)
 
     class Meta(AdminEmployeeSerializer.Meta):
-        fields = AdminEmployeeSerializer.Meta.fields + ("username", "password", "phone")
+        fields = AdminEmployeeSerializer.Meta.fields + ("username", "password")
 
     def validate(self, attrs):
         user = attrs.get("user")
