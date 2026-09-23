@@ -17,11 +17,11 @@
         document.documentElement.style.colorScheme = theme;
       })();
     </script>
-    <meta data-baharnaj-seo="description" name="description" content="سالن زیبایی بهارناژ در رشت؛ سرویس‌ها را ببینید و نوبت خود را آنلاین رزرو کنید." />
-    <title>سالن زیبایی بهارناژ در رشت | رزرو نوبت و نمونه‌کارها</title>
+    <!--ssr-head-->
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <div id="root"><!--ssr-outlet--></div>
+    <!--ssr-data-->
+    <script type="module" src="/src/entry-client.jsx"></script>
   </body>
 </html>

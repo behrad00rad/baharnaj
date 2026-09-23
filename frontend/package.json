@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:client && npm run build:server",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:client": "vite build",
+    "build:server": "vite build --ssr src/entry-server.jsx --outDir dist/server",
+    "start:ssr": "node server.mjs"
   },
   "dependencies": {
     "@majidh1/jalalidatepicker": "^1.0.0",

@@ -3,18 +3,22 @@ import { useFocusScope } from "../shared/useFocusScope";
 import { PageIntro } from "../components/PublicLayout";
 import { MediaImage, PublicState } from "../components/PublicUI";
 import { api } from "../shared/api";
+import { useInitialData } from "../shared/ssrData";
 import { SEO } from "../components/SEO";
 
 const unwrap = (data) => data?.results || data || [];
 
 export default function Gallery() {
   const dialogRef = useRef(null);
-  const [items, setItems] = useState([]);
-  const [categoryOptions, setCategoryOptions] = useState([]);
+  const initialItems = useInitialData("gallery/");
+  const initialCategories = useInitialData("gallery/categories/");
+  const [items, setItems] = useState(() => unwrap(initialItems || []));
+  const [categoryOptions, setCategoryOptions] = useState(() => unwrap(initialCategories || []));
   const [category, setCategory] = useState("همه");
   const [activeId, setActiveId] = useState(null);
-  const [state, setState] = useState("loading");
+  const [state, setState] = useState(initialItems !== undefined && initialCategories !== undefined ? "ready" : "loading");
   useEffect(() => {
+    if (initialItems !== undefined && initialCategories !== undefined) return undefined;
     let active = true;
     Promise.all([api.get("gallery/"), api.get("gallery/categories/")])
       .then(([gallery, categories]) => {

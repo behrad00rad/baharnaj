@@ -1,0 +1,30 @@
+[Unit]
+Description=Baharnaj public page SSR
+After=network.target baharnaj-gunicorn.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=baharnaj
+Group=baharnaj
+WorkingDirectory=/home/baharnaj/apps/baharnaj/frontend
+Environment=NODE_ENV=production
+Environment=SSR_PORT=3000
+Environment=SSR_API_BASE_URL=http://127.0.0.1:8000/api/v1/
+Environment=SSR_PUBLIC_ORIGIN=https://baharnaj.ir
+ExecStart=/usr/bin/node /home/baharnaj/apps/baharnaj/frontend/server.mjs
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+UMask=0027
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

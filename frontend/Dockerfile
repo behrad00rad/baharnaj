@@ -19,3 +19,15 @@ COPY proxy_params_baharnaj /etc/nginx/proxy_params_baharnaj
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s CMD wget -q -O /dev/null http://127.0.0.1/healthz || exit 1
+
+FROM node:22.13.0-alpine AS ssr-production
+WORKDIR /app
+ENV NODE_ENV=production SSR_PORT=3000
+COPY --from=dependencies /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY server.mjs ./server.mjs
+COPY package.json ./package.json
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s CMD wget -q -O /dev/null http://127.0.0.1:3000/healthz || exit 1
+CMD ["node", "server.mjs"]

@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState, useEffect } from "react";
 
 export const THEME_STORAGE_KEY = "baharnaj-theme";
 export const TEXT_SIZE_STORAGE_KEY = "baharnaj-text-size";
@@ -19,18 +19,17 @@ function applyTheme(theme) {
 }
 
 export function ThemeProvider({ children }) {
-  const [theme, setThemeState] = useState(() => {
-    const initial = preferredTheme();
-    if (typeof document !== "undefined") applyTheme(initial);
-    return initial;
-  });
-
-  const [textSize, setTextSizeState] = useState(() => {
+  const [theme, setThemeState] = useState("light");
+  const [textSize, setTextSizeState] = useState("normal");
+  useEffect(() => {
+    const chosen = preferredTheme();
+    setThemeState(chosen);
+    applyTheme(chosen);
     const saved = readPreference(TEXT_SIZE_STORAGE_KEY);
     const size = ["compact", "normal", "large"].includes(saved) ? saved : "normal";
+    setTextSizeState(size);
     document.documentElement.dataset.textSize = size;
-    return size;
-  });
+  }, []);
   const value = useMemo(
     () => ({
       theme,

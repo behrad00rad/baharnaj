@@ -1,7 +1,7 @@
 import BookingManage from "./pages/BookingManage";
 import TelegramSettings from "./pages/TelegramSettings";
 import { lazy, Suspense, useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, StaticRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { PublicLayout } from "./components/PublicLayout";
 import Booking from "./pages/Booking";
 import AdminLayout from "./components/AdminLayout";
@@ -41,7 +41,7 @@ function MobileScrollReset() {
 }
 
 // App is intentionally limited to routing; page behavior lives beside its page.
-export default function App() {
+export default function App({ serverUrl }) {
   const { ready } = useAuth();
   useEffect(() => {
     authBootstrapPromise ??= api
@@ -50,10 +50,11 @@ export default function App() {
       .catch(() => clearSessionState())
       .finally(markAuthReady);
   }, []);
-  if (!ready) return null;
+  if (!ready && !serverUrl) return null;
+  const Router = serverUrl ? StaticRouter : BrowserRouter;
   return (
     <ThemeProvider>
-      <BrowserRouter>
+      <Router {...(serverUrl ? { location: serverUrl } : {})}>
       <MobileScrollReset />
       <Routes>
         <Route
@@ -168,7 +169,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<PublicLayout><NotFound /></PublicLayout>} />
       </Routes>
-      </BrowserRouter>
+      </Router>
     </ThemeProvider>
   );
 }

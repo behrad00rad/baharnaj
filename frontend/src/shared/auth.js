@@ -21,4 +21,4 @@ export const setSession = (token, nextRole) => updateSnapshot(token, nextRole ||
 export const clearSessionState = () => updateSnapshot(null, null, ready)
 export const markAuthReady = () => updateSnapshot(accessToken, role, true)
 const subscribe = (listener) => { listeners.add(listener); return () => listeners.delete(listener) }
-export const useAuth = () => useSyncExternalStore(subscribe, () => snapshot)
+export const useAuth = () => useSyncExternalStore(subscribe, () => snapshot, () => snapshot)

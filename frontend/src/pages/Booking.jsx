@@ -98,7 +98,9 @@ export default function Booking() {
   const [holdRemaining, setHoldRemaining] = useState(0);
   const [holdExpired, setHoldExpired] = useState(false);
   const [availabilityRefresh, setAvailabilityRefresh] = useState(0);
-  const [online, setOnline] = useState(() => navigator.onLine);
+  // Keep the first client render identical to SSR. The effect below applies the
+  // browser's actual connectivity state immediately after hydration.
+  const [online, setOnline] = useState(true);
   const [confirmation, setConfirmation] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -155,6 +157,7 @@ export default function Booking() {
   }, [role]);
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
+    update();
     window.addEventListener("online", update);
     window.addEventListener("offline", update);
     return () => { window.removeEventListener("online", update); window.removeEventListener("offline", update); };
@@ -813,7 +816,7 @@ function Confirmation({ appointment, navigate }) {
       <p>
         کد پیگیری شما: <strong>{appointment.confirmation_code}</strong>
       </p>
-      <div className="confirmation-actions"><button type="button" onClick={copyCode}>کپی کد پیگیری</button>{navigator.share && <button type="button" onClick={share}>اشتراک‌گذاری</button>}<button type="button" onClick={() => window.print()}>چاپ رسید</button></div>
+      <div className="confirmation-actions"><button type="button" onClick={copyCode}>کپی کد پیگیری</button>{typeof navigator !== "undefined" && navigator.share && <button type="button" onClick={share}>اشتراک‌گذاری</button>}<button type="button" onClick={() => window.print()}>چاپ رسید</button></div>
       <div className="confirmation-card">
         <h2>جزئیات نوبت</h2>
         {appointment.items?.map((item) => (

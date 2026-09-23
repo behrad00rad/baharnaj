@@ -36,6 +36,21 @@ services:
     restart: unless-stopped
     networks: [application]
     security_opt: [no-new-privileges:true]
+  ssr:
+    image: baharnaj-ssr:${RELEASE_ID:?Set reviewed release identifier}
+    build:
+      context: ./frontend
+      target: ssr-production
+    environment:
+      SSR_API_BASE_URL: http://backend:8000/api/v1/
+      SSR_PUBLIC_ORIGIN: https://baharnaj.ir
+      SSR_PORT: "3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [application]
+    security_opt: [no-new-privileges:true]
   frontend:
     image: baharnaj-frontend:${RELEASE_ID:?Set reviewed release identifier}
     build:
@@ -53,6 +68,8 @@ services:
           create_host_path: false
     depends_on:
       backend:
+        condition: service_healthy
+      ssr:
         condition: service_healthy
     restart: unless-stopped
     networks: [application]
