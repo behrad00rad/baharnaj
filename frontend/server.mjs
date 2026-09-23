@@ -1,4 +1,5 @@
-import { createServer } from 'node:http'
+import http, { createServer } from 'node:http'
+import https from 'node:https'
 import { readFile } from 'node:fs/promises'
 import { render } from './dist/server/entry-server.js'
 const template = await readFile(new URL('./dist/index.html', import.meta.url), 'utf8')
@@ -11,18 +12,31 @@ const json = (v) => JSON.stringify(v).replace(/[<>&\u2028\u2029]/g, c => `\\u${c
 async function get(endpoint) {
   const url = new URL(endpoint, base)
   if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) throw Error('Invalid API URL')
-  const response = await fetch(url, {
-    headers: {
+  const transport = url.protocol === 'https:' ? https : http
+  return new Promise((resolve, reject) => {
+    const request = transport.get(url, { headers: {
       Accept: 'application/json',
       Host: publicOrigin.host,
       'X-Forwarded-Host': publicOrigin.host,
       'X-Forwarded-Proto': publicOrigin.protocol.slice(0, -1),
-    },
-    signal: AbortSignal.timeout(8000),
+    } }, (response) => {
+      const chunks = []
+      let size = 0
+      response.on('data', (chunk) => {
+        size += chunk.length
+        if (size > 10 * 1024 * 1024) request.destroy(Error('Public API response is too large'))
+        else chunks.push(chunk)
+      })
+      response.on('end', () => {
+        if (response.statusCode === 404) { resolve(null); return }
+        if (response.statusCode < 200 || response.statusCode >= 300) { reject(Error(`API ${response.statusCode}: ${endpoint}`)); return }
+        try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))) }
+        catch (error) { reject(error) }
+      })
+    })
+    request.setTimeout(8000, () => request.destroy(Error(`Public API timeout: ${endpoint}`)))
+    request.on('error', reject)
   })
-  if (response.status === 404) return null
-  if (!response.ok) throw Error(`API ${response.status}: ${endpoint}`)
-  return response.json()
 }
 async function load(path, search) {
   const data = {}, add = async e => {data[e] = await get(e)}
