@@ -18,12 +18,12 @@ export default function BlogArticle() {
   const description = post.seo_description || post.excerpt || post.title;
   const socialImage = post.og_image_url || post.cover_image_url;
   const published = post.published_at || post.scheduled_publish_at || post.created_at;
-  const schema = { "@context": "https://schema.org", "@type": "BlogPosting", headline: post.title, description, url: siteUrl(canonicalPath), mainEntityOfPage: siteUrl(canonicalPath), datePublished: published, dateModified: post.updated_at, author: { "@type": "Person", name: post.author_name }, publisher: { "@type": "BeautySalon", name: siteConfig.name, url: siteUrl("/") }, ...(socialImage ? { image: socialImage } : {}) };
+  const schema = { "@context": "https://schema.org", "@type": "BlogPosting", headline: post.title, description, url: siteUrl(canonicalPath), mainEntityOfPage: siteUrl(canonicalPath), datePublished: published, dateModified: post.updated_at, author: { "@type": "Organization", name: "تحریریهٔ بهارناژ" }, publisher: { "@type": "BeautySalon", name: siteConfig.name, url: siteUrl("/") }, ...(socialImage ? { image: socialImage } : {}) };
   return <>
     <SEO title={post.seo_title || `${post.title} | مجله بهارناژ`} description={description} canonicalPath={canonicalPath} image={socialImage} ogType="article" structuredData={schema} />
     <article className="blog-article">
       <nav className="breadcrumbs container" aria-label="مسیر صفحه"><Link to="/">خانه</Link><span>←</span><Link to="/blog">مجله</Link><span>←</span><span aria-current="page">{post.category?.name || post.title}</span></nav>
-      <header className="article-header container"><span>{post.category?.name || "مجله بهارناژ"}</span><h1>{post.title}</h1>{post.excerpt && <p>{post.excerpt}</p>}<div><time dateTime={published}>{articleDate(published)}</time><span>نوشته {post.author_name}</span></div></header>
+      <header className="article-header container"><span>{post.category?.name || "مجله بهارناژ"}</span><h1>{post.title}</h1>{post.excerpt && <p>{post.excerpt}</p>}<div><time dateTime={published}>{articleDate(published)}</time><span>تحریریهٔ بهارناژ</span></div></header>
       {post.cover_image_url && <div className="article-hero container"><MediaImage src={post.cover_image_url} alt={post.cover_alt_text || post.title} eager /></div>}
       <div className="article-reading"><BlogContent blocks={post.content} media={post.media} services={post.related_services} /></div>
       {!!post.related_services?.length && <section className="article-related-services container"><p className="eyebrow">FROM READING TO DOING</p><h2>سرویس‌های مرتبط در بهارناژ</h2><div>{post.related_services.slice(0, 3).map((service) => <BlogServiceCard key={service.id} service={service} />)}</div></section>}

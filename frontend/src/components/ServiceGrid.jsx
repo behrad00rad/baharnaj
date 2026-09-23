@@ -8,7 +8,7 @@ export function ServiceCard({ service, index = 0 }) {
   const image = service.images?.[0];
   return (
     <article className="service-card">
-      {image?.image_url && <Link className="service-card-media" to={`/services/${service.slug || service.id}`}><MediaImage src={image.image_url} alt={image.alt_text || `${name} در بهارناژ`} /></Link>}
+      <Link className="service-card-media" to={`/services/${service.slug || service.id}`}><MediaImage src={image?.image_url} alt={image?.alt_text || `${name} در بهارناژ`} /></Link>
       <div className="service-card-top">
         <span>
           {new Intl.NumberFormat("fa-IR", {
@@ -19,7 +19,7 @@ export function ServiceCard({ service, index = 0 }) {
         {category && <small>{category}</small>}
       </div>
       <div className="service-card-copy">
-        <h3>{name}</h3>
+        <h3><Link to={`/services/${service.slug || service.id}`}>{name}</Link></h3>
         {(service.short_description || service.description) && <p>{service.short_description || service.description}</p>}
       </div>
       <div className="service-meta">
@@ -40,6 +40,7 @@ export function ServiceGrid({
   services,
   state = "ready",
   empty = "در حال حاضر سرویسی برای نمایش ثبت نشده است.",
+  mode = "visual",
 }) {
   if (state !== "ready" || !services.length)
     return (
@@ -50,7 +51,7 @@ export function ServiceGrid({
       />
     );
   return (
-    <div className="service-grid">
+    <div className={`service-grid service-grid-${mode}`}>
       {services.map((service, index) => (
         <ServiceCard service={service} index={index} key={service.id} />
       ))}

@@ -30,6 +30,10 @@ function renderLayout() {
 }
 
 describe("admin mobile navigation", () => {
+  it("includes the SMS page in the administrator menu", () => {
+    renderLayout();
+    expect(screen.getByRole("link", { name: /پیامک و یادآوری/ })).toHaveAttribute("href", "/admin/sms");
+  });
   it("opens and closes the menu from the mobile top bar", () => {
     renderLayout();
     const openButton = screen.getByRole("button", {

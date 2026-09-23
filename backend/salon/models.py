@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Max
 from django.utils import timezone
 from django.utils.text import slugify
 from decimal import Decimal
@@ -225,6 +226,16 @@ class EmployeeProfile(SoftDeleteModel):
     commission_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)
     profile_photo = models.ImageField(upload_to="profiles/", blank=True)
+    display_order = models.PositiveIntegerField(null=True, blank=True, editable=False)
+
+    class Meta:
+        ordering = ("display_order", "pk")
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.display_order is None:
+            last = EmployeeProfile.all_objects.aggregate(last=Max("display_order"))["last"]
+            self.display_order = (last if last is not None else -1) + 1
+        super().save(*args, **kwargs)
 
     def clean(self):
         if self.user_id and self.user.role != "employee":
@@ -287,11 +298,12 @@ class Service(models.Model):
     is_bookable = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)
+    display_order = models.PositiveIntegerField(null=True, blank=True, editable=False)
     objects = SoftDeleteManager()
     all_objects = models.Manager()
 
     class Meta:
-        ordering = ("name",)
+        ordering = ("category__display_order", "category_id", "display_order", "pk")
 
     def clean(self):
         errors = {}
@@ -323,6 +335,16 @@ class Service(models.Model):
         self.save(update_fields=("is_deleted",))
 
     def save(self, *args, **kwargs):
+        if self._state.adding and self.display_order is None:
+            last = Service.all_objects.filter(category_id=self.category_id).aggregate(last=Max("display_order"))["last"]
+            self.display_order = (last if last is not None else -1) + 1
+        elif not self._state.adding and self.pk:
+            old_category = Service.all_objects.filter(pk=self.pk).values_list("category_id", flat=True).first()
+            if old_category is not None and old_category != self.category_id:
+                last = Service.all_objects.filter(category_id=self.category_id).aggregate(last=Max("display_order"))["last"]
+                self.display_order = (last if last is not None else -1) + 1
+                if kwargs.get("update_fields") is not None:
+                    kwargs["update_fields"] = set(kwargs["update_fields"]) | {"display_order"}
         if not self.slug:
             base_slug = slugify(self.name, allow_unicode=False) or "service"
             candidate = base_slug

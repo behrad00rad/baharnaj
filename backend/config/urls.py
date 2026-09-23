@@ -23,6 +23,7 @@ from salon.views import CookieLogoutView, CookieRefreshView, CookieTokenView, Cs
 from salon.seo import robots_txt, sitemap_xml
 
 urlpatterns = [
+    path("api/v1/sms/", include("sms_crm.urls")),
     path("api/v1/telegram/", include("telegram_crm.urls")),
     path("robots.txt", robots_txt, name="robots-txt"),
     path("sitemap.xml", sitemap_xml, name="sitemap-xml"),

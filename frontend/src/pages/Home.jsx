@@ -66,7 +66,7 @@ export default function Home() {
             text="سرویس‌ها و جزئیات هزینه را ببین و با توجه به سلیقه‌ات انتخاب کن."
             action={<ArrowLink to="/services">همهٔ سرویس‌ها</ArrowLink>}
           />
-          <ServiceGrid services={services.slice(0, 3)} state={serviceState} />
+          <ServiceGrid services={(services.some((service) => service.is_featured) ? services.filter((service) => service.is_featured) : services).slice(0, 3)} state={serviceState} />
         </div>
       </section>
 

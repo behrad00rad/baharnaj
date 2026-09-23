@@ -336,7 +336,7 @@ class FirebaseDeviceViewSet(viewsets.ViewSet):
 
 class ServiceListView(generics.ListAPIView):
     permission_classes = (AllowAny,)
-    queryset = Service.objects.filter(is_active=True, is_bookable=True).select_related("category").prefetch_related("images", "employee_links__employee__user")
+    queryset = Service.objects.filter(is_active=True, is_bookable=True).select_related("category").prefetch_related("images", "employee_links__employee__user").order_by("category__display_order", "category_id", "display_order", "pk")
     serializer_class = ServiceSerializer
 
 
@@ -379,8 +379,8 @@ class EmployeeListView(generics.ListAPIView):
         queryset = EmployeeProfile.objects.filter(is_active=True).select_related("user").prefetch_related("service_links__service")
         service_ids = [value for value in self.request.query_params.get("service", "").split(",") if value]
         if service_ids:
-            return queryset.filter(service_links__service_id__in=service_ids, service_links__is_active=True).annotate(service_count=Count("service_links__service", distinct=True)).filter(service_count=len(set(service_ids)))
-        return queryset
+            return queryset.filter(service_links__service_id__in=service_ids, service_links__is_active=True).annotate(service_count=Count("service_links__service", distinct=True)).filter(service_count=len(set(service_ids))).order_by("display_order", "pk")
+        return queryset.order_by("display_order", "pk")
 
 
 def parse_availability_items(request):
@@ -680,6 +680,8 @@ class AppointmentCreateView(generics.CreateAPIView):
             import logging
             logging.getLogger(__name__).warning("Optional Telegram receipt unavailable (%s)", type(error).__name__)
             data["telegram_receipt"] = None
+        from sms_crm.automation import safe_after_commit
+        safe_after_commit(appointment.pk)
         response = Response(data, status=status.HTTP_201_CREATED)
         if request.data.get("create_account") and not request.user.is_authenticated:
             user = appointment.customer.user
@@ -879,6 +881,8 @@ class CustomerAppointmentMutationView(CustomerBaseView, generics.GenericAPIView)
             return Response({"code": "status_not_eligible", "detail": "این نوبت قابل تغییر نیست."}, status=status.HTTP_409_CONFLICT)
         if action == "cancel":
             appointment.set_status("cancelled", changed_by=request.user, reason=str(request.data.get("reason", "لغو توسط مشتری"))[:500])
+            from sms_crm.automation import safe_after_commit
+            safe_after_commit(appointment.pk)
             transaction.on_commit(lambda: Notification.objects.create(recipient=request.user, type="appointment_cancelled", title="نوبت لغو شد", message="نوبت شما با موفقیت لغو شد.", appointment=appointment, target_url=f"/account/appointments/{appointment.pk}"))
             response = Response(CustomerAppointmentSerializer(appointment, context={"request": request}).data)
         else:
@@ -908,6 +912,8 @@ class CustomerAppointmentMutationView(CustomerBaseView, generics.GenericAPIView)
                 item.date, item.start_time, item.end_time, item.updated_by = target_date, start_time, end_time, request.user
                 item.save(update_fields=("date", "start_time", "end_time", "updated_by", "updated_at"))
             AppointmentStatusHistory.objects.create(appointment=appointment, status=appointment.status, changed_by=request.user, reason="تغییر زمان توسط مشتری", created_by=request.user, updated_by=request.user)
+            from sms_crm.automation import safe_after_commit
+            safe_after_commit(appointment.pk)
             appointment.refresh_from_db()
             transaction.on_commit(lambda: Notification.objects.create(recipient=request.user, type="appointment_rescheduled", title="زمان نوبت تغییر کرد", message="زمان نوبت شما با موفقیت تغییر کرد.", appointment=appointment, target_url=f"/account/appointments/{appointment.pk}"))
             response = Response(CustomerAppointmentSerializer(appointment, context={"request": request}).data)
@@ -1091,9 +1097,46 @@ class AdminTimeOffViewSet(viewsets.ReadOnlyModelViewSet):
         return self._review(request, pk, "rejected")
 
 
+def validate_reorder_items(raw_items, queryset):
+    """Validate a complete scope before changing any positions."""
+    if not isinstance(raw_items, list) or not 1 <= len(raw_items) <= 500:
+        raise ValidationError({"items": "بین ۱ تا ۵۰۰ مورد را ارسال کنید."})
+    if any(not isinstance(item, dict) or set(item) != {"id", "display_order"}
+           or isinstance(item.get("id"), bool) or not isinstance(item.get("id"), int) or item["id"] < 1
+           or isinstance(item.get("display_order"), bool) or not isinstance(item.get("display_order"), int)
+           or item["display_order"] < 0 for item in raw_items):
+        raise ValidationError({"items": "شناسه و جایگاه هر مورد باید معتبر باشد."})
+    ids = [item["id"] for item in raw_items]
+    positions = [item["display_order"] for item in raw_items]
+    if len(ids) != len(set(ids)) or len(positions) != len(set(positions)):
+        raise ValidationError({"items": "شناسه یا جایگاه تکراری است."})
+    objects = {item.pk: item for item in queryset}
+    if len(objects) > 500 or set(ids) != set(objects):
+        raise ValidationError({"items": "فهرست باید تمام موارد همین محدوده را شامل شود."})
+    ordered = [objects[item["id"]] for item in sorted(raw_items, key=lambda value: value["display_order"])]
+    for position, item in enumerate(ordered):
+        item.display_order = position
+    return ordered
+
+
 class AdminServiceViewSet(AdminModelViewSet):
     queryset = Service.objects.select_related("category").prefetch_related("images", "employee_links__employee__user")
     serializer_class = ServiceAdminSerializer
+
+    @action(detail=False, methods=("post",))
+    def reorder(self, request):
+        category_id = request.data.get("category_id")
+        if isinstance(category_id, bool) or not str(category_id).isdigit():
+            raise ValidationError({"category_id": "دسته‌بندی معتبر را انتخاب کنید."})
+        category_id = int(category_id)
+        if not ServiceCategory.objects.filter(pk=category_id).exists():
+            raise ValidationError({"category_id": "دسته‌بندی پیدا نشد."})
+        with transaction.atomic():
+            queryset = Service.objects.select_for_update().filter(category_id=category_id)
+            ordered = validate_reorder_items(request.data.get("items"), queryset)
+            Service.objects.bulk_update(ordered, ["display_order"])
+            AdminActionLog.objects.create(actor=request.user, action="reorder", model_name="Service", object_id=str(category_id), details={"ids": [item.pk for item in ordered]})
+        return Response({"category_id": category_id, "items": [{"id": item.pk, "display_order": item.display_order} for item in ordered]})
 
 
 class AdminGalleryViewSet(AdminModelViewSet):
@@ -1133,6 +1176,15 @@ class AdminGalleryCategoryDetailView(generics.DestroyAPIView):
 class AdminEmployeeViewSet(AdminModelViewSet):
     queryset = EmployeeProfile.objects.select_related("user")
     serializer_class = AdminEmployeeSerializer
+
+    @action(detail=False, methods=("post",))
+    def reorder(self, request):
+        with transaction.atomic():
+            queryset = EmployeeProfile.objects.select_for_update()
+            ordered = validate_reorder_items(request.data.get("items"), queryset)
+            EmployeeProfile.objects.bulk_update(ordered, ["display_order"])
+            AdminActionLog.objects.create(actor=request.user, action="reorder", model_name="EmployeeProfile", object_id="all", details={"ids": [item.pk for item in ordered]})
+        return Response({"items": [{"id": item.pk, "display_order": item.display_order} for item in ordered]})
 
     def get_serializer_class(self):
         return AdminEmployeeCreateSerializer if self.action == "create" else AdminEmployeeSerializer
@@ -1481,6 +1533,8 @@ class AdminAppointmentViewSet(AdminModelViewSet):
 
     def perform_create(self, serializer):
         appointment = serializer.save()
+        from sms_crm.automation import safe_after_commit
+        safe_after_commit(appointment.pk)
         from .notifications import notify_appointment_created
         notify_appointment_created(appointment, actor=self.request.user)
         AdminActionLog.objects.create(actor=self.request.user, action="create", model_name="Appointment", object_id=str(appointment.pk), details={"status": appointment.status})
@@ -1503,6 +1557,8 @@ class AdminAppointmentViewSet(AdminModelViewSet):
             notify_customer_status(appointment)
         appointment.refresh_from_db()
         serializer.instance = appointment
+        from sms_crm.automation import safe_after_commit
+        safe_after_commit(appointment.pk)
         AdminActionLog.objects.create(actor=self.request.user, action="update", model_name="Appointment", object_id=str(appointment.pk), details={"fields": ["status"]})
 
 
@@ -1540,6 +1596,9 @@ class AppointmentItemViewSet(FinalPriceActionMixin, AdminModelViewSet):
         old_schedule = (item.date, item.start_time, item.end_time)
         item = serializer.save(updated_by=self.request.user)
         if old_schedule != (item.date, item.start_time, item.end_time):
+            AppointmentStatusHistory.objects.create(appointment=item.appointment, status=item.appointment.status, changed_by=self.request.user, reason="تغییر زمان توسط مدیر", created_by=self.request.user, updated_by=self.request.user)
+            from sms_crm.automation import safe_after_commit
+            safe_after_commit(item.appointment_id)
             from .notifications import notify_appointment_rescheduled
             notify_appointment_rescheduled(item.appointment, actor=self.request.user)
 
@@ -1563,6 +1622,8 @@ class AppointmentItemViewSet(FinalPriceActionMixin, AdminModelViewSet):
         item.set_completion_status(status_map[requested_action], changed_by=request.user, reason=reason)
         item.appointment.refresh_from_db()
         if requested_action == "cancel":
+            from sms_crm.automation import safe_after_commit
+            safe_after_commit(item.appointment_id)
             from .notifications import notify_appointment_cancelled
             notify_appointment_cancelled(item.appointment, actor=request.user, item=item)
         return Response(AppointmentItemSerializer(item, context={"request": request}).data)

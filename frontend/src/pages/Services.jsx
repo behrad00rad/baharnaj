@@ -3,10 +3,13 @@ import { PageIntro } from "../components/PublicLayout";
 import { ServiceGrid } from "../components/ServiceGrid";
 import { useServices } from "../shared/hooks";
 import { SEO } from "../components/SEO";
+import { ViewToggle } from "../components/BrowseToolbar";
+import { useViewPreference } from "../shared/viewPreference";
 
 export default function Services() {
   const { services, state } = useServices();
   const [category, setCategory] = useState("همه");
+  const [mode, setMode] = useViewPreference("services", "auto");
   const categories = [
     "همه",
     ...new Set(
@@ -15,13 +18,7 @@ export default function Services() {
         .filter(Boolean),
     ),
   ];
-  const visible =
-    category === "همه"
-      ? services
-      : services.filter(
-          (service) =>
-            (service.category_name || service.category?.name) === category,
-        );
+  const visible = category === "همه" ? services : services.filter((service) => (service.category_name || service.category?.name) === category);
   return (
     <>
       <SEO
@@ -46,24 +43,16 @@ export default function Services() {
         }
       />
       <section className="services-page container">
-        <nav className="filter-strip" aria-label="دسته‌بندی سرویس‌ها">
-          {categories.map((item) => (
-            <button
-              aria-pressed={category === item}
-              className={category === item ? "active" : ""}
-              type="button"
-              key={item}
-              onClick={() => setCategory(item)}
-            >
-              {item}
-            </button>
-          ))}
-        </nav>
-        <ServiceGrid
+        <div className="listing-controls">
+          <nav className="filter-strip" aria-label="دسته‌بندی سرویس‌ها">{categories.map((item) => <button aria-pressed={category === item} className={category === item ? "active" : ""} type="button" key={item} onClick={() => setCategory(item)}>{item}</button>)}</nav>
+          <ViewToggle mode={mode} onMode={setMode} />
+        </div>
+        {(visible.length > 0 || services.length === 0 || state !== "ready") && <ServiceGrid
           services={visible}
           state={state}
-          empty="در این دسته سرویسی ثبت نشده است."
-        />
+          empty={services.length ? "" : "در حال حاضر سرویسی ثبت نشده است."}
+          mode={mode}
+        />}
       </section>
     </>
   );

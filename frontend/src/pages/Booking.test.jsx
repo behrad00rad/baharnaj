@@ -58,6 +58,28 @@ vi.mock("../shared/api", () => ({
 describe("booking wizard", () => {
   beforeEach(() => {
     window.history.pushState({}, "", "/book");
+    window.localStorage.clear();
+  });
+
+  it("starts compact, preserves a selected service through search and view changes", () => {
+    render(<MemoryRouter><Booking /></MemoryRouter>);
+    expect(document.querySelector(".service-choice-compact")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /کوتاهی/ }));
+    expect(screen.getByLabelText("سرویس‌های انتخاب‌شده")).toHaveTextContent("۱ سرویس انتخاب شده");
+    fireEvent.change(screen.getByRole("searchbox", { name: "جست‌وجوی سرویس…" }), { target: { value: "ناموجود" } });
+    expect(screen.getByText("سرویسی با این جست‌وجو پیدا نشد.")).toBeInTheDocument();
+    expect(screen.getByLabelText("سرویس‌های انتخاب‌شده")).toHaveTextContent("کوتاهی");
+    fireEvent.click(screen.getByRole("button", { name: "تصویری" }));
+    expect(window.localStorage.getItem("baharnaj:view:booking")).toBe("visual");
+    fireEvent.click(screen.getByRole("button", { name: "نمایش همه" }));
+    expect(screen.getAllByRole("button", { name: /کوتاهی/ }).find((button) => button.hasAttribute("aria-pressed"))).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps direct service preselection in a booking URL", async () => {
+    render(<MemoryRouter initialEntries={["/book?service=1"]}><Booking /></MemoryRouter>);
+    expect(screen.getByText("متخصصت را انتخاب کن.")).toBeInTheDocument();
+    expect(screen.getByText("خلاصه انتخاب").closest("aside")).toHaveTextContent("کوتاهی");
+    expect(await screen.findByRole("button", { name: /متخصص/ })).toBeInTheDocument();
   });
 
   it("moves from service selection to employee selection without showing a false empty state", async () => {

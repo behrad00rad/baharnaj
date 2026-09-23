@@ -1,6 +1,7 @@
 import AdminOverlay from "../components/AdminOverlay";
 import { PanelDisclosure } from "../components/PanelGuide";
 import AdminTelegram from "./AdminTelegram";
+import AdminSms from "./AdminSms";
 import ServicePricingFields from "../components/ServicePricingFields";
 import ItemPricing from "../components/ItemPricing";
 import { formatServicePrice, servicePricingPayload } from "../shared/pricing";
@@ -14,12 +15,15 @@ import { BlogEditor, BlogManagement, BlogPreview } from "./AdminBlog";
 import PasswordInput from "../components/PasswordInput";
 import { formatJalaliDate, formatJalaliDateTime } from "../shared/date";
 import PanelPreferences from "../components/PanelPreferences";
+import ReorderList from "../components/ReorderList";
+import BrowseToolbar from "../components/BrowseToolbar";
+import { normalizeSearch, serviceSearchFields, employeeSearchFields, matchesSearch as matchesCatalogSearch } from "../shared/search";
 
 const today = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Tehran",
 }).format(new Date());
 const unwrap = (data) => data?.results || data || [];
-const searchText = (value) => String(value ?? "").replace(/[\u064A\u0649]/g, "ی").replace(/\u0643/g, "ک").toLocaleLowerCase("fa-IR");
+const searchText = normalizeSearch;
 const entityName = (item) => [item.persian_name, item.name, item.first_name, item.last_name, item.title].filter(Boolean).join(" ") || `مورد #${item.id}`;
 const matchesSearch = (item, query, fields = []) => {
   const needle = searchText(query).trim();
@@ -1723,7 +1727,8 @@ function EmployeeManagement() {
   const [toast, setToast] = useState("");
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
-  const filteredEmployees = useMemo(() => resource.data.filter((employee) => matchesSearch(employee, search)), [resource.data, search]);
+  const [reordering, setReordering] = useState(false);
+  const filteredEmployees = useMemo(() => resource.data.filter((employee) => matchesCatalogSearch(employee, search, [...employeeSearchFields, "phone", (item) => (item.service_ids || []).map((id) => services.data.find((service) => String(service.id) === String(id))?.persian_name).filter(Boolean).join(" ")])), [resource.data, services.data, search]);
   const update = (name, value) => setForm({ ...form, [name]: value });
   const submit = async (event) => {
     event.preventDefault();
@@ -1739,6 +1744,7 @@ function EmployeeManagement() {
           );
           return;
         }
+        if (name === "display_order") return;
         if (
           value !== "" &&
           value !== undefined &&
@@ -1767,7 +1773,7 @@ function EmployeeManagement() {
       <Header
         eyebrow="تیم سالن"
         title="مدیریت کارمندان"
-        action="افزودن کارمند"
+        action={reordering ? null : "افزودن کارمند"}
         onAction={() => {
           setMode("new");
           setEditing(null);
@@ -1777,13 +1783,10 @@ function EmployeeManagement() {
         }}
       />
       <section className="admin-panel">
-        <div className="list-toolbar">
-          <div className="admin-list-search"><span aria-hidden="true">⌕</span><input type="search" placeholder="جست‌وجو در کارمندان" value={search} onChange={(event) => setSearch(event.target.value)} />{search && <button className="admin-list-search-clear" type="button" aria-label="پاک کردن جست‌وجو" onClick={() => setSearch("")}>×</button>}</div>
-          <span>{filteredEmployees.length} از {resource.data.length} مورد</span>
-        </div>
+        <div className="admin-browse-head"><BrowseToolbar search={search} onSearch={setSearch} placeholder="جست‌وجو در کارمندان…" count={filteredEmployees.length} label="کارمندان" /><button type="button" className="admin-secondary" onClick={() => setReordering(true)} disabled={reordering || resource.loading || !resource.data.length}>مرتب‌سازی</button></div>
         {resource.loading ? (
           <Skeleton count={6} />
-        ) : filteredEmployees.length ? (
+        ) : reordering ? <ReorderList items={resource.data} endpoint="admin/employees/reorder/" onDone={(saved) => { setReordering(false); if (saved) { resource.reload(); setToast("ترتیب کارمندان ذخیره شد."); } }} /> : filteredEmployees.length ? (
           <div className="entity-list">
             {filteredEmployees.map((employee) => (
               <article key={employee.id}>
@@ -1812,7 +1815,7 @@ function EmployeeManagement() {
             ))}
           </div>
         ) : (
-          <Empty title={search ? "کارمندی پیدا نشد" : "کارمندی ثبت نشده"} text={search ? "نام، شماره تماس یا تخصص دیگری را جست‌وجو کنید." : undefined} />
+          <div><Empty title={search ? "کارمندی پیدا نشد" : "کارمندی ثبت نشده"} text={search ? "نام، شماره تماس یا تخصص دیگری را جست‌وجو کنید." : undefined} />{search && <button type="button" className="admin-secondary" onClick={() => setSearch("")}>نمایش همه</button>}</div>
         )}
       </section>
       {open && (
@@ -2031,6 +2034,11 @@ function ServiceManagement() {
   const [imageAlt, setImageAlt] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("همه");
+  const [reorderCategory, setReorderCategory] = useState(null);
+  const filteredServices = services.data.filter((service) => (categoryFilter === "همه" || service.category_name === categoryFilter) && matchesCatalogSearch(service, search, [...serviceSearchFields, "slug"]));
+  const reorderItems = services.data.filter((service) => String(service.category) === String(reorderCategory));
   useEffect(() => setCategoryOptions(categories.data), [categories.data]);
   const update = (name, value) => setForm((current) => ({ ...current, [name]: value }));
   const openNew = () => {
@@ -2091,7 +2099,7 @@ function ServiceManagement() {
     event.preventDefault();
     setSaving(true);
     setMessage("");
-    const payload = Object.fromEntries(Object.entries(servicePricingPayload(form)).filter(([key]) => !["id", "images", "employees", "category_name", "is_deleted"].includes(key)));
+    const payload = Object.fromEntries(Object.entries(servicePricingPayload(form)).filter(([key]) => !["id", "images", "employees", "category_name", "is_deleted", "display_order"].includes(key)));
     try {
       const { data } = form.id ? await api.patch(`admin/services/${form.id}/`, payload) : await api.post("admin/services/", payload);
       await uploadImages(data.id);
@@ -2111,15 +2119,16 @@ function ServiceManagement() {
     services.reload();
   };
   return <div className="admin-page service-admin-page">
-    <Header eyebrow="کاتالوگ و محتوای عمومی" title="مدیریت سرویس‌ها" action="افزودن سرویس" onAction={openNew} />
+    <Header eyebrow="کاتالوگ و محتوای عمومی" title="مدیریت سرویس‌ها" action={reorderCategory !== null ? null : "افزودن سرویس"} onAction={openNew} />
     {message && <Toast message={message} type={message.includes("نشد") ? "error" : "success"} />}
     <section className="admin-panel">
-      {services.loading ? <Skeleton count={5} /> : <div className="service-admin-list">{services.data.map((service) => <article key={service.id}>
+      {reorderCategory === null && <div className="admin-browse-head"><BrowseToolbar search={search} onSearch={setSearch} placeholder="جست‌وجو در سرویس‌ها…" categories={["همه", ...categoryOptions.map((item) => item.name)]} category={categoryFilter} onCategory={setCategoryFilter} count={filteredServices.length} label="سرویس‌ها" /><button type="button" className="admin-secondary" disabled={services.loading || !services.data.length} onClick={() => setReorderCategory((services.data.find((service) => service.category_name === categoryFilter) || services.data[0]).category)}>مرتب‌سازی</button></div>}
+      {services.loading ? <Skeleton count={5} /> : reorderCategory !== null ? <div><p className="reorder-category-label">دسته‌بندی: {categoryOptions.find((item) => String(item.id) === String(reorderCategory))?.name}</p><ReorderList key={reorderCategory} items={reorderItems} endpoint="admin/services/reorder/" categoryId={reorderCategory} onDone={(saved) => { setReorderCategory(null); if (saved) { services.reload(); setMessage("ترتیب سرویس‌ها ذخیره شد."); } }} /></div> : filteredServices.length ? <div className="service-admin-list">{filteredServices.map((service) => <article key={service.id}>
         <div className="service-admin-thumb">{service.images?.[0]?.image_url ? <img src={service.images[0].image_url} alt="" /> : (service.persian_name || "س")[0]}</div>
         <div><b>{service.persian_name || service.name}</b><span>{formatServicePrice(service)}</span><small>{service.short_description || service.description || "محتوای صفحه هنوز کامل نشده است."}</small></div>
         <span className={`finance-badge ${service.is_active ? "paid" : "failed"}`}>{service.is_active ? "منتشرشده" : "غیرفعال"}</span>
         <button className="admin-secondary" onClick={() => { setForm(service); setFiles([]); setImageAlt(""); setCategoryDraft(""); setCategoryError(""); setMessage(""); }}>ویرایش صفحه</button>
-      </article>)}</div>}
+      </article>)}</div> : <div className="browse-empty"><p>سرویسی با این جست‌وجو پیدا نشد.</p><button type="button" onClick={() => { setSearch(""); setCategoryFilter("همه"); }}>نمایش همه</button></div>}
     </section>
     {form && <AdminOverlay className="modal-backdrop" onMouseDown={() => setForm(null)}><form className="admin-modal service-editor" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
       <button type="button" className="drawer-close" onClick={() => setForm(null)}>×</button>
@@ -2516,6 +2525,7 @@ function AdminRouter() {
       />
       <Route path="customers" element={<CustomerManagement />} />
       <Route path="telegram" element={<AdminTelegram />} />
+      <Route path="sms" element={<AdminSms />} />
       <Route path="finance" element={<Finance />} />
       <Route path="content" element={<Content />} />
       <Route path="blog" element={<BlogManagement />} />

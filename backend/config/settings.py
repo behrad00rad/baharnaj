@@ -255,6 +255,7 @@ AUTH_USER_MODEL = "salon.User"
 
 # Telegram remains inert until explicitly configured and enabled.
 INSTALLED_APPS += ['telegram_crm']
+INSTALLED_APPS += ['sms_crm']
 TELEGRAM_ENABLED = os.getenv('TELEGRAM_ENABLED', 'false').lower() == 'true'
 TELEGRAM_DRY_RUN = os.getenv('TELEGRAM_DRY_RUN', 'true').lower() == 'true'
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
@@ -268,3 +269,24 @@ from corsheaders.defaults import default_headers
 CORS_ALLOW_HEADERS = [*default_headers, 'x-booking-receipt']
 
 TELEGRAM_FORCE_DISABLED = os.getenv("TELEGRAM_FORCE_DISABLED", "false").lower() in {"1", "true", "yes"}
+
+# SMS is inert unless both the environment and the saved configuration permit it.
+SMS_ENABLED = env_bool("SMS_ENABLED", False)
+SMS_DRY_RUN = env_bool("SMS_DRY_RUN", True)
+SMS_PROVIDER = os.getenv("SMS_PROVIDER", "melipayamak")
+MELIPAYAMAK_USERNAME = os.getenv("MELIPAYAMAK_USERNAME", "")
+MELIPAYAMAK_PASSWORD = os.getenv("MELIPAYAMAK_PASSWORD", "")
+MELIPAYAMAK_SENDER = os.getenv("MELIPAYAMAK_SENDER", "")
+MELIPAYAMAK_BODY_IDS = {
+    kind: os.getenv(f"MELIPAYAMAK_BODY_ID_{suffix}", "")
+    for kind, suffix in (
+        ("booking_received", "BOOKING_RECEIVED"),
+        ("booking_confirmed", "BOOKING_CONFIRMED"),
+        ("booking_rescheduled", "BOOKING_RESCHEDULED"),
+        ("booking_cancelled", "BOOKING_CANCELLED"),
+        ("appointment_reminder", "APPOINTMENT_REMINDER"),
+    )
+}
+SMS_BATCH_SIZE = int(os.getenv("SMS_BATCH_SIZE", "25"))
+SMS_MAX_PER_MINUTE = int(os.getenv("SMS_MAX_PER_MINUTE", "20"))
+REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"].update({"sms_verify": "5/hour", "sms_test": "3/hour"})

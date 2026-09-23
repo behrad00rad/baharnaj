@@ -6,6 +6,7 @@ import AdminRouter from "./AdminApp";
 const { get, post, delete: remove, mockState } = vi.hoisted(() => ({
   mockState: { pendingPayment: false },
   get: vi.fn((endpoint) => {
+    if (mockState.catalog && endpoint === "admin/services/") return Promise.resolve({ data: mockState.catalog });
     if (mockState.pendingPayment && endpoint.startsWith("admin/payments/?"))
       return Promise.resolve({
         data: [
@@ -175,6 +176,7 @@ describe("admin CRUD forms", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockState.pendingPayment = false;
+    mockState.catalog = null;
   });
 
   it("loads eligible users for existing employee creation", async () => {
@@ -227,6 +229,23 @@ describe("admin CRUD forms", () => {
       "4",
     );
     expect(screen.queryByText("گزینه اول")).not.toBeInTheDocument();
+  });
+
+  it("enters service reorder mode, cancels and then saves one batch", async () => {
+    mockState.catalog = [
+      { id: 1, name: "A", persian_name: "اول", category: 4, category_name: "Hair", display_order: 0, price: 100 },
+      { id: 2, name: "B", persian_name: "دوم", category: 4, category_name: "Hair", display_order: 1, price: 200 },
+    ];
+    render(<MemoryRouter initialEntries={["/services"]}><AdminRouter /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole("button", { name: "مرتب‌سازی" }));
+    expect(screen.queryByRole("button", { name: "ویرایش صفحه" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "بالا بردن دوم" }));
+    fireEvent.click(screen.getByRole("button", { name: "انصراف" }));
+    expect(post).not.toHaveBeenCalledWith("admin/services/reorder/", expect.anything());
+    fireEvent.click(screen.getByRole("button", { name: "مرتب‌سازی" }));
+    fireEvent.click(screen.getByRole("button", { name: "بالا بردن دوم" }));
+    fireEvent.click(screen.getByRole("button", { name: "ذخیره ترتیب" }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith("admin/services/reorder/", { category_id: 4, items: [{ id: 2, display_order: 0 }, { id: 1, display_order: 1 }] }));
   });
 
   it("loads and creates gallery categories without leaving the gallery form", async () => {

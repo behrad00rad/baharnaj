@@ -6,6 +6,8 @@ import { useAuth } from "../shared/auth";
 import { useTheme } from "../shared/theme";
 import { siteConfig } from "../shared/siteConfig";
 import { formatJalaliYear } from "../shared/date";
+import { api } from "../shared/api";
+import { employeeSearchFields, matchesSearch, serviceSearchFields } from "../shared/search";
 
 const publicLinks = [
   ["/", "خانه"],
@@ -17,9 +19,62 @@ const publicLinks = [
   ["/contact", "تماس با ما"],
 ];
 
+const unwrap = (data) => data?.results || data || [];
+
+function SearchIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>;
+}
+
+function SiteSearch({ open, onClose }) {
+  const [query, setQuery] = useState("");
+  const [catalog, setCatalog] = useState({ services: [], posts: [], employees: [] });
+  const [state, setState] = useState("loading");
+  const inputRef = useRef(null);
+  const loadedRef = useRef(false);
+  useEffect(() => {
+    if (!open) return undefined;
+    requestAnimationFrame(() => inputRef.current?.focus());
+    if (loadedRef.current) return undefined;
+    loadedRef.current = true;
+    let active = true;
+    Promise.all([api.get("services/"), api.get("blog/posts/"), api.get("employees/")])
+      .then(([services, posts, employees]) => {
+        if (!active) return;
+        setCatalog({ services: unwrap(services.data), posts: unwrap(posts.data), employees: unwrap(employees.data) });
+        setState("ready");
+      })
+      .catch(() => { if (active) setState("error"); });
+    return () => { active = false; };
+  }, [open]);
+  if (!open) return null;
+  const services = query ? catalog.services.filter((item) => matchesSearch(item, query, serviceSearchFields)).slice(0, 4) : [];
+  const posts = query ? catalog.posts.filter((item) => matchesSearch(item, query, ["title", "excerpt", (post) => post.category?.name])).slice(0, 4) : [];
+  const employees = query ? catalog.employees.filter((item) => matchesSearch(item, query, employeeSearchFields)).slice(0, 3) : [];
+  const results = [
+    ...services.map((item) => ({ key: `service-${item.id}`, to: `/services/${item.slug || item.id}`, type: "سرویس", title: item.persian_name || item.name })),
+    ...posts.map((item) => ({ key: `post-${item.id}`, to: `/blog/${item.slug}`, type: "مجله", title: item.title })),
+    ...employees.map((item) => ({ key: `employee-${item.id}`, to: "/team", type: "متخصص", title: item.name })),
+  ];
+  return <div className="site-search-panel">
+    <div className="container site-search-inner">
+      <label className="site-search-field"><SearchIcon /><span className="sr-only">جست‌وجو در بهارناژ</span><input ref={inputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") onClose(); }} placeholder="جست‌وجوی سرویس، مقاله یا متخصص…" aria-label="جست‌وجو در بهارناژ" /></label>
+      <button className="site-search-close" type="button" onClick={onClose} aria-label="بستن جست‌وجو">×</button>
+    </div>
+    <div className="container site-search-results" aria-live="polite">
+      {!query && <div className="site-search-suggestions"><span>پیشنهادها</span><Link to="/services" onClick={onClose}>همهٔ سرویس‌ها</Link><Link to="/blog" onClick={onClose}>مجله</Link><Link to="/team" onClick={onClose}>متخصصان</Link></div>}
+      {query && state === "loading" && <p>در حال جست‌وجو…</p>}
+      {query && state === "error" && <p>جست‌وجو فعلاً در دسترس نیست.</p>}
+      {query && state === "ready" && !results.length && <p>نتیجه‌ای پیدا نشد.</p>}
+      {query && results.length > 0 && <div>{results.map((result) => <Link key={result.key} to={result.to} onClick={onClose}><span>{result.type}</span><strong>{result.title}</strong><i aria-hidden="true">←</i></Link>)}</div>}
+    </div>
+  </div>;
+}
+
 export function PublicLayout({ children }) {
   const location = useLocation();
   const [menuPath, setMenuPath] = useState(null);
+  const [searchPath, setSearchPath] = useState(null);
+  const searchOpen = searchPath === location.pathname;
   const menuOpen = menuPath === location.pathname;
   const setMenuOpen = (open) => setMenuPath(open ? location.pathname : null);
   const menuRef = useRef(null);
@@ -32,6 +87,11 @@ export function PublicLayout({ children }) {
   const panelLabel =
     role === "customer" ? "حساب من" : role === "employee" ? "پنل کارمند" : role === "admin" ? "پنل مدیریت" : "";
   const closeMenu = () => setMenuOpen(false);
+  const closeSearch = () => setSearchPath(null);
+  const toggleSearch = () => {
+    setMenuOpen(false);
+    setSearchPath(searchOpen ? null : location.pathname);
+  };
   useEffect(() => {
     const resize = () => { if (window.innerWidth > 760) setMenuPath(null); };
     window.addEventListener("resize", resize);
@@ -62,6 +122,7 @@ export function PublicLayout({ children }) {
             ))}
           </div>
           <div className="nav-actions">
+            <button className="nav-search-toggle" type="button" onClick={toggleSearch} aria-label={searchOpen ? "بستن جست‌وجو" : "باز کردن جست‌وجو"} aria-expanded={searchOpen} aria-controls="site-search-panel"><SearchIcon /></button>
             <button
               className="theme-toggle"
               type="button"
@@ -97,6 +158,7 @@ export function PublicLayout({ children }) {
             <span />
           </button>
         </nav>
+        <div id="site-search-panel"><SiteSearch open={searchOpen} onClose={closeSearch} /></div>
       </header>
       <div
         className={`mobile-navigation ${menuOpen ? "open" : ""}`}

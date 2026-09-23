@@ -106,7 +106,7 @@ describe("employee app", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "هفته بعد" }));
 
-    expect(screen.getByRole("button", { name: nextWeekValue })).toHaveClass("selected");
+    expect(await screen.findByRole("button", { name: nextWeekValue })).toHaveClass("selected");
   });
 
   it("uses the employee schedule endpoint for weekly hours", async () => {

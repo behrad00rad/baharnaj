@@ -9,6 +9,9 @@ import { useServices } from "../shared/hooks";
 import { SEO } from "../components/SEO";
 import PasswordInput from "../components/PasswordInput";
 import { formatJalaliDate } from "../shared/date";
+import BrowseToolbar from "../components/BrowseToolbar";
+import { employeeSearchFields, matchesSearch, serviceSearchFields } from "../shared/search";
+import { useViewPreference } from "../shared/viewPreference";
 const steps = ["سرویس‌ها", "متخصص", "زمان", "اطلاعات", "تأیید"];
 const today = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Tehran" }).format(
@@ -105,6 +108,16 @@ export default function Booking() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const submitting = useRef(false);
+  const stepHeading = useRef(null);
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      stepHeading.current?.focus();
+      if (window.innerWidth <= 760) window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+  }, [step]);
+  const advance = (nextStep) => {
+    setStep(nextStep);
+  };
   const chosenServices = useMemo(
     () =>
       selected
@@ -311,7 +324,7 @@ export default function Booking() {
         <div>
           <div className="wizard-intro">
             <p className="eyebrow">وقت تو، همین حالا</p>
-            <h1>
+            <h1 ref={stepHeading} tabIndex={-1}>
               {step === 0
                 ? "سرویس‌ت را انتخاب کن."
                 : step === 1
@@ -334,7 +347,7 @@ export default function Booking() {
               servicesState={servicesState}
               selected={selected}
               toggle={toggleService}
-              onNext={() => setStep(1)}
+              onNext={() => advance(1)}
             />
           )}
           {step === 1 && (
@@ -346,7 +359,7 @@ export default function Booking() {
               employeeStates={employeeStates}
               setEmployeeIds={setEmployeeIds}
               onBack={() => setStep(0)}
-              onNext={() => setStep(2)}
+              onNext={() => advance(2)}
             />
           )}
           {step === 2 && (
@@ -430,7 +443,12 @@ export default function Booking() {
   );
 }
 function ServiceStep({ services, servicesState, selected, toggle, onNext }) {
-  const groups = services.reduce((result, service) => {
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("همه");
+  const [mode, setMode] = useViewPreference("booking", "compact");
+  const categories = ["همه", ...new Set(services.map((service) => service.category_name || service.category?.name).filter(Boolean))];
+  const visible = services.filter((service) => (category === "همه" || (service.category_name || service.category?.name) === category) && matchesSearch(service, search, serviceSearchFields));
+  const groups = visible.reduce((result, service) => {
     const key =
       service.category_name || service.category?.name || "سرویس‌های بهارناژ";
     (result[key] ||= []).push(service);
@@ -442,7 +460,8 @@ function ServiceStep({ services, servicesState, selected, toggle, onNext }) {
   return (
     <div className="wizard-panel">
       {selectedServices.length > 0 && (
-        <div className="selected-tray" aria-label="سرویس‌های انتخاب‌شده">
+        <div className="selected-tray selected-tray-sticky" aria-label="سرویس‌های انتخاب‌شده">
+          <div className="selected-tray-summary"><strong>{new Intl.NumberFormat("fa-IR").format(selectedServices.length)} سرویس انتخاب شده</strong><span>{new Intl.NumberFormat("fa-IR").format(selectedServices.reduce((sum, item) => sum + Number(item.duration || 0), 0))} دقیقه · {bookingPriceSummary(selectedServices)}</span></div>
           {selectedServices.map((service) => (
             <button
               type="button"
@@ -451,15 +470,18 @@ function ServiceStep({ services, servicesState, selected, toggle, onNext }) {
             >
               {service.persian_name || service.name}
               <span aria-hidden="true">×</span>
+              <span className="sr-only">حذف از انتخاب</span>
             </button>
           ))}
         </div>
       )}
+      <BrowseToolbar isolated search={search} onSearch={setSearch} placeholder="جست‌وجوی سرویس…" categories={categories} category={category} onCategory={setCategory} count={visible.length} mode={mode} onMode={setMode} label="انتخاب سرویس" />
+      {servicesState !== "loading" && !visible.length && services.length > 0 && <div className="browse-empty"><p>سرویسی با این جست‌وجو پیدا نشد.</p><button type="button" onClick={() => { setSearch(""); setCategory("همه"); }}>نمایش همه</button></div>}
       <div className="category-groups">
         {Object.entries(groups).map(([category, items]) => (
           <section key={category}>
             <h2>{category}</h2>
-            <div className="service-choice-grid">
+            <div className={`service-choice-grid service-choice-${mode}`}>
               {items.map((service) => (
                 <button
                   type="button"
@@ -470,11 +492,14 @@ function ServiceStep({ services, servicesState, selected, toggle, onNext }) {
                   onClick={() => toggle(service.id)}
                   key={service.id}
                 >
-                  <span>
+                  {service.images?.[0]?.image_url ? <img className="service-choice-thumb" src={service.images[0].image_url} alt="" loading="lazy" /> : <span className="service-choice-thumb service-choice-fallback" aria-hidden="true">{(service.persian_name || service.name)[0]}</span>}
+                  <span className="service-choice-select-mark">
                     {selected.includes(String(service.id)) ? "✓" : "＋"}
                   </span>
                   <strong>{service.persian_name || service.name}</strong>
+                  {mode === "visual" && service.short_description && <span className="service-choice-description">{service.short_description}</span>}
                   <small>
+                    {category} · {" "}
                     {new Intl.NumberFormat("fa-IR").format(service.duration)}{" "}
                     دقیقه · {formatServicePrice(service)}
                   </small>
@@ -515,15 +540,19 @@ function EmployeeStep({
   onBack,
   onNext,
 }) {
+  const [search, setSearch] = useState("");
   const complete = selected.every((id) => employeeIds[id]);
+  const resultCount = services.reduce((sum, service) => sum + (employees[service.id] || []).filter((employee) => matchesSearch(employee, search, employeeSearchFields)).length, 0);
   return (
     <div className="wizard-panel">
+      <BrowseToolbar isolated search={search} onSearch={setSearch} placeholder="جست‌وجوی متخصص…" count={resultCount} label="انتخاب متخصص" />
+      {search && resultCount === 0 && <div className="browse-empty"><p>متخصصی با این جست‌وجو پیدا نشد.</p><button type="button" onClick={() => setSearch("")}>نمایش همه</button></div>}
       <div className="employee-choices">
         {services.map((service) => (
           <section key={service.id}>
             <h2>{service.persian_name || service.name}</h2>
             <div className="employee-choice-grid">
-              {(employees[service.id] || []).map((employee) => (
+              {(employees[service.id] || []).filter((employee) => matchesSearch(employee, search, employeeSearchFields)).map((employee) => (
                 <button
                   type="button"
                   aria-pressed={

@@ -900,7 +900,7 @@ class AppointmentItemSchemaTests(TestCase):
     def test_multi_service_booking_hold_and_confirmation_contract(self):
         second_service = Service.objects.create(category=self.service.category, name="Color", persian_name="Color", price=1200, duration=60)
         EmployeeService.objects.create(employee=self.employee, service=second_service)
-        booking_date = date(2026, 9, 21)
+        booking_date = timezone.localdate() + timedelta(days=7)
         WorkingSchedule.objects.create(employee=self.employee, weekday=booking_date.weekday(), start_time="09:00", end_time="20:00")
         items = [
             {"service": self.service.pk, "employee": self.employee.pk, "date": str(booking_date), "start_time": "10:00", "end_time": "11:00"},

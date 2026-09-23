@@ -205,7 +205,7 @@ class ServiceSerializer(serializers.ModelSerializer):
 
     def get_employees(self, obj):
         return [{"id": link.employee_id, "name": link.employee.user.get_full_name(), "specialty": link.employee.specialty}
-                for link in obj.employee_links.all()
+                for link in sorted(obj.employee_links.all(), key=lambda link: (link.employee.display_order if link.employee.display_order is not None else 999999, link.employee_id))
                 if link.is_active
                 if link.employee.is_active and not link.employee.is_deleted]
 
@@ -273,7 +273,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = EmployeeProfile
-        fields = ("id", "name", "specialty", "bio", "services", "is_active", "profile_photo", "profile_photo_url")
+        fields = ("id", "name", "specialty", "bio", "services", "is_active", "display_order", "profile_photo", "profile_photo_url")
         extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
 
     def get_profile_photo_url(self, obj):
@@ -423,7 +423,7 @@ class AdminEmployeeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = EmployeeProfile
-        fields = ("id", "user", "name", "phone", "specialty", "bio", "commission_rate", "is_active", "profile_photo", "profile_photo_url", "services", "service_ids")
+        fields = ("id", "user", "name", "phone", "specialty", "bio", "commission_rate", "is_active", "display_order", "profile_photo", "profile_photo_url", "services", "service_ids")
         extra_kwargs = {"profile_photo": {"write_only": True, "required": False}}
 
     def get_profile_photo_url(self, obj):
