@@ -23,4 +23,6 @@
   .browse-toolbar-isolated .browse-clear{width:42px;min-width:42px;height:42px;min-height:42px;padding:0}
   .browse-toolbar-isolated .browse-view{height:42px;min-height:42px;flex:none}
   .browse-toolbar-isolated .browse-view button{width:36px;height:36px;min-height:36px}
+  .browse-toolbar-isolated .browse-categories{display:flex;flex-wrap:wrap;align-content:flex-start;max-height:82px;overflow-y:auto;overflow-x:hidden;gap:5px;padding:1px 1px 4px;overscroll-behavior:contain}
+  .browse-toolbar-isolated .browse-categories button{min-width:0;max-width:100%;min-height:32px;padding:5px 9px;white-space:normal;overflow-wrap:anywhere;line-height:1.35}
 }
