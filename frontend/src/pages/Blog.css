@@ -8,3 +8,8 @@
 
 /* Long-form reading rhythm: denser, quieter and distinct from interface copy. */
 .article-content>p{margin-bottom:24px;font-family:var(--public-interface);font-size:calc(1.075rem * var(--text-scale));font-weight:390;line-height:1.85;letter-spacing:-.006em}.article-content>h2{margin-top:58px!important;margin-bottom:20px!important;line-height:1.42!important}.article-content>h3{margin-top:44px;margin-bottom:16px;line-height:1.48}.article-content ul,.article-content ol{gap:10px;margin-block:24px;font-size:calc(1.075rem * var(--text-scale));line-height:1.85}.article-content blockquote{margin-block:46px;font-size:calc(1.3rem * var(--text-scale));line-height:1.8}.article-callout p,.article-booking-cta p{line-height:1.8}
+
+/* Long titles and sentences must wrap inside the blog column on narrow screens. */
+.blog-index-head,.blog-index,.blog-article,.article-header,.article-reading,.article-content,.featured-post,.blog-card,.blog-card-copy,.article-service-card,.article-service-card>section,.article-booking-cta,.article-related-services,.article-related{min-width:0;max-width:100%}
+.blog-index-head h1,.blog-index-head p,.featured-post h2,.featured-post p,.blog-card h2,.blog-card p,.article-header h1,.article-header p,.article-content :is(p,h2,h3,blockquote,li),.article-content a,.article-callout p,.article-service-card :is(h3,p),.article-booking-cta :is(h2,p),.article-related :is(h2,h3){overflow-wrap:anywhere}
+.article-content :is(p,h2,h3,blockquote,ul,ol),.article-service-card :is(h3,p),.article-booking-cta :is(h2,p){max-width:100%}

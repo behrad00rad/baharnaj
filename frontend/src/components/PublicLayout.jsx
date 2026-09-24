@@ -171,7 +171,6 @@ export function PublicLayout({ children }) {
         aria-hidden={!menuOpen}
       >
         <div className="mobile-navigation-inner container">
-          <button className="mobile-menu-close" type="button" onClick={closeMenu}>بستن منو ×</button>
           <p>منوی بهارناژ</p>
           {publicLinks.map(([path, label], index) => (
             <Link

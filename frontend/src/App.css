@@ -131,8 +131,24 @@
 @media(max-width:768px){.service-article-body{grid-template-columns:1fr;gap:40px;padding-bottom:80px}.service-article-body .service-specialists{position:static}.service-photo-gallery>div{grid-template-columns:1fr}.service-photo-gallery img,.service-photo-gallery .media-fallback{height:430px}.legal-page{grid-template-columns:1fr;gap:55px;padding-top:60px;padding-bottom:100px}.legal-page>nav{position:static;grid-template-columns:1fr 1fr;gap:0 18px}.service-card-media{height:240px}}
 @media(max-width:430px){.service-photo-gallery img,.service-photo-gallery .media-fallback{height:360px}.legal-page>nav{grid-template-columns:1fr}.legal-page p,.service-copy>p:not(.eyebrow){font-size: var(--text-body)}.service-intro{font-size: var(--text-body)}}
 
+/* Keep the booking wizard inside the viewport on phones. */
+@media(max-width:650px){
+  .booking-wizard,.wizard-layout,.wizard-layout>div,.wizard-panel,.category-groups,.employee-choices{min-width:0;max-width:100%}
+  .selected-tray{min-width:0;max-width:100%;overflow:hidden}
+  .selected-tray button{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .selected-tray-summary strong,.selected-tray-summary span{min-width:0;overflow-wrap:anywhere}
+  .service-choice-grid button,.employee-choice-grid button{min-width:0}
+  .service-choice-compact button strong,.service-choice-compact button small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .service-choice-visual button>* ,.employee-choice-grid button>*{min-width:0;max-width:100%;overflow-wrap:anywhere}
+}
+
 /* Service descriptions share the denser editorial reading style. */
 .service-copy>p:not(.eyebrow){font-family:var(--public-interface);font-size:calc(1.075rem * var(--text-scale));font-weight:390;line-height:1.85;letter-spacing:-.006em}
+
+@media(max-width:760px){
+  .mobile-navigation-inner>a{position:relative;width:100%;border-bottom:0}
+  .mobile-navigation-inner>a::after{position:absolute;right:0;bottom:0;left:0;height:1px;background:var(--color-footer-border);content:""}
+}
 
 /* Shared readable controls and flexible header space in all three surfaces. */
 .public-site :is(input,select,textarea), .admin-app :is(input,select,textarea), .employee-app :is(input,select,textarea) {font-size:var(--text-body);min-width:0}
@@ -184,8 +200,6 @@
   .footer-bottom { display:grid; grid-template-columns:1fr; gap:16px; padding-top:18px; }
   .footer-bottom > div { gap:14px; flex-wrap:wrap; }
 }
-
-.mobile-menu-close { float:left; min-height:44px; padding:8px 12px; border:1px solid var(--color-footer-muted); border-radius:8px; background:transparent; color:inherit; cursor:pointer; }
 
 .footer-brand { color:var(--color-footer-text); }
 .footer-staff-login { margin-top:8px;color:var(--color-footer-muted);font-size:var(--text-caption);text-decoration:underline;text-underline-offset:4px; }
