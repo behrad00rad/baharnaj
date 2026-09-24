@@ -347,7 +347,6 @@ export default function Booking() {
               servicesState={servicesState}
               selected={selected}
               toggle={toggleService}
-              onNext={() => advance(1)}
             />
           )}
           {step === 1 && (
@@ -442,6 +441,12 @@ export default function Booking() {
         <div className="wizard-footer wizard-mobile-actionbar" aria-label="خلاصه انتخاب و ادامه">
           <div className="wizard-mobile-summary">
             <strong>{chosenServices.map((service) => service.persian_name || service.name).join("، ") || "سرویسی انتخاب نشده"}</strong>
+            {chosenServices.length > 0 && <div className="wizard-mobile-selected" aria-label="سرویس‌های انتخاب‌شده">
+              <span className="sr-only">{new Intl.NumberFormat("fa-IR").format(chosenServices.length)} سرویس انتخاب شده</span>
+              {chosenServices.map((service) => <button type="button" key={service.id} onClick={() => toggleService(service.id)}>
+                {service.persian_name || service.name}<span aria-hidden="true">×</span><span className="sr-only">حذف از انتخاب</span>
+              </button>)}
+            </div>}
             <small className="wizard-mobile-price">{bookingPriceSummary(chosenServices)}</small>
             <span className="wizard-mobile-meta">{new Intl.NumberFormat("fa-IR").format(chosenServices.length)} سرویس · {new Intl.NumberFormat("fa-IR").format(totalDuration)} دقیقه</span>
           </div>
@@ -452,7 +457,7 @@ export default function Booking() {
     </>
   );
 }
-function ServiceStep({ services, servicesState, selected, toggle, onNext }) {
+function ServiceStep({ services, servicesState, selected, toggle }) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("همه");
   const [mode, setMode] = useViewPreference("booking", "compact");
@@ -464,27 +469,8 @@ function ServiceStep({ services, servicesState, selected, toggle, onNext }) {
     (result[key] ||= []).push(service);
     return result;
   }, {});
-  const selectedServices = services.filter((service) =>
-    selected.includes(String(service.id)),
-  );
   return (
     <div className="wizard-panel service-step-panel">
-      {selectedServices.length > 0 && (
-        <div className="selected-tray selected-tray-sticky" aria-label="سرویس‌های انتخاب‌شده">
-          <div className="selected-tray-summary"><strong>{new Intl.NumberFormat("fa-IR").format(selectedServices.length)} سرویس انتخاب شده</strong><span>{new Intl.NumberFormat("fa-IR").format(selectedServices.reduce((sum, item) => sum + Number(item.duration || 0), 0))} دقیقه · {bookingPriceSummary(selectedServices)}</span></div>
-          {selectedServices.map((service) => (
-            <button
-              type="button"
-              key={service.id}
-              onClick={() => toggle(service.id)}
-            >
-              {service.persian_name || service.name}
-              <span aria-hidden="true">×</span>
-              <span className="sr-only">حذف از انتخاب</span>
-            </button>
-          ))}
-        </div>
-      )}
       <BrowseToolbar isolated search={search} onSearch={setSearch} placeholder="جست‌وجوی سرویس…" categories={categories} category={category} onCategory={setCategory} count={visible.length} mode={mode} onMode={setMode} label="انتخاب سرویس" />
       {servicesState !== "loading" && !visible.length && services.length > 0 && <div className="browse-empty"><p>سرویسی با این جست‌وجو پیدا نشد.</p><button type="button" onClick={() => { setSearch(""); setCategory("همه"); }}>نمایش همه</button></div>}
       <div className="category-groups service-category-groups">
